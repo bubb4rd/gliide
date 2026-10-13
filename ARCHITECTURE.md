@@ -280,7 +280,12 @@ Prompts and schemas are files in `prompts/`, built in and overridable from a dev
 | Import | Resume text, links | Bank entries (merged into the bank; duplicates by name and dates are offered, not merged silently) |
 | Cover letter / one paragraph | Tailored resume, posting, letter, note | Letter / paragraph |
 
-Extract can use a faster model than suggest where the agent offers a choice.
+Extract defaults to **sonnet**. In the M0 spike (`claude -p`, 11 postings each) sonnet was the fastest (p50 6.3 s, p90
+6.9 s) and ranked priorities best; haiku runs with extended thinking under Claude Code (p50 14.8 s, 10.9 s with
+`--effort low`) and over-marks priority 1. All 33 runs were schema-valid on the first try. Prompt fixes queued for M2:
+no person-describing phrases as skills, `term` word for word with normal forms in `aliases`, priority 1 for at most a
+third, no single item required from a one-of list, students applying full-time are `entry`, application instructions
+are never knockouts, title/company/location passed in from ingest, `degree.equivalent`.
 
 ### Extract: what the posting asks for (master-independent)
 
@@ -530,14 +535,15 @@ easyshmeezy/
 | Toggle or edit → new preview and score | ≤ 150 ms |
 | Export | ≤ 300 ms |
 
-The model-call targets are set by the provider spike (M0), not assumed.
+M0 measured Extract through `claude -p` with sonnet at p50 6.3 s / p90 6.9 s. M1 measured a warm re-render after a
+one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS Fit: about 0.36 s).
 
 ## 13. Roadmap
 
 | Milestone | Delivers | Done when |
 |---|---|---|
-| M0 Spike: providers | `ez llm` running the extract prompt through `claude -p` on the 11 postings in `fixtures/postings/`; `codex-acp` and `gemini --acp` join once core features work | JSON valid without repair, with one repair, latency p50/p90; go/no-go per agent |
-| M1 Core + render | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez render` | Your current `master.json` renders identically to ATS Fit's PDF |
+| M0 Spike: providers ✓ (Claude) | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over the 11 postings in `fixtures/postings/`; `codex-acp` and `gemini --acp` join once core features work | Done for Claude: 33/33 valid first try; sonnet default; outputs in `fixtures/requirements/` |
+| M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to ATS Fit with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score | Ingest, extract, matcher, composite score, master ranking, `ez score <url> --master swe` | Score components for the 11 fixture postings |
 | M3 Tailor | Suggest, validator, change engine, measure + fit, both modes, `ez tailor` | One-page tailored PDFs for the fixtures; the bank-aware ceiling measured beside master-only |
 | M4 macOS app | Bank, masters, job, review with live preview, export, applications log, agent settings | You use it instead of ATS Fit |
