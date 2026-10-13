@@ -77,8 +77,6 @@
     white-space: nowrap;
     font-size: var(--text-xs);
     line-height: var(--leading-xs);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     font-weight: var(--weight-medium);
     color: var(--ink-3);
     background: var(--surface);

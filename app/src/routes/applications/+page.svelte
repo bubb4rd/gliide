@@ -11,23 +11,10 @@
   import { appError, setStatus, type ApplicationRow, type AppStatus } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
-  import { Badge, Button, Empty, Menu, Table, Toolbar, toast } from "$lib/ui";
+  import { STATUS } from "$lib/status";
+  import { Badge, Button, CompanyMark, Empty, Menu, Table, Toolbar, toast } from "$lib/ui";
 
-  const STATUSES: { value: AppStatus; label: string }[] = [
-    { value: "saved", label: "Saved" },
-    { value: "applied", label: "Applied" },
-    { value: "interviewing", label: "Interviewing" },
-    { value: "offer", label: "Offer" },
-    { value: "rejected", label: "Rejected" },
-  ];
-  // Amber means "left out" only (DESIGN.md), so no status is warn.
-  const TONE = {
-    saved: "neutral",
-    applied: "accent",
-    interviewing: "accent",
-    offer: "gain",
-    rejected: "danger",
-  } as const satisfies Record<AppStatus, string>;
+  const STATUSES = (Object.keys(STATUS) as AppStatus[]).map((value) => ({ value, label: STATUS[value].label }));
 
   const COLUMNS = [
     { key: "date", label: "Date", width: "104px" },
@@ -111,7 +98,7 @@
         {#if column.key === "date"}
           <span class="num" title={row.date}>{shortDate(row.date)}</span>
         {:else if column.key === "company"}
-          <span title={row.company}>{row.company}</span>
+          <CompanyMark><span title={row.company}>{row.company}</span></CompanyMark>
         {:else if column.key === "role"}
           <span class="role" title={row.role}>{row.role}</span>
         {:else if column.key === "now"}
@@ -129,7 +116,7 @@
             size="sm"
             onchange={(s) => changeStatus(row, s)}
           >
-            {#snippet trigger(current)}<Badge tone={TONE[row.status]}>{current?.label}</Badge>{/snippet}
+            {#snippet trigger(current)}<Badge tone={STATUS[row.status].tone}>{current?.label}</Badge>{/snippet}
           </Menu>
         {:else if column.key === "resume"}
           {#if row.resume}

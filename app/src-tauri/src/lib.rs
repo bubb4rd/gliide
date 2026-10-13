@@ -6,8 +6,10 @@
 mod commands;
 pub mod cover;
 pub mod dto;
+pub mod entry;
 pub mod error;
 pub mod export;
+pub mod import;
 pub mod jobs;
 pub mod library;
 pub mod review;
@@ -46,7 +48,12 @@ pub fn run() {
             commands::get_settings,
             commands::set_settings,
             commands::library,
-            commands::import_resume,
+            commands::read_import,
+            commands::import_view,
+            commands::finish_import,
+            commands::discard_import,
+            commands::entry,
+            commands::edit_entry,
             commands::set_master_options,
             commands::jobs,
             commands::add_job,
@@ -63,6 +70,7 @@ pub fn run() {
             commands::redo,
             commands::edit_targets,
             commands::rewrite,
+            commands::save_variant,
             commands::export_pdf,
             commands::applications,
             commands::set_status,

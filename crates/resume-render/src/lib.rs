@@ -21,7 +21,7 @@ use typst::utils::{PicoStr, Scalar, hash128};
 use typst_layout::PagedDocument;
 
 pub use fonts::FontOptions;
-pub use readback::pdf_text;
+pub use readback::{Link, PdfRead, pdf_read, pdf_text};
 pub use template::{Manifest, Template};
 use world::ResumeWorld;
 

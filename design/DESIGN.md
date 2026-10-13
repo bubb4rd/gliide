@@ -20,11 +20,16 @@ tool, so the page and the numbers carry the screen.
 
 Premium here means five things, each enforced below:
 
-1. **Restraint.** One accent, one icon library, two typefaces, no gradients, no decoration. Variety comes from type.
+1. **Restraint.** One accent, one icon library, two typefaces, no gradients (one exception: the accent sweeping through
+   the text of a model call in flight, `Thinking`), no decoration. Variety comes from type.
 2. **Precision.** A 4px grid, concentric radii, optical alignment, tabular numbers, hairlines instead of boxes.
 3. **Speed you can feel.** High-frequency actions respond instantly; motion is spent only on rare moments.
 4. **Native manners.** 13px UI, keyboard on every action, hover only on hover devices, a light window by default.
 5. **Honesty in color.** Green only ever means points you gain; amber only means "left out, and why".
+
+**Company logos are the one exception to all five.** They're the company's brand, not our decoration: shown as the
+company publishes them, never recolored, filtered, cropped or outlined, even where they break the palette. Until logos
+are fetched, `CompanyMark` is a blank tile in the logo's place.
 
 ### Evidence (Inspo MCP, 2026-10-12)
 
@@ -83,9 +88,12 @@ dark block overrides a token the light `:root` doesn't define.
 | Reading | `--text-md` 14/22 | Inter | Resume lines: bullets, rewrites, notes |
 | UI | `--text-base` 13/20 | Inter | Everything you operate (macOS native size) |
 | Meta | `--text-sm` 12/16 | Inter | Counts, reasons, timestamps |
-| Label | `.label` 11/16 caps +0.04em | Inter | Group labels |
+| Label | `.label` 11/16 | Inter | Group labels, eyebrows, table headers |
 
 - Weights: 400, 500 (labels, buttons, nav), 600 (priority-1 skills, emphasis). Never 700 in UI.
+- No full capitals in headlines, titles, labels, eyebrows or table headers: sentence case, never `text-transform:
+  uppercase`. Titles that come from your data in capitals (a bank section's `WORK EXPERIENCE`) are shown in sentence
+  case (`Work experience`; two-letter acronyms like `IT` stay). Only the resume page prints them as written.
 - Every number that changes is `tabular-nums` (`.num`).
 - Serif is display-only: never for controls, never below 22px except inside the resume page.
 - Headlines `text-wrap: balance`; paragraphs `text-wrap: pretty`.
@@ -94,7 +102,8 @@ dark block overrides a token the light `:root` doesn't define.
 
 - 4px grid: `--space-0-5` (2) … `--space-16` (64). Row padding 12, column padding 20–24, between groups 24.
 - Controls: `--control-sm` 24, `--control-md` 28 (default), `--control-lg` 36 (inputs, primary calls on empty states).
-- Window: `--sidebar-width` 232, `--toolbar-height` 52, change column `--column-min` 420 to 640, desk takes the rest.
+- Window: `--sidebar-width` 232, `--toolbar-height` 52, change column `--column-min` 420 to `--column-max` 580, desk
+  takes the rest; at 100% the page fills the desk's width less 12px a side (at most 816px, US Letter at 96 dpi).
 - Radius: `xs` 4 (kbd, checkbox), `sm` 6 (buttons, inputs, nav items), `md` 8 (rows, segmented), `lg` 12 (cards,
   popovers, toasts), `xl` 16 (sheets), `full` (chips, badges). **Concentric:** outer = inner + padding + border
   (segmented: 6 + 2 = 8). Past 24px of padding, surfaces are independent.
@@ -119,7 +128,7 @@ Borders are for structure only: separators (`--line`), inputs (`--input-border`)
 | Exit of a transient element | Opacity + 4px blur + `-12px` over 150ms, or instant |
 | Icon swap on an infrequent state (copy → copied, export → done) | Cross-fade: scale 0.25→1, opacity, blur 4px→0, 300ms `--ease-emphasized` |
 | Opening a menu or popover | Opacity in over `--dur-instant` 100ms (`@starting-style`); closes instantly |
-| A model call of unknown length (indeterminate progress) | A segment sweeps the track every `--dur-loop` 1600ms; reduced motion: an opacity pulse. Determinate progress fills from elapsed time, no animation |
+| A model call in flight | `Thinking`: the stage is ink with a band of `--accent-text` sweeping through it left to right (a text-clipped gradient, `linear`) every `--dur-loop` 1600ms; reduced motion and forced colors: the stage in `--accent-text`, fading. No bar, no icon: the stage sentence and its seconds say where it is |
 | Theme switch | No transitions at all (`.theme-switching` on the root for two frames) |
 
 Movement, scale and blur run only under `prefers-reduced-motion: no-preference`; reduced motion gets the opacity fade.
@@ -148,11 +157,12 @@ there and shown in the `/specimen` route in every state before any screen uses i
 | `Checkbox` | `checked`, `label` | off, on, focus, disabled |
 | `Chip` | `state` have/add/missing/not-mine, `p1` | press, hover, disabled |
 | `Badge` | `tone` neutral/accent/gain/warn/danger, `dot` | |
+| `CompanyMark` | `size` 16/20/32, optional name (children) | blank tile (until logos are fetched); with its name, which truncates. 16 in the sidebar's Recent, 20 in the Jobs and Applications tables, 32 beside the job header's headline |
 | `Marked` | `text`, `marks` | inserted keywords in `<mark class="mark">`; the sheet's own highlight comes from the renderer |
 | `ChangeRow` | `state` in/off/left-out/forced, `checked`, `selected`, `points`, snippets `text`/`actions`/`editor` | actions appear on hover, focus or selection; reason line ("Left out: …", "Kept on by you · …"); warning; "Your edit" owner; editing |
 | `GroupHead` | `label`, `meta` | label + count + points |
 | `ScoreHeader` | `now`, `projected`, `ceiling`, `components` | updates instantly; the parts in a popover on hover or focus |
-| `Nav` / `NavItem` | `href`, `icon`, `current`, `meta`, `quiet` | hover, current, count; `quiet` for list entries (Recent) |
+| `Nav` / `NavItem` | `href`, `icon` or `lead` snippet, `current`, `meta` (+ `metaTitle`), `quiet`, `sub`, `status` | hover, current, count; `quiet` for list entries; two lines with `sub`: Recent jobs are a 28px `CompanyMark` (its edges on the company's cap height and the role's baseline), the company and its fit score (`76%`, tooltip "Fit score") over the role and the application's status (a dot in its badge tone, then its word), each line truncating, the status never |
 | `Card` | `pad` | |
 | `Desk` | `pages` (SVG), `status` snippet, `zoom` | fits / over the page limit (badge); zoom 50–200, 100% fits the desk |
 | `Toaster` + `toast()` | `tone` neutral/gain/warn/danger, `action` | enters with `.enter`, exits with blur and -12px; errors stay until dismissed |
@@ -161,7 +171,7 @@ there and shown in the `/specimen` route in every state before any screen uses i
 | `KeyFooter` | `keys` | sticky at the column's foot |
 | `Menu` | `value`, `options` (`label`, `meta`), `label` | closed, open, active option, chosen (check), disabled; ↑↓ Home End ⏎ Esc |
 | `Popover` | `open`, `anchor`, `placement`, `mode` auto/manual | anchored, flips when it would overflow; `--shadow-popover` |
-| `Progress` | `label`, `expectedMs`, `oncancel` | determinate (fills to 90% by the expected time, then creeps), indeterminate |
+| `Thinking` | `label`, `steps` (`label`, `ms`), `startedAt`, `oncancel` | stage alone; with steps already done (a check and their seconds); with Cancel |
 | `Table` | `columns`, `rows`, `cell` snippet | sticky header, tabular numbers, hover wash, no zebra |
 
 ## Layout
@@ -171,15 +181,15 @@ there and shown in the `/specimen` route in every state before any screen uses i
 │ ● ● ●    │ Jobs › Globex             [Master only|Bank-aware] │ SWE ▾ [Export E] │  toolbar 52
 │          ├──────────────────────────────┬─────────────────────────────────┤
 │ Jobs     │ Tailor first · Globex · …    │  ● Fits on 1 page        − 100% + │
-│ Bank     │ Junior Software Engineer     │  ┌───────────────────────────┐   │
-│ Masters  │ 53% › 78%        Ceiling 85% │  │                           │   │
-│ Apps     │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │  │      resume page          │   │
+│ Apps     │ Junior Software Engineer     │  ┌───────────────────────────┐   │
+│ Bank     │ 53% › 78%        Ceiling 85% │  │                           │   │
+│ Masters  │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │  │      resume page          │   │
 │          │ SKILLS  chips…               │  │      (live SVG)           │   │
 │ RECENT   │ WORK · …          3 · +15    │  │                           │   │
 │ …        │ ☑ change row                 │  └───────────────────────────┘   │
 │ Settings │ ↑↓ Select  Space Toggle  …   │              desk                │
 └──────────┴──────────────────────────────┴─────────────────────────────────┘
-  232 (vibrancy)   column 420–640                 rest
+  232 (vibrancy)   column 420–580                 rest
 ```
 
 - **Window:** Tauri `titleBarStyle: "Overlay"`, transparent, with the traffic lights inset into the sidebar
@@ -200,7 +210,8 @@ there and shown in the `/specimen` route in every state before any screen uses i
 |---|---|
 | Job (empty) | `Empty` centered on paper: "No postings yet", one sentence, **Paste from clipboard** `V` |
 | Job → Review | As the specimen: job header (badge, meta, headline), score, skill chips, change groups, key footer; desk with page |
-| Experience bank | Column: entries grouped by section with tag filter chips; selecting an entry opens its editor (bullets as rows with variants); desk previews the entry in the default template |
+| Experience bank | Column: entries grouped by section; an entry opens its editor (`/bank/entries/<id>`): each bullet's wordings (its text, then its variants) as rows with the masters showing each as badges; row actions Edit `⏎`, Make it the text `M`, Remove `⌫` (with Undo in the toast), Show in a master `1–9`; Add a variant `V`, Fold into… `F` per bullet. Desk: the entry in a master that shows it (`P` picks which), highlighted; the entry alone when none does |
+| Import review | As Review: the column lists the file's sections (where each goes), each entry `New` or `Yours` (merged, with **Keep separate**), skills lines' new items, offered contact items, and **Save as** (new master's title, or one to replace); the desk shows the master it makes, what's new to the bank highlighted. `⌘⏎` adds, `Esc` discards |
 | Masters | Column: a master's sections as checkbox rows over the bank, drag to order; desk previews the resolved master |
 | Applications | Full-width `Table` on `--surface`: tabular numbers, status as a `Badge`, row hover wash, no zebra stripes |
 | Settings | Single column of cards (max 640): agents with signed-in `Badge`, models, export folder, theme `Segmented` (Light, Dark, System) |

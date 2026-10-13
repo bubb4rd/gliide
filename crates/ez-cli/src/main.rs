@@ -15,6 +15,8 @@ struct Cli {
 enum Command {
     /// Turn an ATS Fit master.json (v1) into a bank and an `swe` master.
     Migrate(cmd::migrate::Args),
+    /// Import a resume (.pdf, .docx, .md, .txt) into a bank, with a master that shows it as the file does.
+    Import(cmd::import::Args),
     /// Resolve a master against a bank and render it: PDF, SVG and PNG pages, metrics.
     Render(cmd::render::Args),
     /// Write the bank and master JSON Schemas.
@@ -30,6 +32,7 @@ enum Command {
 fn main() -> anyhow::Result<()> {
     match Cli::parse().command {
         Command::Migrate(args) => cmd::migrate::run(args),
+        Command::Import(args) => cmd::import::run(args),
         Command::Render(args) => cmd::render::run(args),
         Command::Schema(args) => cmd::schema::run(args),
         Command::Score(args) => cmd::score::score_cmd(args),

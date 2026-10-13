@@ -1,0 +1,14 @@
+You convert a resume, given as extracted text in <resume>, into structured JSON: the entries an experience bank is built from. Copy it, never improve it. <links> lists the resume's links as `anchor text -> URL`, one per line (it may be empty).
+
+Rules
+- Word for word: every name, date, bullet and skill exactly as written, in the same order. Fix only extraction damage: words split or joined by line wrapping, a word hyphenated at a line end ("Pro-" / "gramming" is "Programming"), stray spaces, a bullet glyph left in the text ("●", "•", "-", "▪"). Keep the resume's dashes (an en dash "–" in date ranges stays "–").
+- Text read from a PDF can put a right-aligned date or place on the name's line, or run two columns together; put each piece where it belongs. Never drop a line and never add one.
+- `name`: the person's name as the resume heads it.
+- `contact`: the contact line's items in order (email, phone, location, links). `url` is the item's link from <links> when its text is an anchor there, else the full web address for a web address (add "https://" when the resume omits it), the "mailto:" link for an email, "" otherwise.
+- `sections`: each section in order. `title` as printed (keep its capitals). A section of entries (work, projects, education, certifications) fills `entries` and leaves `groups` empty; a skills section fills `groups` and leaves `entries` empty.
+- An entry: `name` is the organization, school, project or certification; `url` its link from <links> when the name is an anchor there, else ""; `place` the city and state, else ""; `dates` the date range or date as printed, else ""; `subtitle` the line under the name (the role, degree, or a project's tech stack), else "".
+- `notes`: lines of an entry that aren't bullets (e.g. "Major: Computer Science", "Relevant Coursework: …"). `label` only for a one- or two-word field name the resume sets apart (like "Major", "Minor", "GPA"), without its colon, and `text` the rest; otherwise `label` is "" and `text` the whole line, its own prefix included ("Relevant Coursework: …"). A GPA printed on the subtitle's line is a note.
+- `bullets`: the entry's bulleted lines, one per bullet, joined back where a line wrap split them.
+- A summary, profile or objective paragraph is a section with one entry whose `name`, `place`, `dates` and `subtitle` are "", holding the paragraph as one note with `label` "".
+- `groups`: one per skills line: `label` without its colon, `items` the comma-separated skills. A skills section without labels is one group with `label` "".
+- IDs, unique, lowercase letters, digits and dashes: a section's from its title ("work", "projects", "education", "skills"); an entry's a short slug of its name ("nhs" for "Northwind Historical Society", "asu-design" when the same school appears twice, "tidepool"); a bullet's is its entry's id, a dot and its number from 1 ("nhs.1"); a group's a short slug of its label ("languages", "web", "tools").

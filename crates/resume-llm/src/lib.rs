@@ -7,6 +7,7 @@
 mod claude;
 pub mod cover;
 pub mod extract;
+pub mod import;
 pub mod rewrite;
 pub mod suggest;
 

@@ -7,9 +7,18 @@ pub const PRESENT: &str = "present";
 /// and end. `None` when the text isn't a month, a month range, or a month to present.
 ///
 /// Months are names or abbreviations (`June`, `Sep`, `Sept.`), `MM/YYYY` or `YYYY-MM`; ranges are joined by an en or
-/// em dash, a hyphen or `to`.
+/// em dash, a hyphen or `to`. A graduation date may lead with `Expected`, `Anticipated` or `Graduated` (`Expected May
+/// 2026`).
 pub fn parse_range(printed: &str) -> Option<(String, String)> {
     let s = printed.trim();
+    let s = ["expected", "anticipated", "graduated"]
+        .iter()
+        .find_map(|w| {
+            s.get(..w.len())
+                .filter(|head| head.eq_ignore_ascii_case(w))
+                .map(|_| s[w.len()..].trim_start_matches(':').trim())
+        })
+        .unwrap_or(s);
     if let Some(m) = month(s) {
         return Some((m.clone(), m));
     }
@@ -125,6 +134,8 @@ mod tests {
     fn single_month() {
         assert_eq!(range("May 2026"), Some(("2026-05", "2026-05")));
         assert_eq!(range("2026-05"), Some(("2026-05", "2026-05")));
+        assert_eq!(range("Expected May 2026"), Some(("2026-05", "2026-05")));
+        assert_eq!(range("graduated: Dec 2025"), Some(("2025-12", "2025-12")));
     }
 
     #[test]

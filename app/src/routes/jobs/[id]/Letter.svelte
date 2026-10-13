@@ -9,7 +9,7 @@
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import type { CoverPart } from "$lib/api";
   import { bindKeys } from "$lib/keys";
-  import { Button, Empty, GroupHead, Input, KeyFooter, PartRow, Progress, Textarea } from "$lib/ui";
+  import { Button, Empty, GroupHead, Input, KeyFooter, PartRow, Textarea, Thinking } from "$lib/ui";
   import type { Session } from "./session.svelte";
 
   let { s }: { s: Session } = $props();
@@ -119,9 +119,8 @@
 
 {#if writing && s.running}
   <div class="running">
-    <Progress
+    <Thinking
       label="Writing the cover letter…"
-      expectedMs={s.running.expectedMs}
       startedAt={s.running.startedAt}
       oncancel={() => s.cancel()}
     />
@@ -230,9 +229,8 @@
           </form>
         {:else if index !== null && s.drafting === index && s.running}
           <div class="note">
-            <Progress
+            <Thinking
               label="Rewriting the paragraph…"
-              expectedMs={s.running.expectedMs}
               startedAt={s.running.startedAt}
               oncancel={() => s.cancel()}
             />

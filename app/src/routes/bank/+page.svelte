@@ -1,20 +1,20 @@
 <!--
-  Experience bank: everything you've done, by section, with which masters show each entry. Before the first import,
-  an empty state that imports ATS Fit's master.json. Read-only in M4 (the editors are M5).
+  Experience bank: everything you've done, by section, with which masters show each entry. Import picks a resume file
+  (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its review (/bank/import). Each entry (not a skills
+  line) opens its editor (/bank/entries/<id>): its bullets and their variants.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { page } from "$app/state";
   import FileUp from "@lucide/svelte/icons/file-up";
-  import { appError, importResume } from "$lib/api";
+  import { chooseResume } from "$lib/import";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
-  import { Badge, Button, Empty, GroupHead, Toolbar, toast } from "$lib/ui";
+  import { Badge, Button, Empty, GroupHead, Toolbar } from "$lib/ui";
 
   let loaded = $state(false);
-  let importing = $state(false);
-  /** Set by an import in this visit, so the list enters once (a first result), not on every visit. */
-  let arrived = $state(false);
+  /** Back from adding an import: the list enters once (a result arriving), not on every visit. */
+  const arrived = page.url.searchParams.has("added");
 
   onMount(async () => {
     await Promise.all([app.refreshLibrary(), app.settings ? null : app.loadSettings()]);
@@ -25,35 +25,10 @@
   const bank = $derived(lib?.bank ?? null);
   const masterTitle = $derived(new Map(lib?.masters.map((m) => [m.id, m.title]) ?? []));
 
-  $effect(() => bindKeys({ i: () => void pick() }));
+  /** The toolbar's and the empty state's import, and `I`. */
+  const pick = () => chooseResume(app.settings?.exportDir);
 
-  async function pick() {
-    if (importing) return;
-    const path = await open({
-      title: "Import an ATS Fit resume",
-      multiple: false,
-      directory: false,
-      defaultPath: app.settings?.exportDir,
-      filters: [{ name: "ATS Fit master.json", extensions: ["json"] }],
-    }).catch((e) => {
-      toast(appError(e).message, { tone: "danger" });
-      return null;
-    });
-    if (!path) return;
-    importing = true;
-    try {
-      const first = !app.library?.bank;
-      const next = await importResume(path);
-      app.library = next;
-      arrived = first;
-      const entries = next.bank?.entries ?? 0;
-      toast(`Imported ${entries} ${entries === 1 ? "entry" : "entries"} from ${path.split("/").pop()}`);
-    } catch (e) {
-      toast(appError(e).message, { tone: "danger" });
-    } finally {
-      importing = false;
-    }
-  }
+  $effect(() => bindKeys({ i: () => void pick() }));
 
   function updated(rfc3339: string): string {
     const d = new Date(rfc3339);
@@ -67,9 +42,7 @@
 <Toolbar>
   {#snippet crumbs()}<b>Experience bank</b>{/snippet}
   {#if bank}
-    <Button icon={FileUp} kbd="I" disabled={importing} onclick={pick}>
-      {importing ? "Importing…" : "Import ATS Fit resume"}
-    </Button>
+    <Button icon={FileUp} kbd="I" onclick={pick}>Import resume</Button>
   {/if}
 </Toolbar>
 
@@ -98,7 +71,7 @@
           />
           <ul class="entries">
             {#each section.entries as entry (entry.id)}
-              <li class="entry">
+              {#snippet body()}
                 <div class="line">
                   <span class="name">{entry.name}</span>
                   {#if entry.subtitle}<span class="subtitle">{entry.subtitle}</span>{/if}
@@ -119,6 +92,13 @@
                     <span class="meta">In no master</span>
                   {/if}
                 </div>
+              {/snippet}
+              <li>
+                {#if section.kind === "skills"}
+                  <div class="entry">{@render body()}</div>
+                {:else}
+                  <a class="entry entry--link" href="/bank/entries/{encodeURIComponent(entry.id)}">{@render body()}</a>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -130,12 +110,10 @@
   <div class="center">
     <Empty
       title="No experience yet"
-      body="Import your ATS Fit master.json: its entries become your bank, and its resume your first master."
+      body="Import your resume as a PDF, Word file or ATS Fit's master.json: its entries become your bank, and the resume your first master."
     >
       {#snippet action()}
-        <Button variant="primary" size="lg" icon={FileUp} kbd="I" disabled={importing} onclick={pick}>
-          {importing ? "Importing…" : "Import ATS Fit resume"}
-        </Button>
+        <Button variant="primary" size="lg" icon={FileUp} kbd="I" onclick={pick}>Import resume</Button>
       {/snippet}
     </Empty>
   </div>
@@ -180,6 +158,16 @@
     gap: var(--space-1);
     padding: var(--space-3);
     box-shadow: inset 0 -1px 0 var(--line);
+  }
+  /* An entry that opens its editor: the whole row is the link. */
+  .entry--link {
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+    transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .entry--link:focus-visible {
+    outline-offset: -2px;
   }
   .line {
     display: flex;
@@ -229,5 +217,10 @@
     flex: 1;
     place-items: center;
     min-height: 0;
+  }
+  @media (hover: hover) {
+    .entry--link:hover {
+      background: var(--hover);
+    }
   }
 </style>

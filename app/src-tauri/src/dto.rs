@@ -167,6 +167,212 @@ pub struct TemplateRow {
     pub ats_safe: bool,
 }
 
+/// A resume file read for import, before anything is added: where each part goes, and the master it makes.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ImportView {
+    /// The waiting import: `import_view` and `finish_import` name it.
+    pub id: String,
+    /// The file's name.
+    pub file: String,
+    /// The person's name as the file heads it.
+    pub name: String,
+    /// No bank yet: everything is new, and the file's name and contact line become the bank's.
+    pub first: bool,
+    pub sections: Vec<ImportSection>,
+    /// The file's contact items the bank lacks; adding one puts it on every resume.
+    pub contact: Vec<ImportContact>,
+    /// Dates that can’t be read: "Can’t read the dates “Summer 2023” of …".
+    pub warnings: Vec<String>,
+    /// Entries added (kept-separate ones included).
+    pub new_entries: u32,
+    /// Entries merged into the bank's same entry.
+    pub same_entries: u32,
+    pub new_bullets: u32,
+    pub new_items: u32,
+    /// The master it makes, new lines highlighted, one SVG document per page.
+    pub pages: Vec<String>,
+    pub page_count: u32,
+    pub page_limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ImportSection {
+    /// The heading as the file prints it (the new master shows it).
+    pub title: String,
+    /// The bank section it joins, by its title; `None` for a new section.
+    pub into: Option<String>,
+    pub entries: Vec<ImportEntry>,
+    pub groups: Vec<ImportGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ImportEntry {
+    /// What `ImportChoices.separate` names.
+    pub id: String,
+    pub name: String,
+    pub subtitle: String,
+    pub dates: String,
+    pub bullets: u32,
+    /// The bank entry with the same name and first month: merged into it unless kept separate.
+    pub same: Option<SameEntry>,
+    /// Kept separate: added as an entry of its own.
+    pub separate: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SameEntry {
+    pub name: String,
+    pub subtitle: String,
+    pub dates: String,
+    /// The file's bullets the entry has already (as a bullet or a variant).
+    pub matched: u32,
+    /// The file's bullets merging adds to it.
+    pub new: u32,
+    /// `subtitle`, `place`, `dates`, `link`, `notes`: where the file prints something else; merging keeps the bank's.
+    pub differs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ImportGroup {
+    pub label: String,
+    pub items: u32,
+    /// The bank skills line it joins, by its label; `None` for a new line.
+    pub into: Option<String>,
+    /// Items that line lacks (all of them for a new line).
+    pub new_items: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ImportContact {
+    pub text: String,
+    pub url: String,
+    pub chosen: bool,
+}
+
+/// How to add a waiting import.
+#[derive(Debug, Clone, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ImportChoices {
+    /// `ImportView.id`.
+    pub import: String,
+    /// Ids of entries with a same entry to add as entries of their own.
+    pub separate: Vec<String>,
+    /// Indexes into `ImportView.contact` to add to the contact line.
+    pub contact: Vec<u32>,
+    /// A master the import replaces (keeping its title, template and page limit); `None` makes a new master.
+    pub replace: Option<String>,
+    /// The new master's title.
+    pub title: String,
+}
+
+/// One bank entry in its editor: every bullet with its wordings (its text, then its variants) and which master shows
+/// which, and the desk's preview.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EntryView {
+    pub id: String,
+    /// The bank section's title.
+    pub section: String,
+    pub name: String,
+    pub subtitle: String,
+    pub place: String,
+    pub dates: String,
+    /// Note lines as printed: `Label: text`, or the text alone.
+    pub notes: Vec<String>,
+    pub bullets: Vec<BulletView>,
+    /// The masters that show this entry, by title.
+    pub masters: Vec<MasterRef>,
+    /// The master on the desk; `None`: the entry alone, every bullet in its text.
+    pub preview: Option<String>,
+    /// The preview, the entry's bullets highlighted, one SVG document per page.
+    pub pages: Vec<String>,
+    pub page_count: u32,
+    pub page_limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MasterRef {
+    pub id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BulletView {
+    pub id: String,
+    /// The bullet's text first (`variant` null), then each variant.
+    pub wordings: Vec<WordingView>,
+    /// Skills you say it demonstrates.
+    pub skills: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WordingView {
+    /// `None` for the bullet's text, else the variant's index.
+    pub variant: Option<u32>,
+    pub text: String,
+    /// Ids of the masters that show this wording.
+    pub masters: Vec<String>,
+}
+
+/// An edit of a bank entry's bullets and their wordings. Every master keeps showing the words it showed, except where
+/// the edit says otherwise (`show`, or editing the wording it shows).
+#[derive(Debug, Clone, PartialEq, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+#[ts(export)]
+pub enum EntryEdit {
+    /// A new variant of a bullet.
+    AddVariant {
+        bullet: String,
+        text: String,
+    },
+    /// New words for one wording (`variant` null: the bullet's text), in every master that shows it.
+    SetWording {
+        bullet: String,
+        variant: Option<u32>,
+        text: String,
+    },
+    RemoveVariant {
+        bullet: String,
+        variant: u32,
+    },
+    /// A variant becomes the bullet's text, and the text a variant.
+    MakeMain {
+        bullet: String,
+        variant: u32,
+    },
+    /// Bullet `from` becomes variants of `into`, a bullet of the same entry.
+    Fold {
+        from: String,
+        into: String,
+    },
+    /// Which wording `master` shows.
+    Show {
+        master: String,
+        bullet: String,
+        variant: Option<u32>,
+    },
+}
+
 // ── Jobs ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// A posting in the Jobs list and the sidebar's Recent.
@@ -382,6 +588,9 @@ pub struct ChangeView {
     pub editable: bool,
     /// Rewrite with a note applies (bullet and summary edits).
     pub rewritable: bool,
+    /// Its line can be saved to the bank as a variant of its bullet (`save_variant`): a bullet edit that isn't left
+    /// out and reads unlike every wording the bullet has.
+    pub savable: bool,
     /// Suggest's reason, for the hover/selected detail.
     pub why: String,
 }
@@ -543,8 +752,6 @@ pub struct Progress {
     /// The posting id the step runs for (what `cancel` takes).
     pub job: String,
     pub stage: Stage,
-    /// About how long it takes, ms (extract ≈ 6000, suggest ≈ 15000), for a determinate bar; `None` unknown.
-    pub expected_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -558,4 +765,6 @@ pub enum Stage {
     Writing,
     /// One paragraph of the cover letter, rewritten with a note.
     Revising,
+    /// A resume file copied for import.
+    Importing,
 }

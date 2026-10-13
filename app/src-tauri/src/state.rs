@@ -20,6 +20,7 @@ use tokio::task::AbortHandle;
 use crate::dto::{Mode, Progress, Settings, Stage, Theme};
 use crate::error::Result;
 use crate::export;
+use crate::import::Pending;
 use crate::review::Review;
 
 /// The store file inside the app's data folder.
@@ -37,6 +38,8 @@ pub struct App {
     pub settings: Mutex<Settings>,
     /// The open review: one at a time.
     pub review: Mutex<Option<Review>>,
+    /// A resume file read and copied, waiting for you to add it to the bank: one at a time.
+    pub import: Mutex<Option<Pending>>,
     /// One long-lived renderer per template, kept warm across reviews.
     pub renderers: Mutex<HashMap<String, Renderer>>,
     /// Each master as rendered, by bank and master revision: its resolved resume and page facts for the score now.
@@ -76,6 +79,7 @@ impl App {
             store: Mutex::new(store),
             settings: Mutex::new(settings),
             review: Mutex::new(None),
+            import: Mutex::new(None),
             renderers: Mutex::new(HashMap::new()),
             pages: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
@@ -217,13 +221,11 @@ pub async fn model_call<T: Send + 'static>(
     app: &Arc<App>,
     job: &str,
     stage: Stage,
-    expected_ms: Option<u32>,
     call: impl Future<Output = std::result::Result<T, LlmError>> + Send + 'static,
 ) -> Result<T> {
     (app.emit)(&Progress {
         job: job.to_owned(),
         stage,
-        expected_ms,
     });
     let task = tokio::spawn(call);
     let handle = task.abort_handle();

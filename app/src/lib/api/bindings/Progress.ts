@@ -8,8 +8,4 @@ export type Progress = {
 /**
  * The posting id the step runs for (what `cancel` takes).
  */
-job: string, stage: Stage, 
-/**
- * About how long it takes, ms (extract ≈ 6000, suggest ≈ 15000), for a determinate bar; `None` unknown.
- */
-expectedMs: number | null, };
+job: string, stage: Stage, };

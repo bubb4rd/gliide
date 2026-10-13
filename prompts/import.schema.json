@@ -1,0 +1,85 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "contact", "sections"],
+  "properties": {
+    "name": { "type": "string" },
+    "contact": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "url"],
+        "properties": {
+          "text": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "entries", "groups"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name", "url", "place", "dates", "subtitle", "notes", "bullets"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "url": { "type": "string" },
+                "place": { "type": "string" },
+                "dates": { "type": "string" },
+                "subtitle": { "type": "string" },
+                "notes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["label", "text"],
+                    "properties": {
+                      "label": { "type": "string" },
+                      "text": { "type": "string" }
+                    }
+                  }
+                },
+                "bullets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "text"],
+                    "properties": {
+                      "id": { "type": "string" },
+                      "text": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "label", "items"],
+              "properties": {
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "items": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

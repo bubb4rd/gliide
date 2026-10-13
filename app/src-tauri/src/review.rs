@@ -11,6 +11,7 @@ use resume_core::matcher::{Page, find_literal};
 use resume_core::resume::SectionKind;
 use resume_core::suggestions::Suggestions;
 use resume_core::validate::Grounding;
+use resume_core::variants::add_variant;
 use resume_core::{Master, Requirements, Resume, resolve};
 use resume_llm::rewrite::{self, RewriteInput};
 use resume_llm::suggest::{self, SuggestInput};
@@ -22,15 +23,11 @@ use crate::dto::{
     ChipState, CustomEdit, Decision, EditTargets, MasterChoice, Mode, ReviewView, Rewritten, Stage,
     Target,
 };
+use crate::entry::variant_error;
 use crate::error::{AppError, Result};
 use crate::jobs;
 use crate::state::{App, blocking, lock, model_call};
 use crate::view;
-
-/// About how long Suggest takes on sonnet, for the progress bar.
-const SUGGEST_MS: u32 = 15_000;
-/// About how long a one-line rewrite takes.
-const REWRITE_MS: u32 = 8_000;
 
 pub struct Review {
     /// The analysis id.
@@ -134,7 +131,7 @@ pub async fn start_review(
                 candidates.clone(),
                 model.clone(),
             );
-            let (s, out) = model_call(app, job, Stage::Suggesting, Some(SUGGEST_MS), async move {
+            let (s, out) = model_call(app, job, Stage::Suggesting, async move {
                 let input = SuggestInput {
                     posting: &p,
                     requirements: &rq,
@@ -268,6 +265,30 @@ fn change<'a>(r: &'a Review, key: &str) -> Result<&'a Change> {
         .as_ref()
         .and_then(|l| l.changes.iter().find(|c| c.key == key))
         .ok_or_else(|| AppError::missing("This change is gone; reopen the review"))
+}
+
+/// Saves change `key`'s line as a variant of its bullet in the bank: every master and later review can show it, and
+/// Suggest prefers it over new words. This review goes on as it is, its copy of the bank holding the variant too.
+pub async fn save_variant(app: &Arc<App>, review: &str, key: String) -> Result<ReviewView> {
+    edit(app, review, move |app, r| {
+        let last = r.last.as_ref().ok_or_else(AppError::replaced)?;
+        let c = change(r, &key)?;
+        let bullet = view::savable(r, c, &last.t)
+            .ok_or_else(|| {
+                AppError::other("Only a bullet's new wording can be saved as a variant")
+            })?
+            .to_owned();
+        let text = view::line_text(c, &last.t);
+        {
+            let store = lock(&app.store);
+            let (_, mut bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
+            add_variant(&mut bank, &bullet, &text).map_err(variant_error)?;
+            store.put_bank(&bank)?;
+        }
+        add_variant(&mut r.bank, &bullet, &text).map_err(variant_error)?;
+        Ok(())
+    })
+    .await
 }
 
 pub async fn decide(
@@ -505,24 +526,18 @@ pub async fn rewrite(app: &Arc<App>, review: &str, key: String, note: String) ->
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
     let (line, facts, terms, budget) = (job.line, job.facts, job.terms, job.budget);
-    let text = model_call(
-        app,
-        &job.posting_id,
-        Stage::Rewriting,
-        Some(REWRITE_MS),
-        async move {
-            let input = RewriteInput {
-                line: &line,
-                facts: &facts,
-                terms: &terms,
-                note: &note,
-                budget,
-            };
-            rewrite::rewrite(&llm, &rewrite::schema(), &input, &model)
-                .await
-                .map(|(text, _)| text)
-        },
-    )
+    let text = model_call(app, &job.posting_id, Stage::Rewriting, async move {
+        let input = RewriteInput {
+            line: &line,
+            facts: &facts,
+            terms: &terms,
+            note: &note,
+            budget,
+        };
+        rewrite::rewrite(&llm, &rewrite::schema(), &input, &model)
+            .await
+            .map(|(text, _)| text)
+    })
     .await?;
     let id = review.to_owned();
     blocking(app, move |app| {

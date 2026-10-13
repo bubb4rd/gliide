@@ -38,7 +38,7 @@ impl AppError {
     }
 
     pub fn no_bank() -> Self {
-        Self::missing("Import your resume first: Experience bank, then Import ATS Fit resume")
+        Self::missing("Import your resume first: Experience bank, then Import resume")
     }
 
     pub fn no_posting() -> Self {

@@ -15,6 +15,7 @@ import {
   redo,
   removeEdit,
   rewrite,
+  saveVariant,
   rewriteCoverParagraph,
   setCoverPart,
   setWording,
@@ -41,9 +42,14 @@ export type Phase = "opening" | "suggesting" | "ready" | "stopped" | "failed";
 
 export interface Running {
   stage: Stage;
-  expectedMs: number | null;
   /** `performance.now()` when the event arrived. */
   startedAt: number;
+}
+
+/** A model call of this run that finished: Extract, before Suggest runs. */
+export interface Step {
+  stage: Stage;
+  ms: number;
 }
 
 /** What a click on a row's checkbox asks for, from the state it shows. */
@@ -70,6 +76,8 @@ export class Session {
   error = $state<AppError | null>(null);
   /** The model call running for this job, from its `progress` event; null when none (or a cached answer). */
   running = $state<Running | null>(null);
+  /** The model calls of this run already done (Extract while Suggest runs), for the status's trail. */
+  steps = $state<Step[]>([]);
   /** The change being rewritten from a note. */
   rewriting = $state<string | null>(null);
   /** What the toolbar shows: the review's master and mode, or the ones just asked for. */
@@ -99,7 +107,7 @@ export class Session {
   async start() {
     const unlisten = await onProgress((p) => {
       if (p.job === this.job && this.#alive)
-        this.running = { stage: p.stage, expectedMs: p.expectedMs, startedAt: performance.now() };
+        this.running = { stage: p.stage, startedAt: performance.now() };
     });
     if (!this.#alive) return unlisten();
     this.#unlisten = unlisten;
@@ -117,6 +125,7 @@ export class Session {
   async open() {
     this.phase = "opening";
     this.error = null;
+    this.steps = [];
     try {
       const view = await openJob(this.job);
       if (!this.#alive) return;
@@ -126,6 +135,8 @@ export class Session {
       this.running = null;
       return this.#stop(appError(e));
     }
+    const done = this.running;
+    if (done) this.steps = [{ stage: done.stage, ms: performance.now() - done.startedAt }];
     this.running = null;
     await this.suggest(null, null);
   }
@@ -134,6 +145,8 @@ export class Session {
   suggest(master: string | null, mode: Mode | null, fresh = false) {
     return this.#queue(async () => {
       if (!this.#alive) return;
+      // A run of its own (another master, a re-run) starts its trail afresh; after `open` it carries Extract on.
+      if (this.phase !== "opening") this.steps = [];
       this.phase = "suggesting";
       this.error = null;
       try {
@@ -169,6 +182,11 @@ export class Session {
   /** Your own edit removed, or a suggestion back to its suggested wording. */
   remove(change: ChangeView) {
     return this.#edit((id) => (change.custom ? removeEdit(id, change.key) : setWording(id, change.key, null)));
+  }
+
+  /** The change's line saved to the bank as a variant of its bullet; true when it was. */
+  saveVariant(key: string) {
+    return this.#edit((id, review) => (find(review, key)?.savable ? saveVariant(id, key) : null));
   }
 
   skill(term: string) {

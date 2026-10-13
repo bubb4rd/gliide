@@ -51,7 +51,7 @@ through the subscription you already pay for.
 | Storage | SQLite (`rusqlite`) | Bank, masters and revisions, postings, analyses, drafts, applications |
 | Model | Your agent CLI over ACP (`agent-client-protocol`) or `claude -p`, as a subprocess | Extract, suggest, rewrite, import, cover letter |
 | Posting fetch | `reqwest` + HTML parsing (`scraper`) | Board APIs, JSON-LD `JobPosting`, `<main>` text |
-| Resume import | PDF text + link annotations (pdfium, or PDFKit on Apple); DOCX via its XML | Import into the bank |
+| Resume import | PDF text and link annotations in pure Rust (`resume_render::pdf_read`, the read-back's glyph layout over `hayro`); DOCX via its XML (`zip` + `roxmltree`); Markdown and text as written | Import into the bank |
 
 ## The whole flow
 
@@ -219,6 +219,15 @@ master that selects all of it.
 **Editing:** fix a bullet in the bank and every master that shows it gets the fix. A wording that only suits one
 track is a variant, and the master picks it.
 
+**Variants** (`resume_core::variants`) come from two places: the entry editor (Experience bank → an entry: add,
+edit, remove a variant, make one the bullet's text, fold a reworded duplicate bullet into another of its entry, choose
+which wording each master shows) and the review (**Save as variant** keeps a rewrite or your wording of a bullet; not
+offered for a line left out, since later rewrites may draw on a variant's facts). Every edit keeps each master showing
+the words it showed unless the edit is about what it shows: removing a variant renumbers the others and falls back to
+the text where it was shown; making a variant the text swaps the indexes; folding moves masters onto the same words,
+and is refused when a master shows both bullets. Suggest already sees variants as `(variant N)` lines and prefers them
+over new words; the grounding validator counts them as the bullet's own facts.
+
 ### Trying both methods
 
 The bank model holds both methods, so the app can switch between them without a second data model:
@@ -277,7 +286,7 @@ Prompts and schemas are files in `prompts/`, built in and overridable from a dev
 | Extract | Posting text | `Requirements` |
 | Suggest (streamed) | Tagged master; bank candidates in bank-aware mode; `Requirements`; posting | `Suggestions` |
 | Rewrite one | Master, posting, the line, your note ("shorter", "mention Kafka") | One line |
-| Import | Resume text, links | Bank entries (merged into the bank; duplicates by name and dates are offered, not merged silently) |
+| Import | Resume text, links (`anchor text -> URL`) | The resume word for word, in ATS Fit's master shape (`prompts/import.md`); merged into the bank by code (below) |
 | Cover letter / one paragraph | Tailored resume, posting, letter, note | Letter / paragraph |
 
 Extract defaults to **sonnet**. In the M0 spike (`claude -p`, 11 postings each) sonnet was the fastest (p50 6.3 s, p90
@@ -329,6 +338,22 @@ model's wording against the resume".
   cited for a job) is flagged; a skills line backs only a requirement skill with evidence `yes`/`add`. Summaries draw
   on the whole resume. Degree abbreviations (`B.S.`, `MBA`) count as grounded when the bank has that degree level.
 - A line that fails starts **left out**, with the reason (`"40%" is not in your resume`); you can force it in.
+
+### Import: a resume into the bank
+
+The model only copies the file (ATS Fit's `import.md`: word for word, fixing extraction damage); `resume_core::import`
+decides where it goes, and nothing is saved before you review it next to the master it makes (new lines highlighted).
+
+| Part of the file | Goes |
+|---|---|
+| Section | Into the bank section of its kind (among several, the one sharing the most entries, then the same heading; a `custom` section only by heading), else a new section. The new master keeps the file's heading |
+| Entry | The **same entry** when the name matches (or one starts the other) and the first or last month does: offered, merged by default, its bullets matched by text against the entry's bullets and variants. The bank's name, dates, subtitle and notes stay (the review says which differ). **Keep separate** adds it as an entry of its own. Otherwise a new entry |
+| Skills line | The line with the same label gains the items it lacks; else a new line |
+| Contact item | Offered only (the contact line is on every resume) |
+
+Nothing existing changes or goes, so every master resolves as it did. The import makes a new master that shows the
+file (default template, the PDF's page count as its limit), or replaces one you pick. ATS Fit's `master.json` takes the
+same path without the model call. `ez import <file> --bank … --title …` runs it from the command line.
 
 ## 4. The composite score
 
@@ -467,6 +492,38 @@ only the page count needs the loop.
 | iOS | Share extension from Safari and the LinkedIn app (a native Swift target beside the Tauri app) |
 | Blocked sites (Indeed: HTTP 401) | The app says to paste the text |
 
+### Company logos
+
+Shown in the sidebar's Recent jobs (16px), the Jobs and Applications tables (20px) and beside the job header's
+headline (32px), through `CompanyMark`. **Today the slot is a blank tile**; nothing is fetched yet. A logo is the
+company's brand and is shown as published: never recolored, filtered, cropped or outlined (`design/DESIGN.md`).
+
+**Sources: first party only for now.** The posting's own pages, then the company's own site; no third party learns
+which companies you look at. [logo.dev](https://www.logo.dev) is the third-party option if coverage needs it (free
+tier: attribution required; paid API: results may be cached and self-hosted). Brandfetch doesn't fit: its CDN may only
+be embedded and refuses programmatic fetching and caching. Clearbit's Logo API shut down on 2025-12-08.
+
+| Source | Logo | Company website | Cost |
+|---|---|---|---|
+| Ashby page | JSON-LD `hiringOrganization.logo`, `org-theme-logo` (square), `org-theme-wordmark` | `__appData.organization.publicWebsite`, JSON-LD `sameAs` | In the response already read |
+| LinkedIn guest page | `img.artdeco-entity-image[data-delayed-url]` (`company-logo_100_100`) | None | In the response already read |
+| JSON-LD / HTML page | `hiringOrganization.logo`, header `<img>`, `og:image` (last: often a 1200×630 share card) | `hiringOrganization.sameAs` / `url`; the page's host when it isn't a board | In the response already read |
+| Greenhouse | API has none; the job page's `og:image` | The job page's `a.logo` href | One more request, off the critical path |
+| Lever | API has none; the board page's header `<img alt="… logo">` (its `og:image` is a share card) | The header logo's href | One more request, off the critical path |
+| Pasted text, imported applications | None | A URL or email domain in the text (boards excluded); else **Set website…** | — |
+
+Given a website without a logo: its `apple-touch-icon`, then `icon`, then `/favicon.ico`. Never a favicon from a board
+host (Ashby, Greenhouse, Lever, Workday, iCIMS, ApplicantPro…): those are the board's. Plan, in order:
+
+1. Ingest records `org { website, logo }` on `Found` and `company_site`, `logo_url` on `Posting` (optional fields;
+   the hash covers the text only, so caches hold).
+2. After the posting is saved, a background fetch (the ingest `Fetcher`, `image/*` only, ≤ 512 KB, dimensions read)
+   stores the square mark and any wordmark in a `companies` table keyed by normalized company name, so applications
+   without a posting match too. A website you set is never overwritten; fetched logos refresh after 90 days.
+3. The UI reads them through a `logo://` URI scheme; `CompanyMark` shows the logo, else the blank tile.
+4. Greenhouse and Lever's extra request; then **Set website…** and website-from-text for pasted postings and
+   imported applications (4 of 5 postings and 5 of 7 applications in use on 2026-10-13 had no link to read).
+
 ## 8. Storage
 
 | Where | What |
@@ -513,10 +570,10 @@ gliide/
     resume-core/             bank/master types (serde + JSON Schema), resolve, ids, change engine, apply, matcher, score, validator
     resume-render/           Typst World, fonts, templates, measure, PDF/SVG/PNG, PDF text read-back
     resume-llm/              Llm trait, ACP client provider, claude CLI provider, agent discovery, JSON repair, prompts
-    resume-ingest/           posting fetch/parse, PDF/DOCX import
+    resume-ingest/           posting fetch/parse
     resume-store/            SQLite schema, migrations, queries; the draft event log; applications.csv
     resume-tailor/           the fit check: states, page loop, now / projected / ceiling, points
-    resume-pipeline/         per-posting steps the CLI and the app share: posting files, Extract/Suggest cache keys, templates, today
+    resume-pipeline/         steps the CLI and the app share: posting files, resume files for import (PDF, DOCX, Markdown, text), Extract/Suggest cache keys, templates, today
     ez-cli/                  `ez render | score | tailor | import | eval` for development and evals
   app/
     src-tauri/               Tauri commands over the crates (dto.rs → TypeScript bindings via ts-rs)
@@ -559,8 +616,8 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to ATS Fit with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 fixture postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (waymark 74.2 → 84.2); a real bank with roles outside the master is needed to settle the mode experiment |
-| M4 macOS app (built; in use test) | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv` (ATS Fit's rows imported), agent settings; `resume-store` (SQLite), `resume-pipeline` | You use it instead of ATS Fit. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` give identical scores, states and points on the recorded fixtures |
-| M5 Experience | PDF/DOCX import into the bank, variants, second template (design track), the mode experiment's report | Decision on the default mode |
+| M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv` (ATS Fit's rows imported), agent settings; `resume-store` (SQLite), `resume-pipeline` | Done: in use instead of ATS Fit. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` give identical scores, states and points on the recorded fixtures |
+| M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); second template (design track), the mode experiment's report | Decision on the default mode |
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (ATS Fit's `cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Parity with ATS Fit, plus tracking |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
 | M8 Distribution | Signing, notarization, auto-update; labs' written OK for subscription use | Installable by someone else |
@@ -573,6 +630,7 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | Model access on desktop | **Decided:** your own agents: `claude -p` first; ACP (Codex, Gemini CLI, registry) added after core features work; no API keys |
 | Bank-aware vs master-only suggestions | **Experiment** in M3–M5 on one data model; default chosen from the metrics |
 | Sync | **Not yet** |
+| Company logo source | **Decided:** first party (posting pages, the company's own site); logo.dev if coverage needs a third party |
 | Model access on iOS | Open until M7: Mac relay (needs pairing, close to sync) or your own API key |
 
 ## 15. Risks

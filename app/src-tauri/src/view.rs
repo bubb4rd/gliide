@@ -9,6 +9,7 @@ use resume_core::requirements::SkillKind;
 use resume_core::resume::Resume;
 use resume_core::score::Score;
 use resume_core::suggestions::Verdict as CoreVerdict;
+use resume_core::validate::same_text;
 use resume_render::LineCount;
 use resume_tailor::Tailored;
 
@@ -377,6 +378,7 @@ fn change_view(r: &Review, c: &Change, draft: &Draft, t: &Tailored) -> ChangeVie
         custom: draft.custom.iter().any(|x| x.key == c.key),
         editable: line_edit || matches!(c.op, Op::Add { .. } | Op::Summary { .. }),
         rewritable: rewritable(&c.op),
+        savable: savable(r, c, t).is_some(),
         why: c.why.clone(),
     }
 }
@@ -451,6 +453,32 @@ pub fn rewritable(op: &Op) -> bool {
         Op::Set { line, .. } | Op::Swap { line, .. } => !line.contains('#'),
         _ => false,
     }
+}
+
+/// The bullet whose variants change `c`'s line can join: a bullet edit (a rewrite, your wording, a swap) that isn't
+/// left out and reads unlike every wording the bullet has. Left-out lines aren't offered: a variant is a phrasing you
+/// approved, and later rewrites may draw on its facts.
+pub fn savable<'a>(r: &Review, c: &'a Change, t: &Tailored) -> Option<&'a str> {
+    let bullet = match &c.op {
+        Op::Rewrite { bullet, .. } => bullet,
+        Op::Set { line, .. } | Op::Swap { line, .. } if !line.contains('#') => line,
+        _ => return None,
+    };
+    if matches!(t.states.get(&c.key), Some(State::LeftOut { .. })) {
+        return None;
+    }
+    let b = r
+        .bank
+        .sections
+        .iter()
+        .flat_map(|s| &s.entries)
+        .flat_map(|e| &e.bullets)
+        .find(|b| &b.id == bullet)?;
+    let text = line_text(c, t);
+    let known = std::iter::once(&b.text)
+        .chain(&b.variants)
+        .any(|w| same_text(w, &text));
+    (!known && !text.trim().is_empty()).then_some(bullet.as_str())
 }
 
 /// `Rewrite · adds Python and SQL · same 2 lines`: what the op is, the terms it adds, and its lines when it's in.

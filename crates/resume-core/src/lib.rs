@@ -1,5 +1,5 @@
-//! Bank and master types, `resolve`, the v1 migrator (ARCHITECTURE.md §2), the posting and requirements types (§3,
-//! §7), and the literal matcher, composite score and master ranking (§4).
+//! Bank and master types, `resolve`, the v1 migrator and the import merge (ARCHITECTURE.md §2, §3), the posting and
+//! requirements types (§3, §7), and the literal matcher, composite score and master ranking (§4).
 
 pub mod apply;
 pub mod bank;
@@ -7,6 +7,7 @@ pub mod candidates;
 pub mod change;
 pub mod changes;
 pub mod dates;
+pub mod import;
 pub mod master;
 pub mod matcher;
 pub mod migrate;
@@ -19,6 +20,7 @@ pub mod score;
 pub mod suggestions;
 pub mod text;
 pub mod validate;
+pub mod variants;
 
 pub use bank::Bank;
 pub use master::Master;

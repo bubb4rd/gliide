@@ -1,9 +1,13 @@
 //! The per-posting steps the `ez` CLI and the app share: reading a posting, the cache keys of Extract and Suggest
-//! output, the bank candidates Suggest sees, a master's template and page facts, and today's month.
+//! output, the bank candidates Suggest sees, a master's template and page facts, and today's month; and, for the
+//! import, reading a resume file ([`read_resume`]).
 //!
 //! Callers own the caching: the CLI keeps model output in files under `local/cache/`, the app in its store. Both key
 //! it with [`extract_key`] and [`suggest_key`], so a change to a prompt, a model or the master invalidates it.
 
+pub mod resume_file;
+
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use resume_core::candidates::bank_candidates;
@@ -15,6 +19,8 @@ use resume_core::{
 use resume_llm::extract;
 use resume_llm::suggest::{self, SuggestInput};
 use resume_render::{FontOptions, RenderError, Renderer, Template};
+
+pub use resume_file::{ResumeFile, ResumeSource, read_resume};
 
 /// Bank entries outside the master Suggest sees in bank-aware mode (ARCHITECTURE.md §2).
 pub const CANDIDATES: usize = 5;
@@ -29,6 +35,33 @@ pub enum PipelineError {
     Render(#[from] RenderError),
     #[error("resume JSON: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Couldn't read {}: {source}", path.display())]
+    ReadFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error(
+        "gliide reads .pdf, .docx, .md, .txt and ATS Fit's master.json. Save it as a PDF and import that."
+    )]
+    UnsupportedFile,
+    #[error("This file isn't a PDF gliide can open. Export it again as a PDF, or import a .docx.")]
+    NotPdf,
+    #[error(
+        "This PDF has no text to read (a scan?). Export it again from the app you wrote it in, or import a .docx."
+    )]
+    NoPdfText,
+    #[error(
+        "This file isn't a Word document gliide can open ({0}). Save it again as a .docx, or export a PDF."
+    )]
+    NotDocx(String),
+    #[error("This file isn't UTF-8 text. Save it again as UTF-8, or import a PDF.")]
+    NotUtf8,
+    #[error("This file has no text in it. Choose the file your resume is in.")]
+    EmptyFile,
+    #[error(
+        "This file isn't an ATS Fit master.json ({0}). Choose the master.json ATS Fit tailors from."
+    )]
+    NotMasterJson(serde_json::Error),
 }
 
 /// A posting file: optional `---` front matter (`title`, `company`, `location`, `source`, `method`), then the text.

@@ -13,9 +13,6 @@ use crate::dto::{ChipState, JobHead, JobRow, JobView, MasterChoice, SkillChip, S
 use crate::error::{AppError, Result};
 use crate::state::{App, Library, blocking, lock, model_call};
 
-/// About how long Extract takes on sonnet, for the progress bar.
-const EXTRACT_MS: u32 = 6_000;
-
 /// Every posting, newest first.
 pub fn jobs(app: &App) -> Result<Vec<JobRow>> {
     let rows = lock(&app.store).postings()?;
@@ -117,13 +114,9 @@ pub async fn requirements(app: &Arc<App>, row: &PostingRow) -> Result<Requiremen
     let llm = app.claude().await?;
     let posting = row.posting.clone();
     let m = model.clone();
-    let (req, out) = model_call(
-        app,
-        &row.id,
-        Stage::Extracting,
-        Some(EXTRACT_MS),
-        async move { extract::extract(&llm, &extract::schema(), &posting, &m).await },
-    )
+    let (req, out) = model_call(app, &row.id, Stage::Extracting, async move {
+        extract::extract(&llm, &extract::schema(), &posting, &m).await
+    })
     .await?;
     lock(&app.store).put_requirements(
         &row.id,

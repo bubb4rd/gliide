@@ -7,10 +7,11 @@ use tauri::State;
 
 use crate::dto::{
     AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit, Decision,
-    EditTargets, Exported, JobRow, JobView, Library, Mode, ReviewView, Rewritten, Settings,
+    EditTargets, EntryEdit, EntryView, Exported, ImportChoices, ImportView, JobRow, JobView,
+    Library, Mode, ReviewView, Rewritten, Settings,
 };
 use crate::state::{App, blocking};
-use crate::{cover, export, jobs, library as lib, review, settings};
+use crate::{cover, entry, export, import, jobs, library as lib, review, settings};
 
 type Res<T> = Result<T, AppError>;
 type St<'a> = State<'a, Arc<App>>;
@@ -40,8 +41,24 @@ pub async fn library(app: St<'_>) -> Res<Library> {
 }
 
 #[tauri::command]
-pub async fn import_resume(app: St<'_>, path: String) -> Res<Library> {
-    blocking(&app, move |app| lib::import_resume(app, &path)).await
+pub async fn read_import(app: St<'_>, path: String) -> Res<ImportView> {
+    import::read_import(&app, path).await
+}
+
+#[tauri::command]
+pub async fn import_view(app: St<'_>, choices: ImportChoices) -> Res<ImportView> {
+    blocking(&app, move |app| import::import_view(app, &choices)).await
+}
+
+#[tauri::command]
+pub async fn finish_import(app: St<'_>, choices: ImportChoices) -> Res<Library> {
+    blocking(&app, move |app| import::finish_import(app, &choices)).await
+}
+
+#[tauri::command]
+pub async fn discard_import(app: St<'_>) -> Res<()> {
+    import::discard_import(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -53,6 +70,27 @@ pub async fn set_master_options(
 ) -> Res<Library> {
     blocking(&app, move |app| {
         lib::set_master_options(app, &master, &template, page_limit)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn entry(app: St<'_>, entry: String, preview: Option<String>) -> Res<EntryView> {
+    blocking(&app, move |app| {
+        entry::entry_view(app, &entry, preview.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn edit_entry(
+    app: St<'_>,
+    entry: String,
+    edit: EntryEdit,
+    preview: Option<String>,
+) -> Res<EntryView> {
+    blocking(&app, move |app| {
+        entry::edit_entry(app, &entry, edit, preview.as_deref())
     })
     .await
 }
@@ -151,6 +189,11 @@ pub async fn edit_targets(app: St<'_>, review: String) -> Res<EditTargets> {
 #[tauri::command]
 pub async fn rewrite(app: St<'_>, review: String, key: String, note: String) -> Res<Rewritten> {
     review::rewrite(&app, &review, key, note).await
+}
+
+#[tauri::command]
+pub async fn save_variant(app: St<'_>, review: String, key: String) -> Res<ReviewView> {
+    review::save_variant(&app, &review, key).await
 }
 
 #[tauri::command]

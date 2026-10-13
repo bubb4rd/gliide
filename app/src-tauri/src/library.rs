@@ -1,14 +1,14 @@
-//! The bank and masters: what the Library screens list, ATS Fit import, a master's template and page limit.
+//! The bank and masters: what the Library screens list, a master's template and page limit. Importing a resume into
+//! the bank is `import`.
 
-use std::path::Path;
-
+use resume_core::Master;
 use resume_core::bank::SectionKind;
-use resume_core::{Master, Resume, migrate_v1};
 use resume_render::Template;
 
 use crate::dto::{BankSummary, EntryRow, Library, MasterRow, SectionRow, TemplateRow};
 use crate::error::{AppError, Result};
 use crate::state::{App, DEFAULT_TEMPLATE, lock};
+use crate::view::sentence_case;
 
 /// The bank's summary and sections, every master with its page count, and the templates.
 pub fn library(app: &App) -> Result<Library> {
@@ -68,7 +68,7 @@ pub fn library(app: &App) -> Result<Library> {
         .iter()
         .map(|s| SectionRow {
             id: s.id.clone(),
-            title: s.title.clone(),
+            title: sentence_case(&s.title),
             kind: kind_name(s.kind).to_owned(),
             entries: s
                 .entries
@@ -106,30 +106,6 @@ pub fn library(app: &App) -> Result<Library> {
         sections,
         templates,
     })
-}
-
-/// Imports ATS Fit's `master.json` (v1) at `path`: its bank becomes the current bank (a new revision when it changed)
-/// and its `swe` master the current revision of that master, keeping the template and page limit you chose.
-pub fn import_resume(app: &App, path: &str) -> Result<Library> {
-    let text = std::fs::read_to_string(Path::new(path))
-        .map_err(|e| AppError::other(format!("Couldn't read {path} ({e})")))?;
-    let v1: Resume = serde_json::from_str(&text).map_err(|e| {
-        AppError::other(format!(
-            "This file isn't an ATS Fit master.json ({e}). Choose the master.json ATS Fit tailors from."
-        ))
-    })?;
-    let migrated = migrate_v1(&v1);
-    {
-        let store = lock(&app.store);
-        let mut master = migrated.master;
-        if let Some((_, old)) = store.master(&master.id)? {
-            master.template = old.template;
-            master.page_limit = old.page_limit;
-        }
-        store.put_bank(&migrated.bank)?;
-        store.put_master(&master)?;
-    }
-    library(app)
 }
 
 /// Sets `master`'s template and page limit (a new master revision).

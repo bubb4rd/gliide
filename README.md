@@ -28,6 +28,7 @@ Core and rendering (`cargo run -p ez-cli --bin ez -- …`; outputs belong under 
 | Command | Does |
 |---|---|
 | `ez migrate <master.json> --out <dir>` | ATS Fit's `master.json` → `bank.json` + `masters/swe.json` |
+| `ez import <file> --out <dir> [--bank <f>] [--title "Graphic Design"] [--separate <id,…>] [--contact] [--model sonnet]` | A resume (`.pdf`, `.docx`, `.md`, `.txt`; or a v1 JSON such as an earlier run's `imported.json`, which skips the model) copied with `claude -p` and merged into the bank; writes `imported.json`, `bank.json`, `masters/<id>.json` and prints where each part went |
 | `ez render --bank <f> --master <f> --out <dir> [--highlight] [--system-fonts] [--scale N] [--bench N]` | `resume.pdf`, `page-N.svg`, `page-N.png`, `metrics.json` |
 | `ez schema --out schemas/` | Regenerates `schemas/bank.schema.json` and `schemas/master.schema.json` |
 | `ez score <link\|file\|-\|text> --bank <f> --master <f> [--model sonnet] [--fresh] [--json <f>]` | Reads the posting, extracts its requirements with `claude -p` (cached in `local/cache/`), prints the composite score and every component |

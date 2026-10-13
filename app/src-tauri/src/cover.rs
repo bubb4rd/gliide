@@ -17,10 +17,6 @@ use crate::state::{App, blocking, lock, model_call};
 
 /// The letter's renderer's key in [`App::renderers`] (beside the resume templates').
 const TEMPLATE: &str = "cover-letter";
-/// About how long the model takes to write the letter, ms (measured 6–8 s with sonnet).
-const WRITE_MS: u32 = 8_000;
-/// About how long one paragraph's rewrite takes, ms (measured about 4 s).
-const PARAGRAPH_MS: u32 = 5_000;
 
 /// What a model call reads, copied out of the open review so no lock is held across it.
 struct Job {
@@ -180,16 +176,10 @@ pub async fn write_cover(app: &Arc<App>, review: &str) -> Result<CoverView> {
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
     let posting_id = job.posting_id.clone();
-    let (letter, job) = model_call(
-        app,
-        &posting_id,
-        Stage::Writing,
-        Some(WRITE_MS),
-        async move {
-            let letter = cover::write(&llm, &cover::schema(), &job.input(), &model).await?;
-            Ok((letter.0, job))
-        },
-    )
+    let (letter, job) = model_call(app, &posting_id, Stage::Writing, async move {
+        let letter = cover::write(&llm, &cover::schema(), &job.input(), &model).await?;
+        Ok((letter.0, job))
+    })
     .await?;
     blocking(app, move |app| {
         save_and_view(
@@ -254,30 +244,24 @@ pub async fn rewrite_cover_paragraph(
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
     let posting_id = job.posting_id.clone();
-    let (text, job) = model_call(
-        app,
-        &posting_id,
-        Stage::Revising,
-        Some(PARAGRAPH_MS),
-        async move {
-            let letter = cover::Letter {
-                greeting: before.greeting,
-                paragraphs: before.paragraphs,
-                closing: before.closing,
-            };
-            let (text, _) = cover::rewrite_paragraph(
-                &llm,
-                &cover::paragraph_schema(),
-                &job.input(),
-                &letter,
-                index as usize,
-                &note,
-                &model,
-            )
-            .await?;
-            Ok((text, job))
-        },
-    )
+    let (text, job) = model_call(app, &posting_id, Stage::Revising, async move {
+        let letter = cover::Letter {
+            greeting: before.greeting,
+            paragraphs: before.paragraphs,
+            closing: before.closing,
+        };
+        let (text, _) = cover::rewrite_paragraph(
+            &llm,
+            &cover::paragraph_schema(),
+            &job.input(),
+            &letter,
+            index as usize,
+            &note,
+            &model,
+        )
+        .await?;
+        Ok((text, job))
+    })
     .await?;
     blocking(app, move |app| {
         let mut letter = lock(&app.store)

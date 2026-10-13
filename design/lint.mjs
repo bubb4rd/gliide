@@ -97,6 +97,7 @@ function lintFile(file) {
       }
       if (TRANSITION_ALL.test(d)) report(file, n, "transition-all (name the properties)", d);
       if (/^will-change\s*:\s*all/.test(d)) report(file, n, "will-change-all", d);
+      if (/^text-transform\s*:\s*uppercase/.test(d)) report(file, n, "full capitals (sentence case, DESIGN.md Type)", d);
 
       const scale = d.match(/^scale\s*:\s*(0?\.\d+)/) ?? d.match(/scale\((0?\.\d+)/);
       if (scale && /:active/.test(selector) && parseFloat(scale[1]) < 0.96)

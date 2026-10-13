@@ -31,6 +31,7 @@
     ChangeRow,
     Checkbox,
     Chip,
+    CompanyMark,
     Desk,
     Empty,
     GroupHead,
@@ -44,11 +45,11 @@
     NavItem,
     PartRow,
     Popover,
-    Progress,
     ScoreHeader,
     Segmented,
     Table,
     Textarea,
+    Thinking,
     Toolbar,
     toast,
   } from "$lib/ui";
@@ -344,17 +345,47 @@
           <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
           <Nav label="Main (specimen)">
             <NavItem href="#review" icon={Briefcase} meta={12}>Jobs</NavItem>
-            <NavItem href="#review" icon={Archive} meta={9}>Experience bank</NavItem>
-            <NavItem href="#review" icon={FileText} meta={3}>Masters</NavItem>
             <NavItem href="#review" icon={ListChecks} meta={41}>Applications</NavItem>
+            <NavItem href="#review" icon={Archive}>Experience bank</NavItem>
+            <NavItem href="#review" icon={FileText}>Masters</NavItem>
           </Nav>
           <div class="frame__recent">
             <p class="label">Recent</p>
             <Nav label="Recent (specimen)">
-              <NavItem href="#review" quiet current meta={78}>Globex · Junior Software Engineer</NavItem>
-              <NavItem href="#review" quiet meta={71}>Northwind Traders · Support Engineer</NavItem>
-              <NavItem href="#review" quiet meta={64}>Fabrikam · Product Designer</NavItem>
-              <NavItem href="#review" quiet meta={59}>Contoso · IT Analyst</NavItem>
+              <NavItem
+                href="#review"
+                quiet
+                current
+                meta="78%"
+                metaTitle="Fit score"
+                sub="Junior Software Engineer"
+                status={{ label: "Applied", tone: "accent" }}
+              >
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}Globex
+              </NavItem>
+              <NavItem
+                href="#review"
+                quiet
+                meta="71%"
+                metaTitle="Fit score"
+                sub="Support Engineer"
+                status={{ label: "Interviewing", tone: "accent" }}
+              >
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}Northwind Traders
+              </NavItem>
+              <NavItem
+                href="#review"
+                quiet
+                meta="64%"
+                metaTitle="Fit score"
+                sub="Product Designer"
+                status={{ label: "Saved", tone: "neutral" }}
+              >
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}Fabrikam
+              </NavItem>
+              <NavItem href="#review" quiet meta="59%" metaTitle="Fit score" sub="IT Analyst">
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}Contoso
+              </NavItem>
             </Nav>
           </div>
           <div>
@@ -391,7 +422,10 @@
                     <Badge tone="accent">Tailor first</Badge>
                     <span class="meta">Globex · Remote, US · read from globex.com</span>
                   </div>
-                  <h1 class="headline">Junior Software Engineer</h1>
+                  <div class="named">
+                    <span class="lead"><CompanyMark size={32} /></span>
+                    <h1 class="headline">Junior Software Engineer</h1>
+                  </div>
                 </div>
 
                 <div class="enter" style:--i="1">
@@ -407,7 +441,7 @@
                 </div>
 
                 <div class="skills enter" style:--i="2">
-                  <p class="label">Skills the posting asks for</p>
+                  <p class="label">Skills and Keywords</p>
                   <div class="row">
                     <Chip state="have" p1>React</Chip>
                     <Chip state="have" p1>TypeScript</Chip>
@@ -733,7 +767,7 @@
           <PartRow label="Paragraph 2 · selected: actions show" selected text={para} actions={paraActs} />
           <PartRow label="Paragraph 3 · being rewritten" busy text={para} />
           <div class="part-progress">
-            <Progress label="Rewriting the paragraph…" expectedMs={15000} oncancel={() => {}} />
+            <Thinking label="Rewriting the paragraph…" oncancel={() => {}} />
           </div>
           {#snippet partEditor()}
             <Textarea
@@ -764,7 +798,7 @@
 
     <!-- ═══════════ New primitives ═══════════ -->
     <section class="section">
-      <h2 class="title">Menus, popovers, progress</h2>
+      <h2 class="title">Menus, popovers, progress, company marks</h2>
       <div class="grid cols-2">
         <Card pad>
           <div class="tile">
@@ -794,12 +828,29 @@
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">Progress · determinate · indeterminate</p>
+            <p class="label">Thinking · with steps done · with Cancel · bare</p>
             {#key progressRun}
-              <Progress label="Reading the requirements…" expectedMs={6000} oncancel={() => toast("Cancelled", { tone: "neutral" })} />
-              <Progress label="Suggesting edits…" />
+              <Thinking
+                label="Suggesting edits…"
+                steps={[{ label: "Read the requirements", ms: 6200 }]}
+                oncancel={() => toast("Cancelled", { tone: "neutral" })}
+              />
+              <Thinking label="Reading the requirements…" oncancel={() => toast("Cancelled", { tone: "neutral" })} />
+              <Thinking label="Copying your resume…" />
             {/key}
             <div class="row"><Button size="sm" icon={RotateCcw} onclick={() => progressRun++}>Restart</Button></div>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Company mark · 16 sidebar · 20 table · 32 job header · with its name</p>
+            <div class="row">
+              <CompanyMark size={16} />
+              <CompanyMark size={20} />
+              <CompanyMark size={32} />
+            </div>
+            <CompanyMark>Northwind Traders, a company name long enough that it truncates in a narrow cell</CompanyMark>
+            <p class="meta">Blank until logos are fetched. A logo shows as the company publishes it, never recolored.</p>
           </div>
         </Card>
       </div>
@@ -817,8 +868,10 @@
                 <a class="file" href="#review">{row.resume}</a>
               {:else if column.key === "onFile"}
                 {row.onFile ?? "—"}
+              {:else if column.key === "company"}
+                <CompanyMark>{row.company}</CompanyMark>
               {:else}
-                {row[column.key as "date" | "company" | "role" | "now" | "projected"]}
+                {row[column.key as "date" | "role" | "now" | "projected"]}
               {/if}
             {/snippet}
           </Table>
@@ -882,7 +935,19 @@
             <Nav label="Nav states (specimen)">
               <NavItem href="#review" icon={Briefcase} current meta={12}>Current</NavItem>
               <NavItem href="#review" icon={Archive}>Default</NavItem>
-              <NavItem href="#review" quiet meta={78}>Quiet entry with a long title that truncates</NavItem>
+              <NavItem href="#review" quiet meta={78}>
+                {#snippet lead()}<CompanyMark size={16} />{/snippet}Quiet entry with a long title that truncates
+              </NavItem>
+              <NavItem
+                href="#review"
+                quiet
+                meta="76%"
+                metaTitle="Fit score"
+                sub="Senior Front-End Engineer, Payments Platform"
+                status={{ label: "Rejected", tone: "danger" }}
+              >
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}A company with a long name that truncates
+              </NavItem>
             </Nav>
           </div>
           <KeyFooter keys={reviewKeys} />
@@ -1083,6 +1148,15 @@
     display: grid;
     gap: var(--space-2);
     padding-inline: var(--space-1);
+  }
+  .named {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  /* The mark centers on the headline's first line. */
+  .lead {
+    padding-top: calc((var(--leading-headline) - 32px) / 2);
   }
   .skills {
     display: grid;

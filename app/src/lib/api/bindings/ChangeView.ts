@@ -57,6 +57,11 @@ editable: boolean,
  */
 rewritable: boolean, 
 /**
+ * Its line can be saved to the bank as a variant of its bullet (`save_variant`): a bullet edit that isn't left
+ * out and reads unlike every wording the bullet has.
+ */
+savable: boolean, 
+/**
  * Suggest's reason, for the hover/selected detail.
  */
 why: string, };

@@ -6,6 +6,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+  import BookmarkPlus from "@lucide/svelte/icons/bookmark-plus";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -23,6 +24,7 @@
     Button,
     ChangeRow,
     Chip,
+    CompanyMark,
     Desk,
     GroupHead,
     Icon,
@@ -31,10 +33,10 @@
     Marked,
     Menu,
     Popover,
-    Progress,
     ScoreHeader,
     Segmented,
     Textarea,
+    Thinking,
     Toolbar,
     toast,
   } from "$lib/ui";
@@ -71,6 +73,16 @@
     rewriting: "Rewriting the line…",
     writing: "Writing the cover letter…",
     revising: "Rewriting the paragraph…",
+    importing: "Copying your resume…",
+  } as const;
+  /** A finished stage in the status's trail. */
+  const DONE = {
+    extracting: "Read the requirements",
+    suggesting: "Suggested edits",
+    rewriting: "Rewrote the line",
+    writing: "Wrote the cover letter",
+    revising: "Rewrote the paragraph",
+    importing: "Copied your resume",
   } as const;
   const TABS: { value: Tab; label: string }[] = [
     { value: "resume", label: "Resume" },
@@ -86,6 +98,7 @@
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["Space"], label: "Toggle" },
     { keys: ["⏎"], label: "Edit" },
+    { keys: ["S"], label: "Save as variant" },
     { keys: ["A"], label: "Add your own" },
     { keys: ["E"], label: "Export" },
     { keys: ["R"], label: "Re-run" },
@@ -193,6 +206,12 @@
     const text = draft.trim();
     editing = null;
     if (text && text !== change.text) void s.word(change.key, text);
+  }
+
+  async function keepWording(change: ChangeView) {
+    selectedKey = change.key;
+    if (await s.saveVariant(change.key))
+      toast("Saved as a variant of this bullet: every master and later review can use it");
   }
 
   function startNote(change: ChangeView) {
@@ -303,6 +322,7 @@
       e: () => void (onCover ? exportLetter() : exportNow()),
       r: () => (onCover ? false : rerun()),
       w: () => (onCover ? writeLetter() : false),
+      s: () => (onCover || !selected?.savable ? false : void keepWording(selected)),
       "mod+z": (e) => {
         if (interactive(e.target) || onCover) return false;
         void s.undo();
@@ -385,7 +405,10 @@
               >{/if}
           </span>
         </div>
-        <h1 class="headline">{head.role}</h1>
+        <div class="named">
+          <span class="lead"><CompanyMark size={32} /></span>
+          <h1 class="headline">{head.role}</h1>
+        </div>
         {#if review?.headline}<p class="lede">{review.headline}</p>{/if}
       </div>
     {:else if s.phase === "opening"}
@@ -403,9 +426,9 @@
 
     {#if s.running && !s.rewriting && s.drafting === null}
       <div class="running">
-        <Progress
+        <Thinking
+          steps={s.steps.map((step) => ({ label: DONE[step.stage], ms: step.ms }))}
           label={STAGES[s.running.stage]}
-          expectedMs={s.running.expectedMs}
           startedAt={s.running.startedAt}
           oncancel={() => s.cancel()}
         />
@@ -456,7 +479,7 @@
 
           {#if skills.length}
             <div class="skills enter" style:--i="1">
-              <p class="label">Skills the posting asks for</p>
+              <p class="label">Skills and Keywords</p>
               <div class="row">
                 {#each skills as chip (chip.term)}
                   <Chip
@@ -529,6 +552,16 @@
                         onclick={() => startNote(change)}>Rewrite with a note</Button
                       >
                     {/if}
+                    {#if change.savable}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={BookmarkPlus}
+                        kbd="S"
+                        title="Keep this wording in your bank, as a variant of the bullet"
+                        onclick={() => keepWording(change)}>Save as variant</Button
+                      >
+                    {/if}
                     {#if change.yours}
                       <Button
                         variant="ghost"
@@ -566,9 +599,8 @@
                   </form>
                 {:else if s.rewriting === change.key && s.running}
                   <div class="note">
-                    <Progress
+                    <Thinking
                       label={STAGES.rewriting}
-                      expectedMs={s.running.expectedMs}
                       startedAt={s.running.startedAt}
                       oncancel={() => s.cancel()}
                     />
@@ -586,7 +618,7 @@
             <div class="quiet enter" style:--i="3">
               {#if review.gaps.length}
                 <section>
-                  <p class="label">Gaps your resume can’t back</p>
+                  <p class="label">Gaps</p>
                   <ul>
                     {#each review.gaps as gap (gap.skill)}
                       <li><span class="term">{gap.skill}</span> <span class="meta">{gap.fix}</span></li>
@@ -620,7 +652,7 @@
     {:else if s.phase === "opening" || s.phase === "suggesting" || s.phase === "stopped"}
       {#if skills.length}
         <div class="skills">
-          <p class="label">Skills the posting asks for</p>
+          <p class="label">Skills and Keywords</p>
           <div class="row">
             {#each skills as chip (chip.term)}
               <Chip state={chip.state} p1={chip.priority === 1} disabled>{chip.term}</Chip>
@@ -743,6 +775,15 @@
     display: grid;
     gap: var(--space-2);
     padding-inline: var(--space-1);
+  }
+  .named {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  /* The mark centers on the headline's first line. */
+  .lead {
+    padding-top: calc((var(--leading-headline) - 32px) / 2);
   }
   .job .meta {
     margin: 0;

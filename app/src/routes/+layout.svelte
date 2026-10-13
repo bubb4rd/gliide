@@ -17,7 +17,8 @@
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { shell } from "$lib/stores/shell.svelte";
-  import { Nav, NavItem, Toaster } from "$lib/ui";
+  import { STATUS } from "$lib/status";
+  import { CompanyMark, Nav, NavItem, Toaster } from "$lib/ui";
 
   let { children }: { children: Snippet } = $props();
 
@@ -66,12 +67,6 @@
 
     <Nav label="Main">
       <NavItem href="/jobs" icon={Briefcase} current={path === "/jobs"} meta={count(app.jobs.length)}>Jobs</NavItem>
-      <NavItem href="/bank" icon={Archive} current={within("/bank")} meta={count(app.library?.bank?.entries)}>
-        Experience bank
-      </NavItem>
-      <NavItem href="/masters" icon={FileText} current={within("/masters")} meta={count(app.library?.masters.length)}>
-        Masters
-      </NavItem>
       <NavItem
         href="/applications"
         icon={ListChecks}
@@ -80,6 +75,8 @@
       >
         Applications
       </NavItem>
+      <NavItem href="/bank" icon={Archive} current={within("/bank")}>Experience bank</NavItem>
+      <NavItem href="/masters" icon={FileText} current={within("/masters")}>Masters</NavItem>
     </Nav>
 
     {#if app.jobs.length}
@@ -87,14 +84,19 @@
         <h2 class="label" id="recent-label">Recent</h2>
         <Nav label="Recent jobs">
           {#each app.jobs.slice(0, RECENT) as job (job.id)}
+            {@const status = job.status ? STATUS[job.status] : null}
             <NavItem
               href="/jobs/{job.id}"
               quiet
               current={path === `/jobs/${job.id}`}
-              meta={job.score === null ? null : Math.round(job.score)}
-              title="{job.company} · {job.role}"
+              meta={job.score === null ? null : `${Math.round(job.score)}%`}
+              metaTitle="Fit score"
+              sub={job.role}
+              {status}
+              title="{job.company} · {job.role}{status ? ` · ${status.label}` : ''}"
             >
-              {job.company} · {job.role}
+              {#snippet lead()}<CompanyMark size={28} />{/snippet}
+              {job.company}
             </NavItem>
           {/each}
         </Nav>

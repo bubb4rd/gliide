@@ -9,7 +9,8 @@
   import { addJob, appError } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
-  import { Badge, Button, Empty, Table, Toolbar, toast } from "$lib/ui";
+  import { STATUS } from "$lib/status";
+  import { Badge, Button, CompanyMark, Empty, Table, Toolbar, toast } from "$lib/ui";
 
   let reading = $state(false);
 
@@ -35,19 +36,12 @@
   $effect(() => bindKeys({ v: paste, "mod+v": paste }));
 
   const COLUMNS = [
-    { key: "role", label: "Role" },
     { key: "company", label: "Company", width: "24%" },
+    { key: "role", label: "Role" },
     { key: "status", label: "Status", width: "120px" },
     { key: "score", label: "Score", numeric: true, width: "80px" },
     { key: "added", label: "Added", align: "end" as const, width: "112px" },
   ];
-  const STATUS = {
-    saved: { label: "Saved", tone: "neutral" },
-    applied: { label: "Applied", tone: "accent" },
-    interviewing: { label: "Interviewing", tone: "accent" },
-    offer: { label: "Offer", tone: "gain" },
-    rejected: { label: "Rejected", tone: "danger" },
-  } as const;
   const day = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 </script>
 
@@ -61,24 +55,22 @@
 </Toolbar>
 
 {#if app.jobs.length}
-  <div class="scroll">
-    <div class="list">
-      <Table columns={COLUMNS} rows={app.jobs} key={(j) => j.id} label="Postings">
-        {#snippet cell(job, column)}
-          {#if column.key === "role"}
-            <a class="open" href="/jobs/{job.id}">{job.role}</a>
-          {:else if column.key === "company"}
-            {job.company}
-          {:else if column.key === "status"}
-            {#if job.status}<Badge tone={STATUS[job.status].tone}>{STATUS[job.status].label}</Badge>{/if}
-          {:else if column.key === "score"}
-            {job.score === null ? "—" : `${Math.round(job.score)}%`}
-          {:else}
-            <span class="meta num">{day.format(new Date(job.addedAt))}</span>
-          {/if}
-        {/snippet}
-      </Table>
-    </div>
+  <div class="table">
+    <Table columns={COLUMNS} rows={app.jobs} key={(j) => j.id} label="Postings">
+      {#snippet cell(job, column)}
+        {#if column.key === "company"}
+          <CompanyMark><span title={job.company}>{job.company}</span></CompanyMark>
+        {:else if column.key === "role"}
+          <a class="open" href="/jobs/{job.id}" title={job.role}>{job.role}</a>
+        {:else if column.key === "status"}
+          {#if job.status}<Badge tone={STATUS[job.status].tone}>{STATUS[job.status].label}</Badge>{/if}
+        {:else if column.key === "score"}
+          {job.score === null ? "—" : `${Math.round(job.score)}%`}
+        {:else}
+          <span class="meta num">{day.format(new Date(job.addedAt))}</span>
+        {/if}
+      {/snippet}
+    </Table>
   </div>
 {:else if app.jobsLoaded}
   <div class="empty">
@@ -93,13 +85,12 @@
 {/if}
 
 <style>
-  .scroll {
+  .table {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
     flex: 1;
     min-height: 0;
-    overflow: auto;
-  }
-  .list {
-    padding: var(--space-6);
+    background: var(--surface);
   }
   .open {
     color: var(--ink);

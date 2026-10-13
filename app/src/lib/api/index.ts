@@ -14,7 +14,11 @@ import type { CoverView } from "./bindings/CoverView";
 import type { CustomEdit } from "./bindings/CustomEdit";
 import type { Decision } from "./bindings/Decision";
 import type { EditTargets } from "./bindings/EditTargets";
+import type { EntryEdit } from "./bindings/EntryEdit";
+import type { EntryView } from "./bindings/EntryView";
 import type { Exported } from "./bindings/Exported";
+import type { ImportChoices } from "./bindings/ImportChoices";
+import type { ImportView } from "./bindings/ImportView";
 import type { JobRow } from "./bindings/JobRow";
 import type { JobView } from "./bindings/JobView";
 import type { Library } from "./bindings/Library";
@@ -29,6 +33,7 @@ export type * from "./bindings/AppError";
 export type * from "./bindings/ApplicationRow";
 export type * from "./bindings/AppStatus";
 export type * from "./bindings/BankSummary";
+export type * from "./bindings/BulletView";
 export type * from "./bindings/ChangeGroup";
 export type * from "./bindings/ChangeState";
 export type * from "./bindings/ChangeView";
@@ -39,21 +44,31 @@ export type * from "./bindings/CoverView";
 export type * from "./bindings/CustomEdit";
 export type * from "./bindings/Decision";
 export type * from "./bindings/EditTargets";
+export type * from "./bindings/EntryEdit";
 export type * from "./bindings/EntryRow";
+export type * from "./bindings/EntryView";
 export type * from "./bindings/ErrorKind";
 export type * from "./bindings/Exported";
 export type * from "./bindings/GapView";
+export type * from "./bindings/ImportChoices";
+export type * from "./bindings/ImportContact";
+export type * from "./bindings/ImportEntry";
+export type * from "./bindings/ImportGroup";
+export type * from "./bindings/ImportSection";
+export type * from "./bindings/ImportView";
 export type * from "./bindings/JobHead";
 export type * from "./bindings/JobRow";
 export type * from "./bindings/JobView";
 export type * from "./bindings/Letter";
 export type * from "./bindings/Library";
 export type * from "./bindings/MasterChoice";
+export type * from "./bindings/MasterRef";
 export type * from "./bindings/MasterRow";
 export type * from "./bindings/Mode";
 export type * from "./bindings/Progress";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
+export type * from "./bindings/SameEntry";
 export type * from "./bindings/ScoreView";
 export type * from "./bindings/SectionRow";
 export type * from "./bindings/Settings";
@@ -63,6 +78,7 @@ export type * from "./bindings/Target";
 export type * from "./bindings/TemplateRow";
 export type * from "./bindings/Theme";
 export type * from "./bindings/Verdict";
+export type * from "./bindings/WordingView";
 
 /** `e` as an `AppError`: commands reject with one; anything else (a bridge failure) becomes `other`. */
 export function appError(e: unknown): AppError {
@@ -77,8 +93,26 @@ export const setSettings = (settings: Settings) => invoke<Settings>("set_setting
 
 // ── Bank and masters ──
 export const library = () => invoke<Library>("library");
-/** Imports an ATS Fit `master.json` (v1): a new bank revision and its `swe` master. */
-export const importResume = (path: string) => invoke<Library>("import_resume", { path });
+/** `cancel` and `progress` name the import's model call with this job key. */
+export const IMPORT_JOB = "import";
+/**
+ * Reads a resume file (.pdf, .docx, .md, .txt: one model call, emits `progress` for `IMPORT_JOB`; ATS Fit's
+ * master.json: none) and holds it for review: where each part goes, and the new master it makes, rendered.
+ */
+export const readImport = (path: string) => invoke<ImportView>("read_import", { path });
+/** The waiting import as `choices` would add it. */
+export const importView = (choices: ImportChoices) => invoke<ImportView>("import_view", { choices });
+/** Adds the waiting import to the bank and saves its master. */
+export const finishImport = (choices: ImportChoices) => invoke<Library>("finish_import", { choices });
+export const discardImport = () => invoke<void>("discard_import");
+/** One bank entry with every bullet's wordings and which master shows which; `preview` picks the master on the desk
+ * (null: the first that shows the entry; the entry alone when none does). */
+export const entry = (entry: string, preview: string | null = null) =>
+  invoke<EntryView>("entry", { entry, preview });
+/** Edits an entry's bullet wordings (a new bank revision; masters keep the words they showed unless the edit is about
+ * what one shows). Rejects with a sentence to show, e.g. when a master shows both bullets of a fold. */
+export const editEntry = (entry: string, edit: EntryEdit, preview: string | null = null) =>
+  invoke<EntryView>("edit_entry", { entry, edit, preview });
 export const setMasterOptions = (master: string, template: string, pageLimit: number) =>
   invoke<Library>("set_master_options", { master, template, pageLimit });
 
@@ -114,6 +148,8 @@ export const editTargets = (review: string) => invoke<EditTargets>("edit_targets
 /** One model call: the line rewritten per your note, set as your wording. Emits `progress`. */
 export const rewrite = (review: string, key: string, note: string) =>
   invoke<Rewritten>("rewrite", { review, key, note });
+/** Saves the change's line to the bank as a variant of its bullet (`ChangeView.savable`); the review goes on as it is. */
+export const saveVariant = (review: string, key: string) => invoke<ReviewView>("save_variant", { review, key });
 /** The PDF (no highlights) into the export folder, its application row, and the score read back from it. */
 export const exportPdf = (review: string) => invoke<Exported>("export_pdf", { review });
 

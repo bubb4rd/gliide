@@ -1,6 +1,7 @@
 <!--
   The desk: the resume pages (live SVG) on a darker surface, the only object with real depth. The bar holds the
-  page-status badge, optional meta, and zoom. 100% fits the page to the desk (at most US Letter's 612px).
+  page-status badge, optional meta, and zoom. 100% fits the page to the desk's width (at most US Letter at 96 dpi,
+  816px), with a narrow margin so the page reads large in its pane.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -78,7 +79,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
+    padding: var(--space-3);
     background: var(--desk);
   }
   .note {
@@ -110,11 +111,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-    padding: var(--space-3) var(--space-6) var(--space-10);
+    padding: var(--space-2) var(--space-3) var(--space-10);
   }
   .page {
     flex: none;
-    width: calc(min(612px, 100%) * var(--zoom));
+    width: calc(min(816px, 100%) * var(--zoom));
     margin-inline: auto;
     border: 1px solid transparent;
     color: var(--page-ink);

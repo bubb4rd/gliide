@@ -1,10 +1,10 @@
 //! The PDF read-back through the score's format check: the text a parser reads from the exported PDF carries every
-//! matched skill, unless the page breaks one.
+//! matched skill, unless the page breaks one. And the import's read of the same PDF: that text plus its links.
 
 use resume_core::{
     PageFacts, Requirements, Resume, Score, migrate_v1, resolve, resume_text, score,
 };
-use resume_render::{FontOptions, Renderer, Template};
+use resume_render::{FontOptions, Link, Renderer, Template, pdf_read};
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
 const REQ: &str = include_str!("../../../fixtures/score/jane-doe-swe.requirements.json");
@@ -123,4 +123,37 @@ fn a_term_a_line_break_splits_fails_the_check() {
         format_detail(&s)
     );
     assert!(s.total < own.total, "{} < {}", s.total, own.total);
+}
+
+#[test]
+fn the_import_reads_the_pdf_text_and_the_links_under_their_text() {
+    let r = jane();
+    let pdf = Renderer::new(&Template::classic_serif(), FontOptions::default())
+        .render(&serde_json::to_string(&r).unwrap(), false)
+        .unwrap()
+        .pdf()
+        .unwrap();
+    let read = pdf_read(pdf.clone()).unwrap();
+    assert_eq!(read.text, resume_render::pdf_text(pdf).unwrap());
+    assert_eq!(read.pages, 1);
+    // classic-serif links contact items (not `mailto:`) and entry names that have a URL.
+    let link = |text: &str, url: &str| Link {
+        text: text.into(),
+        url: url.into(),
+    };
+    assert_eq!(
+        read.links,
+        [
+            link(
+                "linkedin.com/in/janeqdoe-example",
+                "https://linkedin.com/in/janeqdoe-example"
+            ),
+            link(
+                "github.com/janeqdoe-example",
+                "https://github.com/janeqdoe-example"
+            ),
+            link("Acme Widgets Co.", "https://example.com/acme"),
+            link("Tidepool", "https://github.com/janeqdoe-example/tidepool"),
+        ]
+    );
 }
