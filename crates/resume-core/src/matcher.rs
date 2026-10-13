@@ -331,7 +331,7 @@ static DICTIONARY: LazyLock<Vec<Vec<(String, String)>>> = LazyLock::new(|| {
         .collect()
 });
 
-fn dictionary() -> &'static [Vec<(String, String)>] {
+pub(crate) fn dictionary() -> &'static [Vec<(String, String)>] {
     &DICTIONARY
 }
 

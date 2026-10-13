@@ -325,6 +325,9 @@ model's wording against the resume".
 - Proper nouns and tool names (alias dictionary + capitalized tokens) must appear in the bank, or be a requirement
   skill whose evidence is `yes` or `add`.
 - `before` must equal the line it names; every `id` must exist.
+- A rewrite or new bullet may draw only on its own entry: a source from another entry's bullets or notes (coursework
+  cited for a job) is flagged; a skills line backs only a requirement skill with evidence `yes`/`add`. Summaries draw
+  on the whole resume. Degree abbreviations (`B.S.`, `MBA`) count as grounded when the bank has that degree level.
 - A line that fails starts **left out**, with the reason (`"40%" is not in your resume`); you can force it in.
 
 ## 4. The composite score
@@ -431,7 +434,7 @@ flowchart TD
   M --> L[Leave out rewrites and swaps over their line budget; Skills additions by priority until the line fits]
   L --> B[apply → tailored JSON]
   B --> C[compile, read pages]
-  C -->|over page limit| D[Leave out the lowest-priority included bank entry, then new bullet, then skill addition]
+  C -->|over page limit| D[Leave out the lowest-priority included bank entry, then new bullet, then skill addition, then the summary]
   D --> B
   C -->|fits| E[SVG preview with highlights · PDF on export]
 ```
@@ -545,7 +548,7 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | M0 Spike: providers ✓ (Claude) | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over the 11 postings in `fixtures/postings/`; `codex-acp` and `gemini --acp` join once core features work | Done for Claude: 33/33 valid first try; sonnet default; outputs in `fixtures/requirements/` |
 | M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to ATS Fit with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
-| M3 Tailor | Suggest, validator, change engine, measure + fit, both modes, `ez tailor` | One-page tailored PDFs for the fixtures; the bank-aware ceiling measured beside master-only |
+| M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 fixture postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (waymark 74.2 → 84.2); a real bank with roles outside the master is needed to settle the mode experiment |
 | M4 macOS app | Bank, masters, job, review with live preview, export, applications log, agent settings | You use it instead of ATS Fit |
 | M5 Experience | PDF/DOCX import into the bank, variants, second template (design track), the mode experiment's report | Decision on the default mode |
 | M6 Around the application | Cover letters, application statuses, CSV, rewrite-with-note | Parity with ATS Fit, plus tracking |

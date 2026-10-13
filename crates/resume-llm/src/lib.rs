@@ -6,6 +6,7 @@
 
 mod claude;
 pub mod extract;
+pub mod suggest;
 
 use std::path::PathBuf;
 use std::time::Duration;

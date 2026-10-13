@@ -927,6 +927,7 @@ dependencies = [
  "resume-ingest",
  "resume-llm",
  "resume-render",
+ "resume-tailor",
  "serde",
  "serde_json",
  "tokio",
@@ -2977,6 +2978,16 @@ dependencies = [
  "typst-pdf",
  "typst-render",
  "typst-svg",
+]
+
+[[package]]
+name = "resume-tailor"
+version = "0.1.0"
+dependencies = [
+ "resume-core",
+ "resume-render",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

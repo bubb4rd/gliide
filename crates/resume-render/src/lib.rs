@@ -63,16 +63,47 @@ pub struct Metrics {
     pub groups: Vec<LineCount>,
 }
 
+/// A text to measure at the width of the line it targets (the template's measure mode).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Candidate {
+    /// Returned with its count.
+    pub id: String,
+    pub kind: LineKind,
+    /// A bullet's indent steps (1 under an entry with notes, as the template lays it out); 0 otherwise.
+    pub depth: u32,
+    pub text: String,
+    /// The bold label before a note line's or skills line's text (`""` for none).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+}
+
+/// The kind of line a [`Candidate`] targets, which sets its width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LineKind {
+    Bullet,
+    Note,
+    /// A skills line: `text` is its items joined by `", "`.
+    Group,
+}
+
 /// Compiles resumes through one template.
 pub struct Renderer {
     world: ResumeWorld,
+    manifest: Manifest,
 }
 
 impl Renderer {
     pub fn new(template: &Template, fonts: FontOptions) -> Self {
         Self {
             world: ResumeWorld::new(&template.source, fonts::load(fonts)),
+            manifest: template.manifest.clone(),
         }
+    }
+
+    /// The template's manifest.
+    pub fn manifest(&self) -> &Manifest {
+        &self.manifest
     }
 
     /// Compiles `data`, the resume as a JSON string (`sys.inputs.data`), with `sys.inputs.highlight` set to `"1"` when
@@ -83,6 +114,40 @@ impl Renderer {
         if highlight {
             inputs.insert("highlight".into(), "1".into_value());
         }
+        let (doc, warnings) = self.compile(inputs)?;
+        let metrics = metrics(&doc)?;
+        Ok(Rendered {
+            doc,
+            metrics,
+            warnings,
+        })
+    }
+
+    /// Every candidate's wrapped line count at the width of the line it targets, in order, from one compile in the
+    /// template's measure mode (`sys.inputs.mode = "measure"`, `sys.inputs.candidates`).
+    pub fn measure(&mut self, candidates: &[Candidate]) -> Result<Vec<(String, u32)>, RenderError> {
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+        let json = serde_json::to_string(candidates)
+            .map_err(|e| RenderError::Metrics(format!("candidates: {e}")))?;
+        let mut inputs = Dict::new();
+        inputs.insert("mode".into(), "measure".into_value());
+        inputs.insert("candidates".into(), json.into_value());
+        let (doc, _) = self.compile(inputs)?;
+        let counts = line_counts(&doc, "measure")?;
+        if counts.len() != candidates.len() {
+            return Err(RenderError::Metrics(format!(
+                "{} <measure> counts for {} candidates",
+                counts.len(),
+                candidates.len()
+            )));
+        }
+        Ok(counts.into_iter().map(|c| (c.id, c.lines)).collect())
+    }
+
+    /// One compile with `inputs` as `sys.inputs`: the document and its formatted warnings.
+    fn compile(&mut self, inputs: Dict) -> Result<(PagedDocument, Vec<String>), RenderError> {
         self.world.set_inputs(inputs);
         let warned = typst::compile::<PagedDocument>(&self.world);
         typst::comemo::evict(CACHE_AGE);
@@ -90,12 +155,7 @@ impl Renderer {
         let doc = warned.output.map_err(|errs| {
             RenderError::Compile(errs.iter().map(|d| self.describe(d)).collect())
         })?;
-        let metrics = metrics(&doc)?;
-        Ok(Rendered {
-            doc,
-            metrics,
-            warnings,
-        })
+        Ok((doc, warnings))
     }
 
     /// `error: message (resume.typ:12)`, then its hints.
@@ -169,35 +229,38 @@ impl Rendered {
 
 /// The template's `<pages>`, `<bullet>` and `<group>` metadata, read from the compiled document's introspector.
 fn metrics(doc: &PagedDocument) -> Result<Metrics, RenderError> {
-    let values = |label: &str| -> Result<Vec<serde_json::Value>, RenderError> {
-        let label = Label::new(PicoStr::intern(label)).expect("label is not empty");
-        doc.introspector()
-            .query(&Selector::Label(label))
-            .iter()
-            .map(|c| {
-                let meta = c.to_packed::<MetadataElem>().ok_or_else(|| {
-                    RenderError::Metrics(format!("<{}> is not metadata", label.resolve()))
-                })?;
-                serde_json::to_value(&meta.value).map_err(|e| RenderError::Metrics(e.to_string()))
-            })
-            .collect()
-    };
-    let counts = |label: &str| -> Result<Vec<LineCount>, RenderError> {
-        values(label)?
-            .into_iter()
-            .map(|v| {
-                serde_json::from_value(v)
-                    .map_err(|e| RenderError::Metrics(format!("<{label}>: {e}")))
-            })
-            .collect()
-    };
-    let pages = values("pages")?
+    let pages = values(doc, "pages")?
         .first()
         .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| RenderError::Metrics("no <pages> page count".into()))?;
     Ok(Metrics {
         pages: pages as u32,
-        bullets: counts("bullet")?,
-        groups: counts("group")?,
+        bullets: line_counts(doc, "bullet")?,
+        groups: line_counts(doc, "group")?,
     })
+}
+
+/// The values of every metadata element labeled `label`, in document order.
+fn values(doc: &PagedDocument, label: &str) -> Result<Vec<serde_json::Value>, RenderError> {
+    let label = Label::new(PicoStr::intern(label)).expect("label is not empty");
+    doc.introspector()
+        .query(&Selector::Label(label))
+        .iter()
+        .map(|c| {
+            let meta = c.to_packed::<MetadataElem>().ok_or_else(|| {
+                RenderError::Metrics(format!("<{}> is not metadata", label.resolve()))
+            })?;
+            serde_json::to_value(&meta.value).map_err(|e| RenderError::Metrics(e.to_string()))
+        })
+        .collect()
+}
+
+/// The line counts labeled `label`.
+fn line_counts(doc: &PagedDocument, label: &str) -> Result<Vec<LineCount>, RenderError> {
+    values(doc, label)?
+        .into_iter()
+        .map(|v| {
+            serde_json::from_value(v).map_err(|e| RenderError::Metrics(format!("<{label}>: {e}")))
+        })
+        .collect()
 }

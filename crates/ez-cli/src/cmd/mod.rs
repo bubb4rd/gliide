@@ -1,9 +1,11 @@
 //! One module per subcommand.
 
+pub mod job;
 pub mod migrate;
 pub mod render;
 pub mod schema;
 pub mod score;
+pub mod tailor;
 
 use std::path::Path;
 

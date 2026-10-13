@@ -6,8 +6,14 @@
 // `<group>`: `id`, `lines`, and `orig`, the count of the master text it replaces when the data carries one) and the
 // page count (`<pages>`). With `--input highlight=1` (the review's preview, never the export) the text the tailoring
 // changed is highlighted: bullets and note lines marked `changed`, a skills line's `added` items.
+//
+// With `--input mode=measure` it reads no resume; it lays out each of `sys.inputs.candidates` (JSON:
+// `[{id, kind: "bullet" | "note" | "group", depth, text, label}]`) at the width of the line it targets (a bullet's text
+// column at its `depth`, a note line, a skills line after its bold `label`) and records its wrapped line count as
+// `<measure>` metadata (`id`, `lines`). One compile measures every candidate text of a fit check.
 
-#let data = json(bytes(sys.inputs.at("data")))
+#let measuring = sys.inputs.at("mode", default: "") == "measure"
+#let data = if measuring { (name: "", contact: (), sections: ()) } else { json(bytes(sys.inputs.at("data"))) }
 #let blue = rgb("#1155cc")
 #let indent = 0.25in
 
@@ -40,11 +46,14 @@
   block(width: size.width, body)
 })
 
-#let bullet(b, depth) = pad(left: depth * indent, grid(
+#let bullet(b, depth, tag: "bullet") = pad(left: depth * indent, grid(
   columns: (indent, 1fr),
   text(size: 10pt, baseline: 0.05em)[●],
-  counted(b.id, mark(b.at("changed", default: false), b.text), b.at("orig", default: none), "bullet"),
+  counted(b.id, mark(b.at("changed", default: false), b.text), b.at("orig", default: none), tag),
 ))
+
+// A note line: its bold label, when it has one, then its text.
+#let note-line(label, body) = if label != "" [*#label:* #body] else [#body]
 
 #let rule = block(above: 2pt, below: 2pt, line(length: 100%, stroke: 0.9pt))
 
@@ -54,15 +63,18 @@
   rule
 }
 
+// An entry with no name, place or dates (a summary line) has no header row.
 #let entry(e, depth) = {
-  grid(
-    columns: (1fr, auto),
-    [#linked(e.url, strong(e.name))#if e.place != "" [*,* #e.place]],
-    emph(e.dates),
-  )
+  if (e.name, e.place, e.dates) != ("", "", "") {
+    grid(
+      columns: (1fr, auto),
+      [#linked(e.url, strong(e.name))#if e.place != "" [*,* #e.place]],
+      emph(e.dates),
+    )
+  }
   if e.subtitle != "" { block(emph(e.subtitle)) }
   for n in e.notes {
-    block(mark(n.at("changed", default: false), if n.label != "" [*#n.label:* #n.text] else [#n.text]))
+    block(mark(n.at("changed", default: false), note-line(n.label, n.text)))
   }
   for b in e.bullets { bullet(b, depth) }
 }
@@ -86,6 +98,18 @@
   // Bullets under notes (an education entry's honors) sit one step in, as in the Docs original.
   for e in s.entries { entry(e, if e.notes.len() > 0 { 1 } else { 0 }) }
   for g in s.groups { group(g) }
+}
+
+#if measuring {
+  for c in json(bytes(sys.inputs.at("candidates"))) {
+    if c.kind == "bullet" {
+      bullet((id: c.id, text: c.text), c.depth, tag: "measure")
+    } else if c.kind == "note" {
+      counted(c.id, note-line(c.at("label", default: ""), c.text), none, "measure")
+    } else {
+      counted(c.id, [*#c.label:* #c.text], none, "measure")
+    }
+  }
 }
 
 #context [#metadata(counter(page).final().first())<pages>]

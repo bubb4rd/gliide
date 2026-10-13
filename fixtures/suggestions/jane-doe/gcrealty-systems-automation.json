@@ -1,0 +1,149 @@
+{
+  "bank": [],
+  "bullets": [],
+  "evidence": [
+    {
+      "have": "yes",
+      "ids": [
+        "languages"
+      ],
+      "skill": "Python"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "JavaScript"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "languages"
+      ],
+      "skill": "SQL"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "REST APIs"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Podio"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "n8n"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Zapier"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "MySQL"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "acme.1",
+        "tools"
+      ],
+      "skill": "Postgres"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "webhooks"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "web applications"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "MFA"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "SSO"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "systems administration"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "acme.3",
+        "tools"
+      ],
+      "skill": "React"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Next.js"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Supabase"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "AppFolio"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Google Workspace"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "communication"
+    }
+  ],
+  "gaps": [
+    {
+      "fix": "Build a small JavaScript project that calls a REST API and handles webhooks; TypeScript experience is adjacent.",
+      "gap": "JavaScript (required)",
+      "skill": "JavaScript"
+    },
+    {
+      "fix": "Build a Python script that pulls from a public REST API and receives webhooks, then add it to GitHub.",
+      "gap": "REST APIs and webhooks",
+      "skill": "REST APIs"
+    },
+    {
+      "fix": "Only a 3-month internship; point to the Tidepool project and library IT work as hands-on equivalent.",
+      "gap": "2+ years in a technical role",
+      "skill": ""
+    }
+  ],
+  "headline": "Lacks JavaScript, REST APIs and 2+ years of technical experience; Python, SQL, Postgres and React match.",
+  "keywords": [],
+  "order": [],
+  "skills": [
+    {
+      "group": "tools",
+      "item": "PostgreSQL",
+      "op": "rename",
+      "priority": 2,
+      "skill": "Postgres",
+      "to": "Postgres",
+      "why": "Posting's exact form for ATS match"
+    }
+  ],
+  "summary": null,
+  "verdict": "stretch"
+}

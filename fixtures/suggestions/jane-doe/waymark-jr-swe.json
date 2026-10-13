@@ -1,0 +1,154 @@
+{
+  "bank": [],
+  "bullets": [
+    {
+      "after": "Wrote GitHub Actions CI/CD integration tests for the order API, catching 14 regressions pre-release",
+      "before": "Wrote integration tests in GitHub Actions for the order API, catching 14 regressions before release",
+      "hits": [
+        "CI/CD"
+      ],
+      "id": "acme.2",
+      "op": "rewrite",
+      "priority": 3,
+      "sources": [
+        "acme.2"
+      ],
+      "variant": null,
+      "why": "Puts CI/CD and GitHub on the page in the posting's words"
+    }
+  ],
+  "evidence": [
+    {
+      "have": "yes",
+      "ids": [
+        "acme.3",
+        "tools"
+      ],
+      "skill": "React"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Next.js"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Phoenix"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "tools"
+      ],
+      "skill": "Git"
+    },
+    {
+      "have": "add",
+      "ids": [
+        "tools"
+      ],
+      "skill": "version control"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "languages",
+        "tidepool.1"
+      ],
+      "skill": "TypeScript"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Elixir"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "tools",
+        "acme.1"
+      ],
+      "skill": "PostgreSQL"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "functional programming"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "testing frameworks"
+    },
+    {
+      "have": "add",
+      "ids": [
+        "acme.2",
+        "tools"
+      ],
+      "skill": "CI/CD"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Jira"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "acme.2",
+        "tools"
+      ],
+      "skill": "GitHub"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "code reviews"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "healthcare technology"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "written and verbal communication"
+    }
+  ],
+  "gaps": [
+    {
+      "fix": "Build a small Phoenix app and say in the interview you're learning Elixir; the posting says none is required.",
+      "gap": "No Phoenix or Elixir experience",
+      "skill": "Phoenix"
+    },
+    {
+      "fix": "Complete an Elixir tutorial project and mention it; the posting says Elixir will be taught.",
+      "gap": "No Elixir or functional programming",
+      "skill": "Elixir"
+    },
+    {
+      "fix": "Give an interview example from the TA office hours or the design team collaboration.",
+      "gap": "No stated written/verbal communication",
+      "skill": "written and verbal communication"
+    }
+  ],
+  "headline": "React, Git, TypeScript, PostgreSQL are covered; add CI/CD and version control wording. Phoenix, Elixir, Next.js missing.",
+  "keywords": [],
+  "order": [],
+  "skills": [
+    {
+      "group": "tools",
+      "item": "version control",
+      "op": "add",
+      "priority": 2,
+      "skill": "version control",
+      "to": "",
+      "why": "Git is listed; the posting asks for version control literally"
+    }
+  ],
+  "summary": "Software engineering intern and CS student building with React, TypeScript, PostgreSQL and Git; shipped a React dashboard and CI/CD-tested APIs.",
+  "verdict": "tailor"
+}

@@ -1,7 +1,11 @@
 //! Bank and master types, `resolve`, the v1 migrator (ARCHITECTURE.md §2), the posting and requirements types (§3,
 //! §7), and the literal matcher, composite score and master ranking (§4).
 
+pub mod apply;
 pub mod bank;
+pub mod candidates;
+pub mod change;
+pub mod changes;
 pub mod dates;
 pub mod master;
 pub mod matcher;
@@ -12,7 +16,9 @@ pub mod requirements;
 pub mod resolve;
 pub mod resume;
 pub mod score;
+pub mod suggestions;
 pub mod text;
+pub mod validate;
 
 pub use bank::Bank;
 pub use master::Master;

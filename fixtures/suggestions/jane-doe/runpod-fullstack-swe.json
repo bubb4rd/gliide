@@ -1,0 +1,157 @@
+{
+  "bank": [],
+  "bullets": [
+    {
+      "after": "Wrote order API integration tests in GitHub Actions continuous integration, catching 14 regressions",
+      "before": "Wrote integration tests in GitHub Actions for the order API, catching 14 regressions before release",
+      "hits": [
+        "continuous integration"
+      ],
+      "id": "acme.2",
+      "op": "rewrite",
+      "priority": 3,
+      "sources": [
+        "acme.2"
+      ],
+      "variant": null,
+      "why": "Puts the posting's CI term on the page"
+    }
+  ],
+  "evidence": [
+    {
+      "have": "yes",
+      "ids": [
+        "languages"
+      ],
+      "skill": "Python"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "languages",
+        "tidepool.1"
+      ],
+      "skill": "Typescript"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Go Lang"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "HTML"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "CSS"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "JavaScript"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "acme.3",
+        "tools"
+      ],
+      "skill": "React"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Express"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "FastAPI"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Pydantic"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "tools"
+      ],
+      "skill": "Docker"
+    },
+    {
+      "have": "yes",
+      "ids": [
+        "tools"
+      ],
+      "skill": "Git"
+    },
+    {
+      "have": "add",
+      "ids": [
+        "acme.2",
+        "tools"
+      ],
+      "skill": "continuous integration"
+    },
+    {
+      "have": "add",
+      "ids": [
+        "tools"
+      ],
+      "skill": "cloud platforms"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "distributed computing"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Problem-Solving"
+    },
+    {
+      "have": "no",
+      "ids": [],
+      "skill": "Communication Skills"
+    }
+  ],
+  "gaps": [
+    {
+      "fix": "Build a small Go service or open-source contribution; the posting accepts Go and/or TypeScript.",
+      "gap": "No Go Lang experience",
+      "skill": "Go Lang"
+    },
+    {
+      "fix": "Add them only if you've used them; ship a small web project with plain HTML/CSS/JS.",
+      "gap": "No HTML, CSS or JavaScript listed",
+      "skill": "HTML"
+    },
+    {
+      "fix": "Build a small FastAPI app with Pydantic models and link it on GitHub.",
+      "gap": "No Express or FastAPI backend work",
+      "skill": "FastAPI"
+    }
+  ],
+  "headline": "TypeScript, Python, React, Docker, Git match; HTML/CSS/JavaScript, Go, Express, FastAPI not on resume.",
+  "keywords": [],
+  "order": [],
+  "skills": [
+    {
+      "group": "tools",
+      "item": "AWS",
+      "op": "rename",
+      "priority": 3,
+      "skill": "cloud platforms",
+      "to": "AWS (cloud platforms)",
+      "why": "States the posting's cloud platforms term"
+    }
+  ],
+  "summary": "Computer Science student and Software Engineering Intern: TypeScript, Python, React, Docker, Git; Postgres-backed services and React dashboards.",
+  "verdict": "tailor"
+}

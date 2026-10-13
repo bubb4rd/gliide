@@ -1,5 +1,5 @@
 use resume_core::{Resume, migrate_v1, resolve};
-use resume_render::{FontOptions, Renderer, Template};
+use resume_render::{Candidate, FontOptions, LineKind, Renderer, Template};
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
 
@@ -21,7 +21,7 @@ fn fixture_renders_one_page_with_a_metric_per_bullet_and_group() {
     // Bundled fonts only: Times New Roman is missing and Liberation Serif, next in the template's list, is used.
     assert_eq!(
         out.warnings,
-        ["warning: unknown font family: times new roman (resume.typ:16)"]
+        ["warning: unknown font family: times new roman (resume.typ:22)"]
     );
     assert_eq!(out.metrics.pages, 1);
     assert_eq!(out.page_count(), 1);
@@ -119,4 +119,88 @@ fn rerender_after_an_edit_reflects_it() {
 fn bad_data_is_a_compile_error() {
     let err = renderer().render("{not json", false).err().expect("fails");
     assert!(err.to_string().contains("error"), "{err}");
+}
+
+/// Every bullet and skills line of the fixture as a measure candidate: same text, same line.
+fn candidates(resume: &Resume) -> Vec<Candidate> {
+    let mut out = Vec::new();
+    for s in &resume.sections {
+        for e in &s.entries {
+            let depth = u32::from(!e.notes.is_empty());
+            for b in &e.bullets {
+                out.push(Candidate {
+                    id: b.id.clone(),
+                    kind: LineKind::Bullet,
+                    depth,
+                    text: b.text.clone(),
+                    label: String::new(),
+                });
+            }
+        }
+        for g in &s.groups {
+            out.push(Candidate {
+                id: g.id.clone(),
+                kind: LineKind::Group,
+                depth: 0,
+                text: g.items.join(", "),
+                label: g.label.clone(),
+            });
+        }
+    }
+    out
+}
+
+#[test]
+fn measure_counts_each_line_as_the_render_does() {
+    let resume = fixture();
+    let mut r = renderer();
+    let rendered = r
+        .render(&serde_json::to_string(&resume).unwrap(), false)
+        .unwrap();
+    let cands = candidates(&resume);
+    let measured = r.measure(&cands).unwrap();
+    let rendered: Vec<_> = rendered
+        .metrics
+        .bullets
+        .iter()
+        .chain(&rendered.metrics.groups)
+        .map(|m| (m.id.clone(), m.lines))
+        .collect();
+    assert_eq!(measured, rendered);
+    // Some bullet sits under an entry with notes, so both widths are exercised.
+    assert!(cands.iter().any(|c| c.depth == 1), "{cands:?}");
+}
+
+#[test]
+fn measure_counts_a_longer_text_as_more_lines() {
+    let resume = fixture();
+    let b = &resume.sections[0].entries[0].bullets[2];
+    let note = |text: String| Candidate {
+        id: "n".into(),
+        kind: LineKind::Note,
+        depth: 0,
+        text,
+        label: "Coursework".into(),
+    };
+    let bullet = |id: &str, text: String| Candidate {
+        id: id.into(),
+        kind: LineKind::Bullet,
+        depth: 0,
+        text,
+        label: String::new(),
+    };
+    let measured = renderer()
+        .measure(&[
+            bullet("short", b.text.clone()),
+            bullet("long", format!("{} {}", b.text, "and more".repeat(30))),
+            note("Data Structures".into()),
+            note("Data Structures, ".repeat(20)),
+        ])
+        .unwrap();
+    let lines: Vec<u32> = measured.iter().map(|m| m.1).collect();
+    assert_eq!(lines[0], 1);
+    assert!(lines[1] > lines[0], "{measured:?}");
+    assert_eq!(lines[2], 1);
+    assert!(lines[3] > 1, "{measured:?}");
+    assert!(renderer().measure(&[]).unwrap().is_empty());
 }
