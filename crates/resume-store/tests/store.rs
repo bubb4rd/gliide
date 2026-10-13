@@ -513,7 +513,7 @@ fn migrating_to_covers_keeps_the_data() {
     };
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE covers; PRAGMA user_version = 1;")
+    conn.execute_batch("DROP TABLE covers; DROP TABLE companies; PRAGMA user_version = 1;")
         .unwrap();
     drop(conn);
 
@@ -558,6 +558,27 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A new logo replaces the old under a new stamp (the UI's URLs carry it, so no stale image shows); removing one
+/// leaves the others.
+#[test]
+fn logos_replace_and_remove() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.logo("acme").unwrap(), None);
+    let first = store.put_logo("acme", b"<svg/>", "image/svg+xml").unwrap();
+    store.put_logo("northwind", b"png", "image/png").unwrap();
+    let second = store.put_logo("acme", b"png2", "image/png").unwrap();
+    assert_ne!(first, second);
+    let logo = store.logo("acme").unwrap().unwrap();
+    assert_eq!(
+        (logo.bytes.as_slice(), logo.media_type.as_str(), logo.updated_at.as_str()),
+        (b"png2".as_slice(), "image/png", second.as_str())
+    );
+    store.remove_logo("acme").unwrap();
+    store.remove_logo("acme").unwrap();
+    let keys: Vec<String> = store.logos().unwrap().into_iter().map(|(k, _)| k).collect();
+    assert_eq!(keys, ["northwind"]);
 }

@@ -1,5 +1,5 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
-//! cover letters, applications and settings (ARCHITECTURE.md §8).
+//! cover letters, applications, company logos and settings (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -24,7 +24,11 @@ use uuid::Uuid;
 pub use csv::{applications_csv, parse_ats_fit_csv};
 
 /// Schema migrations in order; `PRAGMA user_version` counts the ones applied.
-const MIGRATIONS: &[&str] = &[include_str!("schema.sql"), include_str!("covers.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("schema.sql"),
+    include_str!("covers.sql"),
+    include_str!("companies.sql"),
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -94,7 +98,7 @@ pub struct AnalysisRow {
     pub mode: Mode,
     pub model: String,
     pub suggestions: Suggestions,
-    /// The projected score, for the Jobs list; `None` until the review computed it.
+    /// The projected score, for the posting's fit score; `None` until the review computed it.
     pub projected: Option<f64>,
     pub created_at: String,
     /// When the review was last opened.
@@ -181,6 +185,16 @@ pub struct Cover {
     pub greeting: String,
     pub paragraphs: Vec<String>,
     pub closing: String,
+    pub updated_at: String,
+}
+
+/// A company's logo as stored, by company key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Logo {
+    pub bytes: Vec<u8>,
+    /// `image/png` or `image/svg+xml`.
+    pub media_type: String,
+    /// When it was set; every new image gets a new one.
     pub updated_at: String,
 }
 
@@ -528,7 +542,7 @@ impl Store {
         )
     }
 
-    /// Records the analysis's projected score, for the Jobs list.
+    /// Records the analysis's projected score, for the posting's fit score.
     pub fn set_projected(&self, id: &str, projected: f64) -> Result<(), StoreError> {
         self.update_analysis(
             id,
@@ -686,6 +700,55 @@ impl Store {
         )?;
         self.cover(analysis_id)?
             .ok_or_else(|| not_found("cover", analysis_id))
+    }
+
+    // Company logos.
+
+    /// Every company with a logo: its key and when the logo was set.
+    pub fn logos(&self) -> Result<Vec<(String, String)>, StoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT key, updated_at FROM companies ORDER BY key")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn logo(&self, key: &str) -> Result<Option<Logo>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT logo, logo_type, updated_at FROM companies WHERE key = ?1",
+                [key],
+                |r| {
+                    Ok(Logo {
+                        bytes: r.get(0)?,
+                        media_type: r.get(1)?,
+                        updated_at: r.get(2)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Sets the company's logo, replacing any; returns when it was set.
+    pub fn put_logo(&self, key: &str, bytes: &[u8], media_type: &str) -> Result<String, StoreError> {
+        let now = now();
+        self.conn.execute(
+            "INSERT INTO companies (id, key, logo, logo_type, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT (key) DO UPDATE SET logo = excluded.logo, logo_type = excluded.logo_type,
+                 updated_at = excluded.updated_at",
+            params![new_id(), key, bytes, media_type, now],
+        )?;
+        Ok(now)
+    }
+
+    /// Removes the company's logo; nothing when it has none.
+    pub fn remove_logo(&self, key: &str) -> Result<(), StoreError> {
+        self.conn
+            .execute("DELETE FROM companies WHERE key = ?1", [key])?;
+        Ok(())
     }
 
     // Applications.
