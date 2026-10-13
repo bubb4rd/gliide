@@ -1,0 +1,209 @@
+{
+  "certifications": [],
+  "company": "",
+  "degree": {
+    "equivalent": false,
+    "fields": [
+      "User Experience (UX) Design",
+      "Human-Computer Interaction",
+      "Computer Science",
+      "Graphic Design"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [],
+  "location": "Remote",
+  "role": "Front-end UI designer",
+  "seniority": "mid",
+  "short_role": "ui_designer",
+  "skills": [
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 1,
+      "required": true,
+      "term": "Figma"
+    },
+    {
+      "aliases": [
+        "WCAG 2.1 Level AA",
+        "WCAG"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "WCAG 2.1 AA"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Section 508"
+    },
+    {
+      "aliases": [
+        "HTML"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "HTML5"
+    },
+    {
+      "aliases": [
+        "CSS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "CSS3"
+    },
+    {
+      "aliases": [
+        "JS",
+        "ES6+"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "React"
+    },
+    {
+      "aliases": [],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "Vue"
+    },
+    {
+      "aliases": [],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "Svelte"
+    },
+    {
+      "aliases": [
+        "Tailwind"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Tailwind CSS"
+    },
+    {
+      "aliases": [
+        "MapLibre"
+      ],
+      "group": "mapping_library",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "MapLibre GL"
+    },
+    {
+      "aliases": [],
+      "group": "mapping_library",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "OpenLayers"
+    },
+    {
+      "aliases": [],
+      "group": "mapping_library",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Leaflet"
+    },
+    {
+      "aliases": [
+        "D3"
+      ],
+      "group": "charting_library",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "D3.js"
+    },
+    {
+      "aliases": [
+        "U.S. Web Design System"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "USWDS"
+    },
+    {
+      "aliases": [
+        "design system"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "Design systems"
+    },
+    {
+      "aliases": [
+        "wireframes"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "Wireframing"
+    },
+    {
+      "aliases": [],
+      "group": "testing_framework",
+      "kind": "tool",
+      "priority": 3,
+      "required": true,
+      "term": "Jest"
+    },
+    {
+      "aliases": [],
+      "group": "testing_framework",
+      "kind": "tool",
+      "priority": 3,
+      "required": true,
+      "term": "Cypress"
+    }
+  ],
+  "title_terms": [
+    "Front-end UI designer",
+    "UI Designer",
+    "Front-end"
+  ],
+  "years_min": 3
+}

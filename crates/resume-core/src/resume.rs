@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-pub use crate::bank::Contact;
+pub use crate::bank::{Contact, SectionKind};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -21,6 +21,9 @@ pub struct Section {
     pub title: String,
     pub entries: Vec<Entry>,
     pub groups: Vec<Group>,
+    /// Scoring only (templates ignore it): the bank section's kind, filled by `resolve`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<SectionKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -34,6 +37,12 @@ pub struct Entry {
     pub subtitle: String,
     pub notes: Vec<Note>,
     pub bullets: Vec<Bullet>,
+    /// Scoring only (templates ignore it): the bank entry's first month, `YYYY-MM`, filled by `resolve`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
+    /// Scoring only (templates ignore it): the bank entry's last month, `YYYY-MM` or `present`, filled by `resolve`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

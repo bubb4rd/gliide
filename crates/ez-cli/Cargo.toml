@@ -12,6 +12,9 @@ path = "src/main.rs"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 resume-core = { path = "../resume-core" }
+resume-ingest = { path = "../resume-ingest" }
+resume-llm = { path = "../resume-llm" }
 resume-render = { path = "../resume-render" }
 serde = "1"
 serde_json = "1"
+tokio = { version = "1", features = ["rt"] }

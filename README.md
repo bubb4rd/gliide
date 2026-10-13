@@ -22,3 +22,5 @@ Core and rendering (`cargo run -p ez-cli --bin ez -- …`; outputs belong under 
 | `ez migrate <master.json> --out <dir>` | ATS Fit's `master.json` → `bank.json` + `masters/swe.json` |
 | `ez render --bank <f> --master <f> --out <dir> [--highlight] [--system-fonts] [--scale N] [--bench N]` | `resume.pdf`, `page-N.svg`, `page-N.png`, `metrics.json` |
 | `ez schema --out schemas/` | Regenerates `schemas/bank.schema.json` and `schemas/master.schema.json` |
+| `ez score <link\|file\|-\|text> --bank <f> --master <f> [--model sonnet] [--fresh] [--json <f>]` | Reads the posting, extracts its requirements with `claude -p` (cached in `local/cache/`), prints the composite score and every component |
+| `ez rank <link\|file\|-\|text> --bank <f> --masters <dir>` | Scores every master in the folder against the posting, best first |

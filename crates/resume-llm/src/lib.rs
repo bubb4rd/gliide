@@ -154,6 +154,13 @@ pub enum LlmError {
         raw: String,
         attempts: Vec<Attempt>,
     },
+    /// Schema-valid output that doesn't fit the Rust type the call returns (the schema and the type disagree).
+    #[error("output does not fit {target}: {message}")]
+    Decode {
+        target: &'static str,
+        message: String,
+        output: Structured,
+    },
 }
 
 /// What one turn produced, before validation.

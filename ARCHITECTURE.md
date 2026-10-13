@@ -292,9 +292,9 @@ are never knockouts, title/company/location passed in from ingest, `degree.equiv
 | Field | Content |
 |---|---|
 | `role`, `company`, `short_role`, `location`, `seniority` | As ATS Fit, plus seniority (intern, entry, mid, senior, lead) |
-| `skills[]` | `term` (posting's exact words), `aliases[]`, `kind` (hard, tool, domain, soft), `priority` 1–3, `required` |
+| `skills[]` | `term` (posting's exact words), `aliases[]`, `kind` (hard, tool, domain, soft), `priority` 1–3, `required`, `group` (one-of alternatives share a group id, `priority` and `required`) |
 | `title_terms[]` | Words of the job title an ATS matches on |
-| `years_min`, `degree` (level, fields), `certifications[]` | Hard requirements; null when absent |
+| `years_min`, `degree` (level, fields, `equivalent`), `certifications[]` | Hard requirements; null when absent |
 | `knockouts[]` | Clearance, work authorization, on-site location |
 
 ### Suggest: what to change (master-dependent)
@@ -544,7 +544,7 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 |---|---|---|
 | M0 Spike: providers ✓ (Claude) | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over the 11 postings in `fixtures/postings/`; `codex-acp` and `gemini --acp` join once core features work | Done for Claude: 33/33 valid first try; sonnet default; outputs in `fixtures/requirements/` |
 | M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to ATS Fit with system fonts; identical line and page metrics with bundled Liberation Serif |
-| M2 Requirements + score | Ingest, extract, matcher, composite score, master ranking, `ez score <url> --master swe` | Score components for the 11 fixture postings |
+| M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
 | M3 Tailor | Suggest, validator, change engine, measure + fit, both modes, `ez tailor` | One-page tailored PDFs for the fixtures; the bank-aware ceiling measured beside master-only |
 | M4 macOS app | Bank, masters, job, review with live preview, export, applications log, agent settings | You use it instead of ATS Fit |
 | M5 Experience | PDF/DOCX import into the bank, variants, second template (design track), the mode experiment's report | Decision on the default mode |

@@ -7,6 +7,7 @@ description = "Model access for easyshmeezy: the Llm trait, the claude CLI provi
 
 [dependencies]
 jsonschema = { version = "0.58", default-features = false }
+resume-core = { path = "../resume-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

@@ -8,20 +8,43 @@ fn v1() -> Resume {
     serde_json::from_str(V1).expect("fixture parses as a v1 resume")
 }
 
+/// `r` without the scoring metadata `resolve` adds (section kinds, entry months), which a v1 resume doesn't carry.
+fn without_metadata(mut r: Resume) -> Resume {
+    for s in &mut r.sections {
+        s.kind = None;
+        for e in &mut s.entries {
+            (e.start, e.end) = (None, None);
+        }
+    }
+    r
+}
+
 #[test]
 fn migrate_then_resolve_round_trips() {
     let v1 = v1();
     let m = migrate_v1(&v1);
     assert_eq!(m.master.id, "swe");
-    assert_eq!(resolve(&m.bank, &m.master).unwrap(), v1);
+    let resolved = resolve(&m.bank, &m.master).unwrap();
+    assert_eq!(without_metadata(resolved.clone()), v1);
+    // The metadata comes from the bank.
+    assert_eq!(resolved.sections[0].kind, Some(SectionKind::Experience));
+    let acme = &resolved.sections[0].entries[0];
+    assert_eq!(
+        (acme.start.as_deref(), acme.end.as_deref()),
+        (Some("2025-06"), Some("2025-09"))
+    );
+    assert_eq!(
+        resolved.sections[1].entries[0].end.as_deref(),
+        Some("present")
+    );
     // Also through JSON, as `ez migrate` writes them and `ez render` reads them.
     let bank: Bank = serde_json::from_str(&serde_json::to_string(&m.bank).unwrap()).unwrap();
     let master: Master = serde_json::from_str(&serde_json::to_string(&m.master).unwrap()).unwrap();
-    assert_eq!(resolve(&bank, &master).unwrap(), v1);
-    // And the resolved JSON equals the fixture's, field for field.
+    assert_eq!(resolve(&bank, &master).unwrap(), resolved);
+    // And the resolved JSON, without the metadata, equals the fixture's, field for field.
     let fixture: serde_json::Value = serde_json::from_str(V1).unwrap();
     assert_eq!(
-        serde_json::to_value(resolve(&bank, &master).unwrap()).unwrap(),
+        serde_json::to_value(without_metadata(resolve(&bank, &master).unwrap())).unwrap(),
         fixture
     );
 }

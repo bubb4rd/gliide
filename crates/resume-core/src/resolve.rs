@@ -26,7 +26,8 @@ pub enum ResolveError {
 }
 
 /// The resume `master` selects from `bank`: its sections, entries, bullets (or the chosen variant) and skills, in the
-/// master's order. Every id the master names must exist in the bank.
+/// master's order, with each section's kind and each entry's `start`/`end` for scoring. Every id the master names must
+/// exist in the bank.
 pub fn resolve(bank: &Bank, master: &Master) -> Result<Resume, ResolveError> {
     let sections = master
         .sections
@@ -91,6 +92,7 @@ fn section(bs: &BankSection, ms: &MasterSection) -> Result<Section, ResolveError
         title: ms.title.clone().unwrap_or_else(|| bs.title.clone()),
         entries,
         groups,
+        kind: Some(bs.kind),
     })
 }
 
@@ -144,5 +146,7 @@ fn entry(be: &BankEntry, me: &MasterEntry) -> Result<Entry, ResolveError> {
             })
             .collect(),
         bullets,
+        start: be.start.clone(),
+        end: be.end.clone(),
     })
 }

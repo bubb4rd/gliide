@@ -27,7 +27,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["term", "aliases", "kind", "priority", "required"],
+        "required": ["term", "aliases", "kind", "priority", "required", "group"],
         "properties": {
           "term": { "type": "string", "minLength": 1, "maxLength": 60 },
           "aliases": {
@@ -37,7 +37,8 @@
           },
           "kind": { "enum": ["hard", "tool", "domain", "soft"] },
           "priority": { "enum": [1, 2, 3] },
-          "required": { "type": "boolean" }
+          "required": { "type": "boolean" },
+          "group": { "type": ["string", "null"], "pattern": "^[a-z0-9_]{1,40}$" }
         }
       }
     },
@@ -51,14 +52,15 @@
     "degree": {
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["level", "fields"],
+      "required": ["level", "fields", "equivalent"],
       "properties": {
         "level": { "enum": ["associate", "bachelor", "master", "phd"] },
         "fields": {
           "type": "array",
           "maxItems": 6,
           "items": { "type": "string", "minLength": 1, "maxLength": 60 }
-        }
+        },
+        "equivalent": { "type": "boolean" }
       }
     },
     "certifications": {

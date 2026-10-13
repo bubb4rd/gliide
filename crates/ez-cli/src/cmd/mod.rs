@@ -3,6 +3,7 @@
 pub mod migrate;
 pub mod render;
 pub mod schema;
+pub mod score;
 
 use std::path::Path;
 

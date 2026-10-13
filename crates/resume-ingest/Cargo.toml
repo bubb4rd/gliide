@@ -1,0 +1,20 @@
+[package]
+name = "resume-ingest"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+description = "Postings in for easyshmeezy: a job link fetched and parsed, or pasted text"
+
+[dependencies]
+ego-tree = "0.11"
+httpdate = "1"
+reqwest = { version = "0.13", features = ["brotli", "gzip"] }
+resume-core = { path = "../resume-core" }
+scraper = "0.27"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

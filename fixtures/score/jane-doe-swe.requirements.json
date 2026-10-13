@@ -1,0 +1,27 @@
+{
+  "role": "Backend Software Engineer",
+  "company": "Example Widgets",
+  "short_role": "swe",
+  "location": "Springfield, IL",
+  "seniority": "entry",
+  "skills": [
+    { "term": "Rust", "aliases": [], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "JavaScript", "aliases": [], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "Amazon Web Services", "aliases": [], "kind": "tool", "priority": 2, "required": true, "group": null },
+    { "term": "Integration test", "aliases": [], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "React", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": "frontend" },
+    { "term": "Vue", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": "frontend" },
+    { "term": "MongoDB", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": "nosql" },
+    { "term": "DynamoDB", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": "nosql" },
+    { "term": "Docker", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "C", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "Telemetry", "aliases": [], "kind": "domain", "priority": 2, "required": false, "group": null },
+    { "term": "Help desk", "aliases": [], "kind": "domain", "priority": 3, "required": false, "group": null },
+    { "term": "Mentoring", "aliases": [], "kind": "soft", "priority": 3, "required": false, "group": null }
+  ],
+  "title_terms": ["Software Engineer", "Backend Engineer"],
+  "years_min": 1,
+  "degree": { "level": "bachelor", "fields": ["Computer Science", "Computer Engineering"], "equivalent": false },
+  "certifications": ["AWS Certified Cloud Practitioner"],
+  "knockouts": [{ "kind": "onsite", "text": "On-site in Springfield, IL three days a week" }]
+}

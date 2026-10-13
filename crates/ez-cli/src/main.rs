@@ -19,6 +19,10 @@ enum Command {
     Render(cmd::render::Args),
     /// Write the bank and master JSON Schemas.
     Schema(cmd::schema::Args),
+    /// Read a posting, extract its requirements, and score a master against it.
+    Score(cmd::score::ScoreArgs),
+    /// Score every master in a folder against a posting, best first.
+    Rank(cmd::score::RankArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -26,5 +30,7 @@ fn main() -> anyhow::Result<()> {
         Command::Migrate(args) => cmd::migrate::run(args),
         Command::Render(args) => cmd::render::run(args),
         Command::Schema(args) => cmd::schema::run(args),
+        Command::Score(args) => cmd::score::score_cmd(args),
+        Command::Rank(args) => cmd::score::rank_cmd(args),
     }
 }
