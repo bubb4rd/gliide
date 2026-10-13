@@ -28,8 +28,9 @@ Premium here means five things, each enforced below:
 5. **Honesty in color.** Green only ever means points you gain; amber only means "left out, and why".
 
 **Company logos are the one exception to all five.** They're the company's brand, not our decoration: shown as the
-company publishes them, never recolored, filtered, cropped or outlined, even where they break the palette. Until logos
-are fetched, `CompanyMark` is a blank tile in the logo's place.
+company publishes them, never recolored, filtered or outlined, even where they break the palette. A logo is scaled to
+fit `CompanyMark`'s square and rounded like the blank tile, which stands in until you set one (job header: click the
+mark or **Upload company photo**, then drop, paste or choose an image).
 
 ### Evidence (Inspo MCP, 2026-10-12)
 
@@ -151,13 +152,14 @@ there and shown in the `/specimen` route in every state before any screen uses i
 |---|---|---|
 | `Icon` | `icon` (Lucide), `size` 12/14/16, `weight` | stroke per weight |
 | `Button` | `variant` default/primary/ghost/danger, `size` sm/md/lg, `square`, `icon`, `iconEnd`, `kbd`, `static` | default, hover, pressed, focus, disabled; optional `Kbd` hint (primary tints it); 2px less padding on the icon side |
-| `Kbd` | children | inside buttons, in the key footer |
+| `Kbd` | children | inside buttons, in the command menu |
 | `Segmented` | `options`, `value`, `label` | on, off, hover, disabled |
 | `Input` / `Textarea` | `value`, `size` | placeholder, focus (accent border + 3px ring), disabled; `Textarea size="lg"` is the reading size for inline edits |
 | `Checkbox` | `checked`, `label` | off, on, focus, disabled |
 | `Chip` | `state` have/add/missing/not-mine, `p1` | press, hover, disabled |
 | `Badge` | `tone` neutral/accent/gain/warn/danger, `dot` | |
-| `CompanyMark` | `size` 16/20/32, optional name (children) | blank tile (until logos are fetched); with its name, which truncates. 16 in the sidebar's Recent, 20 in the Jobs and Applications tables, 32 beside the job header's headline |
+| `CompanyMark` | `size` 16/20/28/48, `src`, optional name (children); `label` makes it a button (`onclick` or `popovertarget`), `over` | blank tile; logo (scaled to fit, rounded like the tile, no tile or ring behind it); with its name, which truncates; as a button: image icon on hover and focus, accent ring and wash while files are dragged over it. 16 in one-line lists, 20 beside a name in one line, 28 beside two lines (the sidebar's Recent, the Applications table), 48 in the job header across the company and the title (the button) |
+| `LogoDrop` | `over`, `busy`, `set`, `onpaste`, `onchoose`, `onremove` | the job header's photo panel, inside a `Popover`: a dashed well to drop an image file on, Paste `⌘V`, Choose file…; files over it (accent well); setting; Remove once a logo is set |
 | `Marked` | `text`, `marks` | inserted keywords in `<mark class="mark">`; the sheet's own highlight comes from the renderer |
 | `ChangeRow` | `state` in/off/left-out/forced, `checked`, `selected`, `points`, snippets `text`/`actions`/`editor` | actions appear on hover, focus or selection; reason line ("Left out: …", "Kept on by you · …"); warning; "Your edit" owner; editing |
 | `GroupHead` | `label`, `meta` | label + count + points |
@@ -168,26 +170,27 @@ there and shown in the `/specimen` route in every state before any screen uses i
 | `Toaster` + `toast()` | `tone` neutral/gain/warn/danger, `action` | enters with `.enter`, exits with blur and -12px; errors stay until dismissed |
 | `Empty` | `title`, `body`, `action` snippet | title (serif), one sentence, one primary action with its key; staggered `.enter` |
 | `Toolbar` | `crumbs` snippet, trailing children | drags the window; `<hr>` draws a divider; compact: room for the traffic lights and the sidebar toggle |
-| `KeyFooter` | `keys` | sticky at the column's foot |
+| `KeyFooter` | `keys` (`KeyCommand`: `keys`, `label`, optional `run`, `disabled`) | collapsed: one ghost button, **Commands** `⌘K`, sticky at the column's foot; open: a menu above it listing every command with its keys; a command with `run` is an item (click, or ↑↓ Home End ⏎), disabled while it can't run; one without (↑↓ Select) is listed for its keys only; Esc, Tab or a click outside closes it |
 | `Menu` | `value`, `options` (`label`, `meta`), `label` | closed, open, active option, chosen (check), disabled; ↑↓ Home End ⏎ Esc |
 | `Popover` | `open`, `anchor`, `placement`, `mode` auto/manual | anchored, flips when it would overflow; `--shadow-popover` |
 | `Thinking` | `label`, `steps` (`label`, `ms`), `startedAt`, `oncancel` | stage alone; with steps already done (a check and their seconds); with Cancel |
 | `Table` | `columns`, `rows`, `cell` snippet | sticky header, tabular numbers, hover wash, no zebra |
+| `Heatmap` | `counts` (by `dayKey`), `weeks`, `end`, `label`, `describe`, `caption` snippet | one cell per day, a column per week, Sunday on top; empty well, then four steps of `--accent` mixed into `--sunken` (in oklab, so the hue holds) against the busiest day shown (a data series, not "good"); month labels; a day's title says what happened; Less–More legend; forced colors: `Highlight` at stepped opacity |
 
 ## Layout
 
 ```
 ┌──────────┬────────────────────────────────────────────────────────────────┐
-│ ● ● ●    │ Jobs › Globex             [Master only|Bank-aware] │ SWE ▾ [Export E] │  toolbar 52
+│ ● ● ●    │ Apps › Globex   [Resume|Cover letter] SWE ▾ │ [Export E] Del │  toolbar 52
 │          ├──────────────────────────────┬─────────────────────────────────┤
-│ Jobs     │ Tailor first · Globex · …    │  ● Fits on 1 page        − 100% + │
-│ Apps     │ Junior Software Engineer     │  ┌───────────────────────────┐   │
-│ Bank     │ 53% › 78%        Ceiling 85% │  │                           │   │
-│ Masters  │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │  │      resume page          │   │
-│          │ SKILLS  chips…               │  │      (live SVG)           │   │
-│ RECENT   │ WORK · …          3 · +15    │  │                           │   │
+│ Overview │ Tailor first · Remote, US    │  ● Fits on 1 page        − 100% + │
+│ Apps     │ ▢ Globex                     │  ┌───────────────────────────┐   │
+│ Exp.     │   Junior Software Engineer   │  │                           │   │
+│ Resumes  │ 53% › 78%        Ceiling 85% │  │      resume page          │   │
+│          │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │  │      (live SVG)           │   │
+│ RECENT   │ SKILLS  chips…               │  │                           │   │
 │ …        │ ☑ change row                 │  └───────────────────────────┘   │
-│ Settings │ ↑↓ Select  Space Toggle  …   │              desk                │
+│ Settings │ Commands ⌘K                  │              desk                │
 └──────────┴──────────────────────────────┴─────────────────────────────────┘
   232 (vibrancy)   column 420–580                 rest
 ```
@@ -199,8 +202,10 @@ there and shown in the `/specimen` route in every state before any screen uses i
   and the main area paints `--paper`. Without it the sidebar is `--sidebar` over paper. Verified on macOS 26; the
   window's appearance follows the app theme so the material matches. Windows (Mica) is unverified until M7.
 - **Dragging:** the `Toolbar` (`data-tauri-drag-region="deep"`: any empty part) and the sidebar's top 52px.
-- **One primary action per screen**, in the toolbar's trailing edge, with its key.
-- **Keys:** every row action has a key; the sticky key footer lists the screen's keys.
+- **One primary action per screen**, in the toolbar's trailing edge, with its key; only a delete (the job's trash)
+  comes after it, at the very end.
+- **Keys:** every row action has a key; the key footer's **Commands** menu (`⌘K`) lists the screen's keys and runs
+  any of them with a click.
 - **Compact (iOS, narrow windows under 960px):** the sidebar collapses to a sheet (the toolbar's sidebar button,
   Esc or a click outside closes it), the desk becomes a tab.
 
@@ -208,12 +213,13 @@ there and shown in the `/specimen` route in every state before any screen uses i
 
 | Screen | Composition |
 |---|---|
-| Job (empty) | `Empty` centered on paper: "No postings yet", one sentence, **Paste from clipboard** `V` |
-| Job → Review | As the specimen: job header (badge, meta, headline), score, skill chips, change groups, key footer; desk with page |
-| Experience bank | Column: entries grouped by section; an entry opens its editor (`/bank/entries/<id>`): each bullet's wordings (its text, then its variants) as rows with the masters showing each as badges; row actions Edit `⏎`, Make it the text `M`, Remove `⌫` (with Undo in the toast), Show in a master `1–9`; Add a variant `V`, Fold into… `F` per bullet. Desk: the entry in a master that shows it (`P` picks which), highlighted; the entry alone when none does |
+| Overview (`/`, the window's first screen) | Toolbar: **Import resume** `I`, **Paste from clipboard** `V` (primary). Column (max 880): the greeting as the headline ("What’s up next, Jane?", the bank's nickname or first name); an Activity card: range `Segmented` (All, 30 days, 7 days) over six stats in serif (postings, applications, interviews, active days, average fit, points from tailoring in `--gain-text`), then the last 26 weeks as a `Heatmap` with one sentence under it; **Up next**: applications in interviews, then postings not sent yet, best fit first (at most 5), each row opening its job; **Import your resume** `I` first while there's no bank |
+| Applications (empty) | `Empty` centered on paper: "No postings yet", one sentence, **Paste from clipboard** `V` |
+| Job → Review | As the specimen: job header (verdict badge and meta: location, source; then a 48px `CompanyMark` across the company, 16/24 500 ink 2, over the headline, its edges on the company's cap height and the title's baseline), score, skill chips, change groups, then **Other lines** (a `GroupHead`, then a `PartRow` per master line no change touches, labeled with its entry: Edit `⏎` and, for bullets and the summary, Rewrite with a note `N`; either makes it your edit, which lands selected in its section's group), Add your own `A` (a skill, a bullet, or a summary when the master has none), key footer (Commands `⌘K`); desk with page. ↑↓ moves through the changes, then the other lines. Crumbs: Applications › company. Toolbar, in two groups split by a divider: what you're working on (the document `Segmented`: Resume, Cover letter, `Tab`; then the resume's master `Menu`, or the letter's Rewrite letter `W`), then export and delete (**Export** `E` or **Export letter** `E`, then the trash right after it: Delete posting `⌘⌫`, back to Applications, then deleted as there). Master only / Bank-aware is a setting (Settings → default suggestions), not a toolbar control |
+| Experience (`/bank`; the sidebar's name for the experience bank) | Column: entries grouped by section; an entry opens its editor (`/bank/entries/<id>`): each bullet's wordings (its text, then its variants) as rows with the masters showing each as badges; row actions Edit `⏎`, Make it the text `M`, Remove `⌫` (with Undo in the toast), Show in a master `1–9`; Add a variant `V`, Fold into… `F` per bullet. Desk: the entry in a master that shows it (`P` picks which), highlighted; the entry alone when none does |
 | Import review | As Review: the column lists the file's sections (where each goes), each entry `New` or `Yours` (merged, with **Keep separate**), skills lines' new items, offered contact items, and **Save as** (new master's title, or one to replace); the desk shows the master it makes, what's new to the bank highlighted. `⌘⏎` adds, `Esc` discards |
-| Masters | Column: a master's sections as checkbox rows over the bank, drag to order; desk previews the resolved master |
-| Applications | Full-width `Table` on `--surface`: tabular numbers, status as a `Badge`, row hover wash, no zebra stripes |
+| Resumes (`/masters`; the sidebar's name for the masters) | Column: a master's sections as checkbox rows over the bank, drag to order; desk previews the resolved master. No masters yet: `Empty`, **Go to Experience** `E` |
+| Applications | Every posting, newest first (the day it was sent, else added), as a full-width `Table` on `--surface`: tabular numbers, row hover wash, no zebra stripes. Toolbar: Open applications.csv, **Paste from clipboard** `V` (primary). The Job column stacks like the sidebar's Recent: a 28px `CompanyMark` across both lines, the company (500, ink) over the role (meta size, ink 2), each truncating; the cell opens the job, the company turning accent on hover. An application has its scores, its status as a `Badge` in a `Menu` (saves at once, rewrites applications.csv), its resume and its link. A posting not sent yet has a "Not sent" badge, its fit score under Projected, its link, and a trash (a ghost square button, shown on the row's hover or focus, always on touch) that deletes it with Undo in the toast: it leaves every list at once and is deleted for good (reviews, drafts, letter) when the Undo runs out |
 | Settings | Single column of cards (max 640): agents with signed-in `Badge`, models, export folder, theme `Segmented` (Light, Dark, System) |
 
 ## Voice

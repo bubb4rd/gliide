@@ -494,9 +494,20 @@ only the page count needs the loop.
 
 ### Company logos
 
-Shown in the sidebar's Recent jobs (16px), the Jobs and Applications tables (20px) and beside the job header's
-headline (32px), through `CompanyMark`. **Today the slot is a blank tile**; nothing is fetched yet. A logo is the
-company's brand and is shown as published: never recolored, filtered, cropped or outlined (`design/DESIGN.md`).
+Shown in the sidebar's Recent jobs and the Applications table (28px, beside the company over the role) and in the job
+header (48px, across the company and the title), through `CompanyMark`. A logo is the company's brand and is shown as
+published: never recolored, filtered or outlined, only scaled to fit the square and rounded like the blank tile
+(`design/DESIGN.md`).
+
+**Logos you set (built).** Nothing is fetched yet, so the slot is a blank tile until you set one: in the job header,
+click the mark or **Upload company photo**, then drop an image file on the mark or its panel, paste (`⌘V`: a copied
+image file, else the copied picture) or choose a file. `app/src-tauri/src/logo.rs` keeps SVG as is (≤ 512 KB) and
+scales anything else (PNG, JPEG, GIF, WebP, TIFF, BMP, ICO; files ≤ 20 MB) to fit 128px with premultiplied alpha,
+stored as PNG in `companies` under the company key (the name lowercased, each run of anything but letters and digits
+as one `_`), so every posting and application with that name shows it. The UI loads it from
+`logo://localhost/<key>?v=<set at>` (cached for good: a new logo gets a new URL); rows carry `companyKey`, and
+`logos()` lists the keys with a logo. Tauri takes files dropped on the window, so the page hit-tests
+`onDragDropEvent`'s position against `data-logo-drop` targets.
 
 **Sources: first party only for now.** The posting's own pages, then the company's own site; no third party learns
 which companies you look at. [logo.dev](https://www.logo.dev) is the third-party option if coverage needs it (free
@@ -518,9 +529,9 @@ host (Ashby, Greenhouse, Lever, Workday, iCIMS, ApplicantPro…): those are the 
 1. Ingest records `org { website, logo }` on `Found` and `company_site`, `logo_url` on `Posting` (optional fields;
    the hash covers the text only, so caches hold).
 2. After the posting is saved, a background fetch (the ingest `Fetcher`, `image/*` only, ≤ 512 KB, dimensions read)
-   stores the square mark and any wordmark in a `companies` table keyed by normalized company name, so applications
-   without a posting match too. A website you set is never overwritten; fetched logos refresh after 90 days.
-3. The UI reads them through a `logo://` URI scheme; `CompanyMark` shows the logo, else the blank tile.
+   stores the square mark and any wordmark in `companies` (above), so applications without a posting match too. A
+   logo or website you set is never overwritten; fetched logos refresh after 90 days.
+3. `CompanyMark` shows them through the `logo://` scheme as it shows the logos you set.
 4. Greenhouse and Lever's extra request; then **Set website…** and website-from-text for pasted postings and
    imported applications (4 of 5 postings and 5 of 7 applications in use on 2026-10-13 had no link to read).
 
@@ -528,7 +539,7 @@ host (Ashby, Greenhouse, Lever, Workday, iCIMS, ApplicantPro…): those are the 
 
 | Where | What |
 |---|---|
-| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings`, `requirements`, `analyses`, `drafts`, `applications`, `covers`, `settings` |
+| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings`, `requirements`, `analyses`, `drafts`, `applications`, `covers`, `companies` (logos you set), `settings` |
 | User-chosen folder (default `~/Documents/Resumes`) | Exported PDFs `<company>_<short_role>_<surname>_resume.pdf` (`-2`… when taken), `applications.csv` |
 | The agents' own config | Their sign-ins; the app stores none |
 
@@ -545,7 +556,7 @@ composed Review screen.
 | Bank | Every entry, filterable by tag and section; which masters show each; editor with variants and skills per bullet |
 | Masters | Cards (track, template thumbnail, last edited); a master's editor is checkboxes and drag-to-order over the bank, with live preview |
 | Job | Posting input; requirements as chips; master picker with each master's score; score header |
-| Review | Score header; changes grouped by section, then **From your bank**; live preview beside them |
+| Review | Score header; changes grouped by section, then **From your bank**; then **Other lines**: every master line no change touches, each with Edit and Rewrite with a note (either makes it your edit); live preview beside them |
 | Applications | Table with status, scores, files, posting link; CSV export |
 | Settings | Agents found, signed in or not, model per call; mode (master only / bank-aware); export folder; default template |
 
@@ -556,8 +567,9 @@ from your selections, and the headroom left; components on hover.
 replaces, `+n pts`, and actions: Edit (inline field), Rewrite with a note (one model call for that line), Save to
 master. Skill chips toggle with a click: gray → yours (adds it to its line), green → not yours (removes it).
 
-**Keyboard first** (carried from ATS Fit): `↑` `↓` select, Space toggle, `⏎` edit, `a` add your own, `e` export,
-`r` re-run, `⌘Z` / `⇧⌘Z` undo/redo over the draft log.
+**Keyboard first** (carried from ATS Fit): `↑` `↓` select (changes, then other lines), Space toggle, `⏎` edit, `n`
+rewrite with a note, `a` add your own (a skill, a bullet, a missing summary), `e` export, `r` re-run, `⌘Z` / `⇧⌘Z`
+undo/redo over the draft log.
 
 Compact layout (iOS, narrow windows): the preview becomes a tab.
 
