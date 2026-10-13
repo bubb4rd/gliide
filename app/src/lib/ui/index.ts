@@ -25,7 +25,7 @@ export { default as PartRow } from "./PartRow.svelte";
 export { default as Popover } from "./Popover.svelte";
 export { default as ScoreHeader } from "./ScoreHeader.svelte";
 export { default as Segmented } from "./Segmented.svelte";
-export { default as Table } from "./Table.svelte";
+export { default as Table, type TableColumn, type TableSort } from "./Table.svelte";
 export { default as Textarea } from "./Textarea.svelte";
 export { default as Thinking } from "./Thinking.svelte";
 export { default as Toaster } from "./Toaster.svelte";

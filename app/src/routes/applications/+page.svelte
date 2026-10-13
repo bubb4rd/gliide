@@ -4,7 +4,24 @@
   applications.csv. A posting not sent yet shows "Not sent", its fit score and the day it was added; its trash (shown on
   hover or focus) deletes it, with Undo in the toast. V (or ⌘V) reads the clipboard: a link or the posting's text
   becomes a posting, and its review opens.
+
+  Above the table: a filter on company or role (/ or ⌘F focuses it, Esc clears it) and a status filter. A column
+  header sorts by its column; a second click reverses it. Filters and sort stay as you left them when you come back
+  from a job.
 -->
+<script lang="ts" module>
+  import type { AppStatus } from "$lib/api";
+  import type { TableSort } from "$lib/ui";
+
+  type Show = "all" | "unsent" | AppStatus;
+
+  const view = $state<{ query: string; show: Show; sort: TableSort }>({
+    query: "",
+    show: "all",
+    sort: { key: "date", dir: "desc" },
+  });
+</script>
+
 <script lang="ts">
   import { onMount } from "svelte";
   import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -12,25 +29,61 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { appError, setStatus, type ApplicationRow, type AppStatus, type JobRow } from "$lib/api";
+  import { appError, setStatus, type ApplicationRow, type JobRow } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
   import { app } from "$lib/stores/app.svelte";
   import { STATUS } from "$lib/status";
-  import { Badge, Button, CompanyMark, Empty, Menu, Table, Toolbar, dayKey, toast } from "$lib/ui";
+  import {
+    Badge,
+    Button,
+    CompanyMark,
+    Empty,
+    Input,
+    Menu,
+    Segmented,
+    Table,
+    Toolbar,
+    dayKey,
+    toast,
+    type TableColumn,
+  } from "$lib/ui";
 
-  const STATUSES = (Object.keys(STATUS) as AppStatus[]).map((value) => ({ value, label: STATUS[value].label }));
+  const ORDER = Object.keys(STATUS) as AppStatus[];
+  const STATUSES = ORDER.map((value) => ({ value, label: STATUS[value].label }));
+  const SHOW: { value: Show; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "unsent", label: "Not sent" },
+    ...STATUSES,
+  ];
 
-  const COLUMNS = [
-    { key: "date", label: "Date", width: "88px" },
-    { key: "job", label: "Job" },
-    { key: "now", label: "Now", numeric: true, width: "64px" },
-    { key: "projected", label: "Projected", numeric: true, width: "96px" },
-    { key: "onFile", label: "On file", numeric: true, width: "80px" },
-    { key: "status", label: "Status", width: "148px" },
-    { key: "resume", label: "Resume", width: "16%" },
-    { key: "link", label: "Link", align: "end" as const, width: "68px" },
-    { key: "delete", label: "", align: "end" as const, width: "64px" },
+  const COLUMNS: TableColumn<Row>[] = [
+    { key: "date", label: "Date", width: "88px", sortBy: (r) => r.date, sortFirst: "desc" },
+    { key: "job", label: "Job", sortBy: (r) => `${r.company} ${r.role}` },
+    { key: "now", label: "Now", numeric: true, width: "64px", sortBy: (r) => r.application?.now },
+    {
+      key: "projected",
+      label: "Projected",
+      numeric: true,
+      width: "96px",
+      sortBy: (r) => (r.posting ? r.posting.score : r.application?.projected),
+    },
+    { key: "onFile", label: "On file", numeric: true, width: "80px", sortBy: (r) => r.application?.onFile },
+    // Along the pipeline: not sent, then each status in order.
+    {
+      key: "status",
+      label: "Status",
+      width: "148px",
+      sortBy: (r) => (r.application ? ORDER.indexOf(r.application.status) + 1 : 0),
+    },
+    {
+      key: "resume",
+      label: "Resume",
+      width: "16%",
+      sortBy: (r) => (r.application?.resume ? fileName(r.application.resume) : null),
+    },
+    { key: "link", label: "Link", align: "end", width: "68px" },
+    { key: "delete", label: "", align: "end", width: "64px" },
   ];
 
   /** One row: an application, or a posting without one yet (`posting`). */
@@ -49,13 +102,40 @@
   }
 
   let loaded = $state(false);
+  let filterInput = $state<ReturnType<typeof Input>>();
 
   onMount(async () => {
     await Promise.all([app.refreshApplications(), app.refreshJobs(), app.settings ? null : app.loadSettings()]);
     loaded = true;
   });
 
-  $effect(() => bindKeys({ v: paste.run, "mod+v": paste.run }));
+  function focusFilter() {
+    filterInput?.focus();
+    filterInput?.select();
+  }
+
+  function clearFilters() {
+    view.query = "";
+    view.show = "all";
+  }
+
+  function onFilterKey(e: KeyboardEvent) {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    if (view.query) view.query = "";
+    else (e.currentTarget as HTMLInputElement).blur();
+  }
+
+  $effect(() =>
+    bindKeys({
+      v: paste.run,
+      // In the filter, ⌘V pastes into it.
+      "mod+v": (e) => (e.target instanceof HTMLInputElement ? false : paste.run()),
+      "/": focusFilter,
+      "mod+f": focusFilter,
+      Escape: () => (filtered ? clearFilters() : false),
+    }),
+  );
 
   const rows = $derived<Row[]>(
     [
@@ -87,6 +167,24 @@
       ),
     ].sort((a, b) => b.date.localeCompare(a.date)),
   );
+  const terms = $derived(view.query.toLocaleLowerCase().split(/\s+/).filter(Boolean));
+  const filtered = $derived(terms.length > 0 || view.show !== "all");
+  const shown = $derived(
+    rows.filter((r) => {
+      if (view.show === "unsent" ? r.application : view.show !== "all" && r.application?.status !== view.show)
+        return false;
+      const text = `${r.company} ${r.role}`.toLocaleLowerCase();
+      return terms.every((t) => text.includes(t));
+    }),
+  );
+  const showing = $derived(
+    filtered ? `${shown.length} of ${rows.length}` : `${rows.length} ${rows.length === 1 ? "posting" : "postings"}`,
+  );
+  const noMatch = $derived.by(() => {
+    const query = view.query.trim();
+    const where = view.show === "all" ? "" : ` in ${SHOW.find((s) => s.value === view.show)?.label}`;
+    return query ? `Nothing${where} matches “${query}”.` : `Nothing${where} yet.`;
+  });
   const csvPath = $derived(app.settings ? `${app.settings.exportDir.replace(/\/+$/, "")}/applications.csv` : null);
 
   const THIS_YEAR = new Date().getFullYear();
@@ -145,94 +243,119 @@
 </Toolbar>
 
 {#if rows.length}
-  <div class="table">
-    <Table columns={COLUMNS} {rows} key={(r) => r.key} label="Applications">
-      {#snippet cell(row, column)}
-        {#if column.key === "date"}
-          <span class="num" title={row.date}>{shortDate(row.date)}</span>
-        {:else if column.key === "job"}
-          <svelte:element
-            this={row.href ? "a" : "span"}
-            class={["job", row.href && "job--link"]}
-            href={row.href}
-            title="{row.company} · {row.role}"
-          >
-            <CompanyMark size={28} src={app.logos[row.companyKey]} />
-            <span class="company">{row.company}</span>
-            <span class="role meta">{row.role}</span>
-          </svelte:element>
-        {:else if column.key === "now"}
-          {score(row.application?.now)}
-        {:else if column.key === "projected"}
-          {#if row.posting}
-            <span title="Fit score">{score(row.posting.score)}</span>
-          {:else}
-            {score(row.application?.projected)}
-          {/if}
-        {:else if column.key === "onFile"}
-          {score(row.application?.onFile)}
-        {:else if column.key === "status"}
-          {#if row.application}
-            {@const application = row.application}
-            <Menu
-              value={application.status}
-              options={STATUSES}
-              label="Status for {row.company}"
-              variant="ghost"
-              size="sm"
-              onchange={(s) => changeStatus(application, s)}
-            >
-              {#snippet trigger(current)}<Badge tone={STATUS[application.status].tone}>{current?.label}</Badge>{/snippet}
-            </Menu>
-          {:else}
-            <span class="unsent"><Badge>Not sent</Badge></span>
-          {/if}
-        {:else if column.key === "resume"}
-          {#if row.application?.resume}
-            {@const path = row.application.resume}
-            <button
-              type="button"
-              class="file"
-              title="Show {path} in Finder"
-              onclick={() => run(`show ${fileName(path)} in Finder`, () => revealItemInDir(path))}
-            >
-              {fileName(path)}
-            </button>
-          {:else}
-            <span class="none">—</span>
-          {/if}
-        {:else if column.key === "link"}
-          {#if row.url}
-            {@const url = row.url}
-            <Button
-              variant="ghost"
-              size="sm"
-              square
-              icon={ExternalLink}
-              aria-label="Open the {row.company} posting"
-              title={url}
-              onclick={() => run("open the posting", () => openUrl(url))}
-            />
-          {:else}
-            <span class="none">—</span>
-          {/if}
-        {:else if row.posting}
-          {@const posting = row.posting}
-          <span class="delete">
-            <Button
-              variant="ghost"
-              size="sm"
-              square
-              icon={Trash2}
-              aria-label="Delete the {row.company || row.role} posting"
-              title="Delete posting"
-              onclick={() => app.deleteJob(posting)}
-            />
-          </span>
-        {/if}
-      {/snippet}
-    </Table>
+  <div class="filters">
+    <div class="query">
+      <Input
+        bind:this={filterInput}
+        bind:value={view.query}
+        size="md"
+        placeholder="Filter by company or role"
+        aria-label="Filter by company or role"
+        aria-keyshortcuts="/"
+        onkeydown={onFilterKey}
+      />
+    </div>
+    <Segmented options={SHOW} bind:value={view.show} label="Show" />
+    <span class="meta num count" aria-live="polite">{showing}</span>
   </div>
+  {#if shown.length}
+    <div class="table">
+      <Table columns={COLUMNS} rows={shown} bind:sort={view.sort} key={(r) => r.key} label="Applications">
+        {#snippet cell(row, column)}
+          {#if column.key === "date"}
+            <span class="num" title={row.date}>{shortDate(row.date)}</span>
+          {:else if column.key === "job"}
+            <svelte:element
+              this={row.href ? "a" : "span"}
+              class={["job", row.href && "job--link"]}
+              href={row.href}
+              title="{row.company} · {row.role}"
+            >
+              <CompanyMark size={28} src={app.logos[row.companyKey]} />
+              <span class="company">{row.company}</span>
+              <span class="role meta">{row.role}</span>
+            </svelte:element>
+          {:else if column.key === "now"}
+            {score(row.application?.now)}
+          {:else if column.key === "projected"}
+            {#if row.posting}
+              <span title="Fit score">{score(row.posting.score)}</span>
+            {:else}
+              {score(row.application?.projected)}
+            {/if}
+          {:else if column.key === "onFile"}
+            {score(row.application?.onFile)}
+          {:else if column.key === "status"}
+            {#if row.application}
+              {@const application = row.application}
+              <Menu
+                value={application.status}
+                options={STATUSES}
+                label="Status for {row.company}"
+                variant="ghost"
+                size="sm"
+                onchange={(s) => changeStatus(application, s)}
+              >
+                {#snippet trigger(current)}<Badge tone={STATUS[application.status].tone}>{current?.label}</Badge>{/snippet}
+              </Menu>
+            {:else}
+              <span class="unsent"><Badge>Not sent</Badge></span>
+            {/if}
+          {:else if column.key === "resume"}
+            {#if row.application?.resume}
+              {@const path = row.application.resume}
+              <button
+                type="button"
+                class="file"
+                title="Show {path} in Finder"
+                onclick={() => run(`show ${fileName(path)} in Finder`, () => revealItemInDir(path))}
+              >
+                {fileName(path)}
+              </button>
+            {:else}
+              <span class="none">—</span>
+            {/if}
+          {:else if column.key === "link"}
+            {#if row.url}
+              {@const url = row.url}
+              <Button
+                variant="ghost"
+                size="sm"
+                square
+                icon={ExternalLink}
+                aria-label="Open the {row.company} posting"
+                title={url}
+                onclick={() => run("open the posting", () => openUrl(url))}
+              />
+            {:else}
+              <span class="none">—</span>
+            {/if}
+          {:else if row.posting}
+            {@const posting = row.posting}
+            <span class="delete">
+              <Button
+                variant="ghost"
+                size="sm"
+                square
+                icon={Trash2}
+                aria-label="Delete the {row.company || row.role} posting"
+                title="Delete posting"
+                onclick={() => app.deleteJob(posting)}
+              />
+            </span>
+          {/if}
+        {/snippet}
+      </Table>
+    </div>
+  {:else}
+    <div class="center surface">
+      <Empty title="No matches" body={noMatch}>
+        {#snippet action()}
+          <Button size="lg" kbd="Esc" onclick={clearFilters}>Clear filters</Button>
+        {/snippet}
+      </Empty>
+    </div>
+  {/if}
 {:else if loaded && app.jobsLoaded}
   <div class="center">
     <Empty title="No postings yet" body="Paste a job link or the posting’s text, and the score shows up in a few seconds.">
@@ -246,11 +369,32 @@
 {/if}
 
 <style>
+  /* One surface with the table under it; the 24px inset lines the field up with the first column. */
+  .filters {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-6) var(--space-1);
+    background: var(--surface);
+  }
+  .query {
+    flex: 0 1 280px;
+    min-width: 180px;
+  }
+  .count {
+    margin-inline-start: auto;
+    white-space: nowrap;
+  }
   .table {
     display: grid;
     grid-template-rows: minmax(0, 1fr);
     flex: 1;
     min-height: 0;
+    background: var(--surface);
+  }
+  .surface {
     background: var(--surface);
   }
   /* As the sidebar's Recent: the 28px mark spans both lines, its edges on the company's cap height and the role's

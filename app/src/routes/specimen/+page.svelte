@@ -56,6 +56,8 @@
     Thinking,
     Toolbar,
     toast,
+    type TableColumn,
+    type TableSort,
   } from "$lib/ui";
   import { FITS, LOGO, OVER, WIDE_LOGO } from "./sample";
 
@@ -305,16 +307,18 @@
     { id: "3", date: "2026-10-07", company: "Contoso", role: "IT Analyst", now: 48, projected: 59, onFile: null, status: "saved", resume: "contoso_it_analyst_doe_resume.pdf" },
     { id: "4", date: "2026-10-01", company: "Fabrikam", role: "Product Designer", now: 40, projected: 64, onFile: 63, status: "rejected", resume: "fabrikam_product_designer_doe_resume.pdf" },
   ];
-  const appColumns = [
-    { key: "date", label: "Date", width: "112px" },
-    { key: "company", label: "Company", width: "18%" },
+  // Every column but Role sorts; Date starts sorted, newest first.
+  const appColumns: TableColumn<AppRow>[] = [
+    { key: "date", label: "Date", width: "112px", sortBy: (r) => r.date, sortFirst: "desc" },
+    { key: "company", label: "Company", width: "18%", sortBy: (r) => r.company },
     { key: "role", label: "Role" },
-    { key: "now", label: "Now", numeric: true, width: "72px" },
-    { key: "projected", label: "Projected", numeric: true, width: "96px" },
-    { key: "onFile", label: "On file", numeric: true, width: "80px" },
-    { key: "status", label: "Status", width: "128px" },
-    { key: "resume", label: "Resume", width: "22%" },
+    { key: "now", label: "Now", numeric: true, width: "72px", sortBy: (r) => r.now },
+    { key: "projected", label: "Projected", numeric: true, width: "96px", sortBy: (r) => r.projected },
+    { key: "onFile", label: "On file", numeric: true, width: "80px", sortBy: (r) => r.onFile },
+    { key: "status", label: "Status", width: "128px", sortBy: (r) => statuses.findIndex((s) => s.value === r.status) },
+    { key: "resume", label: "Resume", width: "22%", sortBy: (r) => r.resume },
   ];
+  let appSort = $state<TableSort>({ key: "date", dir: "desc" });
 
   // ── Heatmap: nine weeks of made-up activity ending on a fixed day, so the specimen never shifts ──
   const heatEnd = new Date(2026, 9, 13);
@@ -928,9 +932,13 @@
 
     <section class="section">
       <h2 class="title">Table</h2>
+      <p class="meta lede">
+        Headers sort: the sorted column is ink with its arrow, others show the arrow faintly on hover or focus; a second
+        click reverses. Role doesn’t sort; empty On file sorts last either way.
+      </p>
       <Card>
         <div class="table">
-          <Table columns={appColumns} rows={appRows} key={(r) => r.id} label="Applications (specimen)">
+          <Table columns={appColumns} rows={appRows} bind:sort={appSort} key={(r) => r.id} label="Applications (specimen)">
             {#snippet cell(row, column)}
               {#if column.key === "status"}
                 <Badge tone={statusTone[row.status]}>{statuses.find((s) => s.value === row.status)?.label}</Badge>
