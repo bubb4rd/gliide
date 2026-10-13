@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Master",
+  "description": "Which sections, entries and bullets a resume shows, in what order, which variant of each bullet, which skills, under\nwhat title and template.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "pageLimit": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 1
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MasterSection"
+      }
+    },
+    "template": {
+      "description": "Template name, e.g. `classic-serif`.",
+      "type": "string"
+    },
+    "title": {
+      "description": "The track, e.g. `Software Engineering`.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "template",
+    "pageLimit",
+    "sections"
+  ],
+  "$defs": {
+    "MasterBullet": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "variant": {
+          "description": "Index into the bullet's `variants`; its `text` when absent.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "MasterEntry": {
+      "description": "An entry of the section, with the bullets shown under it (none when empty). Its notes are always shown.",
+      "type": "object",
+      "properties": {
+        "bullets": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MasterBullet"
+          }
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "MasterGroup": {
+      "description": "A skills line of the section with the items shown, in order; each must be one of the bank line's items.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "items"
+      ]
+    },
+    "MasterSection": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MasterEntry"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MasterGroup"
+          }
+        },
+        "id": {
+          "description": "A bank section id.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Heading override; the bank section's title when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    }
+  }
+}

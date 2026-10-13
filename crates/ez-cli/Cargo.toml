@@ -1,0 +1,17 @@
+[package]
+name = "ez-cli"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ez"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+resume-core = { path = "../resume-core" }
+resume-render = { path = "../resume-render" }
+serde = "1"
+serde_json = "1"

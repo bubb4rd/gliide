@@ -4,7 +4,7 @@ From a job posting to a tailored, one-page resume: score the fit against one of 
 edits (rewrites, skills, entries from your experience bank) with a click each, and export a PDF in your design.
 macOS first; Windows and iOS from the same Rust core.
 
-Status: planning. Nothing builds yet.
+Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 
 | Document | What it covers |
 |---|---|
@@ -14,3 +14,11 @@ Status: planning. Nothing builds yet.
 
 Design specimen: `cd design && python3 -m http.server`, then open `http://localhost:8000/specimen.html`.
 Design lint: `node design/lint.mjs`.
+
+Core and rendering (`cargo run -p ez-cli --bin ez -- …`; outputs belong under the gitignored `local/`):
+
+| Command | Does |
+|---|---|
+| `ez migrate <master.json> --out <dir>` | ATS Fit's `master.json` → `bank.json` + `masters/swe.json` |
+| `ez render --bank <f> --master <f> --out <dir> [--highlight] [--system-fonts] [--scale N] [--bench N]` | `resume.pdf`, `page-N.svg`, `page-N.png`, `metrics.json` |
+| `ez schema --out schemas/` | Regenerates `schemas/bank.schema.json` and `schemas/master.schema.json` |

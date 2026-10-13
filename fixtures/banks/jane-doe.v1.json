@@ -1,0 +1,96 @@
+{
+  "name": "Jane Q. Doe",
+  "contact": [
+    { "text": "jane.doe@example.com", "url": "mailto:jane.doe@example.com" },
+    { "text": "(555) 010-0199", "url": "" },
+    { "text": "linkedin.com/in/janeqdoe-example", "url": "https://linkedin.com/in/janeqdoe-example" },
+    { "text": "github.com/janeqdoe-example", "url": "https://github.com/janeqdoe-example" }
+  ],
+  "sections": [
+    {
+      "id": "work",
+      "title": "WORK EXPERIENCE",
+      "entries": [
+        {
+          "id": "acme",
+          "name": "Acme Widgets Co.",
+          "url": "https://example.com/acme",
+          "place": "Springfield, IL",
+          "dates": "June 2025 – Sep 2025",
+          "subtitle": "Software Engineering Intern",
+          "notes": [],
+          "bullets": [
+            { "id": "acme.1", "text": "Built a Rust service that batches widget telemetry into Postgres, cutting ingest latency from 900 ms to 120 ms across 40 production lines" },
+            { "id": "acme.2", "text": "Wrote integration tests in GitHub Actions for the order API, catching 14 regressions before release" },
+            { "id": "acme.3", "text": "Paired with the design team to ship a React dashboard that plant managers now use daily" }
+          ]
+        },
+        {
+          "id": "library",
+          "name": "Springfield Public Library",
+          "url": "",
+          "place": "Springfield, IL",
+          "dates": "Summer 2023",
+          "subtitle": "IT Assistant",
+          "notes": [],
+          "bullets": [
+            { "id": "library.1", "text": "Imaged and deployed 60 patron laptops with a scripted setup, halving setup time per machine" },
+            { "id": "library.2", "text": "Answered help-desk tickets for staff and patrons, documenting fixes in a shared knowledge base" }
+          ]
+        }
+      ],
+      "groups": []
+    },
+    {
+      "id": "projects",
+      "title": "PROJECTS",
+      "entries": [
+        {
+          "id": "tidepool",
+          "name": "Tidepool",
+          "url": "https://github.com/janeqdoe-example/tidepool",
+          "place": "",
+          "dates": "Jan 2025 – Present",
+          "subtitle": "Creator",
+          "notes": [],
+          "bullets": [
+            { "id": "tidepool.1", "text": "Designed an offline-first notes app in TypeScript and SQLite with conflict-free sync between devices" },
+            { "id": "tidepool.2", "text": "Grew it to 300 weekly users through a public beta and weekly release notes" }
+          ]
+        }
+      ],
+      "groups": []
+    },
+    {
+      "id": "education",
+      "title": "EDUCATION",
+      "entries": [
+        {
+          "id": "state-u",
+          "name": "State University",
+          "url": "",
+          "place": "Capital City, IL",
+          "dates": "Aug 2022 – May 2026",
+          "subtitle": "B.S. Computer Science",
+          "notes": [
+            { "label": "Relevant Coursework", "text": "Data Structures, Operating Systems, Databases, Computer Networks" },
+            { "label": "Honors", "text": "Dean's List (6 semesters)" }
+          ],
+          "bullets": [
+            { "id": "state-u.1", "text": "Teaching assistant for Data Structures, holding weekly office hours for 80 students" }
+          ]
+        }
+      ],
+      "groups": []
+    },
+    {
+      "id": "skills",
+      "title": "SKILLS",
+      "entries": [],
+      "groups": [
+        { "id": "languages", "label": "Languages", "items": ["Rust", "TypeScript", "Python", "SQL", "Java"] },
+        { "id": "tools", "label": "Tools & Technologies", "items": ["Git", "GitHub Actions", "Docker", "PostgreSQL", "SQLite", "React", "Linux", "AWS"] }
+      ]
+    }
+  ]
+}

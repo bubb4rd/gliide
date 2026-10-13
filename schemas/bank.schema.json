@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bank",
+  "description": "Every job, project, school, certification and skills line you have, whether or not a master shows it.",
+  "type": "object",
+  "properties": {
+    "contact": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Contact"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "schema": {
+      "description": "Format version, always 2.",
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 2,
+      "minimum": 2
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BankSection"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "name",
+    "contact",
+    "sections"
+  ],
+  "$defs": {
+    "BankBullet": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "skills": {
+          "description": "Skills you say this bullet demonstrates.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
+          "type": "string"
+        },
+        "variants": {
+          "description": "Other phrasings you wrote and approved; a master picks one by index.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text"
+      ]
+    },
+    "BankEntry": {
+      "description": "A job, project, school or certification.",
+      "type": "object",
+      "properties": {
+        "bullets": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BankBullet"
+          }
+        },
+        "dates": {
+          "description": "The dates as printed, e.g. `Aug 2022 – May 2026`.",
+          "type": "string"
+        },
+        "end": {
+          "description": "Last month, `YYYY-MM`, or `present`; null when the printed dates couldn't be read.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "pattern": "^([0-9]{4}-(0[1-9]|1[0-2])|present)$"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "notes": {
+          "description": "Labeled lines under the entry (an education entry's honors or coursework).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Note"
+          }
+        },
+        "place": {
+          "type": "string"
+        },
+        "start": {
+          "description": "First month, `YYYY-MM`; null when the printed dates couldn't be read.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "tags": {
+          "description": "Tracks this entry belongs to (`swe`, `design`, `it`…): editor filters and a hint for candidates.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "description": "Link on the name, `\"\"` for none.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "url",
+        "place",
+        "dates",
+        "subtitle"
+      ]
+    },
+    "BankGroup": {
+      "description": "A skills line: `label: item, item, …`.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "items"
+      ]
+    },
+    "BankSection": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BankEntry"
+          }
+        },
+        "groups": {
+          "description": "Skills lines.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BankGroup"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SectionKind"
+        },
+        "title": {
+          "description": "The printed heading, unless a master overrides it.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "title"
+      ]
+    },
+    "Contact": {
+      "description": "One item of the contact line: shown text, and a link (`\"\"` for none, `mailto:` for an email).",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "url"
+      ]
+    },
+    "Note": {
+      "description": "A line under an entry, `label: text` (or just `text` when the label is `\"\"`).",
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "text"
+      ]
+    },
+    "SectionKind": {
+      "description": "Where a section's content lives for scoring and the standard-heading check.",
+      "type": "string",
+      "enum": [
+        "summary",
+        "experience",
+        "projects",
+        "education",
+        "skills",
+        "certifications",
+        "custom"
+      ]
+    }
+  }
+}

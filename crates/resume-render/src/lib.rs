@@ -1,0 +1,203 @@
+//! Typst embedded in-process: a resume JSON through a template into PDF, SVG and PNG pages, plus the template's line
+//! and page metrics (ARCHITECTURE.md §6).
+//!
+//! A [`Renderer`] is long-lived: it keeps the parsed template and loaded fonts, and Typst's memoization makes a
+//! re-render after a small edit incremental.
+
+mod fonts;
+mod template;
+mod world;
+
+use serde::{Deserialize, Serialize};
+use typst::WorldExt;
+use typst::diag::{Severity, SourceDiagnostic};
+use typst::foundations::{Dict, IntoValue, Label, Selector};
+use typst::introspection::{Introspector, MetadataElem};
+use typst::utils::{PicoStr, Scalar};
+use typst_layout::PagedDocument;
+
+pub use fonts::FontOptions;
+pub use template::{Manifest, Template};
+use world::ResumeWorld;
+
+/// Compilations a memoized result may go unused before it is evicted.
+const CACHE_AGE: usize = 10;
+
+#[derive(Debug, thiserror::Error)]
+pub enum RenderError {
+    #[error("typst: {}", .0.join("\n"))]
+    Compile(Vec<String>),
+    #[error("PDF export: {}", .0.join("\n"))]
+    Pdf(Vec<String>),
+    #[error("PNG export: {0}")]
+    Png(String),
+    #[error("template metadata: {0}")]
+    Metrics(String),
+}
+
+/// A wrapped-line count the template recorded: a bullet's or skills line's `id`, its `lines`, and `orig`, the count of
+/// the master text it replaces (equal to `lines` when it replaces none).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LineCount {
+    pub id: String,
+    #[serde(deserialize_with = "count")]
+    pub lines: u32,
+    #[serde(deserialize_with = "count")]
+    pub orig: u32,
+}
+
+/// A count Typst may hand over as a float (`1 + calc.round(…)` is one): any whole, non-negative number.
+fn count<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let n = f64::deserialize(d)?;
+    if n.fract() != 0.0 || !(0.0..=f64::from(u32::MAX)).contains(&n) {
+        return Err(serde::de::Error::custom(format!("{n} is not a line count")));
+    }
+    Ok(n as u32)
+}
+
+/// What the template reports about a compiled resume: `<pages>`, every `<bullet>` and every `<group>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Metrics {
+    pub pages: u32,
+    pub bullets: Vec<LineCount>,
+    pub groups: Vec<LineCount>,
+}
+
+/// Compiles resumes through one template.
+pub struct Renderer {
+    world: ResumeWorld,
+}
+
+impl Renderer {
+    pub fn new(template: &Template, fonts: FontOptions) -> Self {
+        Self {
+            world: ResumeWorld::new(&template.source, fonts::load(fonts)),
+        }
+    }
+
+    /// Compiles `data`, the resume as a JSON string (`sys.inputs.data`), with `sys.inputs.highlight` set to `"1"` when
+    /// `highlight` (the review's preview; never the export).
+    pub fn render(&mut self, data: &str, highlight: bool) -> Result<Rendered, RenderError> {
+        let mut inputs = Dict::new();
+        inputs.insert("data".into(), data.into_value());
+        if highlight {
+            inputs.insert("highlight".into(), "1".into_value());
+        }
+        self.world.set_inputs(inputs);
+        let warned = typst::compile::<PagedDocument>(&self.world);
+        typst::comemo::evict(CACHE_AGE);
+        let warnings = warned.warnings.iter().map(|d| self.describe(d)).collect();
+        let doc = warned.output.map_err(|errs| {
+            RenderError::Compile(errs.iter().map(|d| self.describe(d)).collect())
+        })?;
+        let metrics = metrics(&doc)?;
+        Ok(Rendered {
+            doc,
+            metrics,
+            warnings,
+        })
+    }
+
+    /// `error: message (resume.typ:12)`, then its hints.
+    fn describe(&self, d: &SourceDiagnostic) -> String {
+        let severity = match d.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let mut out = format!("{severity}: {}", d.message);
+        let source = self.world.main_source();
+        if d.span.id() == Some(source.id())
+            && let Some(line) = self
+                .world
+                .range(d.span)
+                .and_then(|r| source.lines().byte_to_line(r.start))
+        {
+            out += &format!(" (resume.typ:{})", line + 1);
+        }
+        for hint in &d.hints {
+            out += &format!("\n  hint: {}", hint.v);
+        }
+        out
+    }
+}
+
+/// A compiled resume.
+pub struct Rendered {
+    doc: PagedDocument,
+    pub metrics: Metrics,
+    /// Compiler warnings, formatted.
+    pub warnings: Vec<String>,
+}
+
+impl Rendered {
+    pub fn page_count(&self) -> usize {
+        self.doc.pages().len()
+    }
+
+    /// The PDF, with no creation timestamp so the same resume gives the same bytes.
+    pub fn pdf(&self) -> Result<Vec<u8>, RenderError> {
+        typst_pdf::pdf(&self.doc, &typst_pdf::PdfOptions::default())
+            .map_err(|errs| RenderError::Pdf(errs.iter().map(|d| d.message.to_string()).collect()))
+    }
+
+    /// One SVG document per page.
+    pub fn svgs(&self) -> Vec<String> {
+        self.doc
+            .pages()
+            .iter()
+            .map(|p| typst_svg::svg(p, &typst_svg::SvgOptions::default()))
+            .collect()
+    }
+
+    /// One PNG per page at `scale` pixels per point (2.0 is the `typst` CLI's default 144 ppi).
+    pub fn pngs(&self, scale: f32) -> Result<Vec<Vec<u8>>, RenderError> {
+        let options = typst_render::RenderOptions {
+            pixel_per_pt: Scalar::new(f64::from(scale)),
+            render_bleed: false,
+        };
+        self.doc
+            .pages()
+            .iter()
+            .map(|p| {
+                typst_render::render(p, &options)
+                    .encode_png()
+                    .map_err(|e| RenderError::Png(e.to_string()))
+            })
+            .collect()
+    }
+}
+
+/// The template's `<pages>`, `<bullet>` and `<group>` metadata, read from the compiled document's introspector.
+fn metrics(doc: &PagedDocument) -> Result<Metrics, RenderError> {
+    let values = |label: &str| -> Result<Vec<serde_json::Value>, RenderError> {
+        let label = Label::new(PicoStr::intern(label)).expect("label is not empty");
+        doc.introspector()
+            .query(&Selector::Label(label))
+            .iter()
+            .map(|c| {
+                let meta = c.to_packed::<MetadataElem>().ok_or_else(|| {
+                    RenderError::Metrics(format!("<{}> is not metadata", label.resolve()))
+                })?;
+                serde_json::to_value(&meta.value).map_err(|e| RenderError::Metrics(e.to_string()))
+            })
+            .collect()
+    };
+    let counts = |label: &str| -> Result<Vec<LineCount>, RenderError> {
+        values(label)?
+            .into_iter()
+            .map(|v| {
+                serde_json::from_value(v)
+                    .map_err(|e| RenderError::Metrics(format!("<{label}>: {e}")))
+            })
+            .collect()
+    };
+    let pages = values("pages")?
+        .first()
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| RenderError::Metrics("no <pages> page count".into()))?;
+    Ok(Metrics {
+        pages: pages as u32,
+        bullets: counts("bullet")?,
+        groups: counts("group")?,
+    })
+}
