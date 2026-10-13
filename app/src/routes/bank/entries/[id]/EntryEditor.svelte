@@ -1,5 +1,5 @@
 <!--
-  A bank entry's editor (DESIGN.md, Experience bank): the entry's facts, then each bullet as rows, one per wording
+  A bank entry's editor (DESIGN.md, Experience): the entry's facts, then each bullet as rows, one per wording
   (its text, then the variants you wrote), with the masters that show each. Every edit goes to the bank and the whole
   view comes back; the desk previews the entry, highlighted, in a master that shows it (or alone in the default
   template when none does). One request at a time: its answer replaces the view, a failure leaves it and says why.
@@ -33,6 +33,7 @@
     GroupHead,
     Icon,
     KeyFooter,
+    type KeyCommand,
     Menu,
     PartRow,
     Segmented,
@@ -63,17 +64,6 @@
   const fits = $derived(view !== null && view.pageCount <= view.pageLimit);
   const previewTitle = $derived(view?.preview ? (title.get(view.preview) ?? view.preview) : null);
   const masterOptions = $derived(view?.masters.map((m) => ({ value: m.id, label: m.title })) ?? []);
-  const KEYS = $derived([
-    { keys: ["↑", "↓"], label: "Select" },
-    { keys: ["⏎"], label: "Edit" },
-    { keys: ["V"], label: "Add a variant" },
-    { keys: ["M"], label: "Make it the text" },
-    ...(view?.masters.length ? [{ keys: [view.masters.length > 1 ? "1–9" : "1"], label: "Show in a master" }] : []),
-    { keys: ["⌫"], label: "Remove variant" },
-    ...((view?.bullets.length ?? 0) > 1 ? [{ keys: ["F"], label: "Fold into…" }] : []),
-    ...((view?.masters.length ?? 0) > 1 ? [{ keys: ["P"], label: "Preview in" }] : []),
-    { keys: ["Esc"], label: "Cancel" },
-  ]);
 
   // ── Rows: every wording of every bullet, in order ──
   interface Row {
@@ -254,6 +244,37 @@
     trigger.click();
   }
 
+  const KEYS: KeyCommand[] = $derived([
+    { keys: ["↑", "↓"], label: "Select" },
+    { keys: ["⏎"], label: "Edit", run: () => startEdit(selected), disabled: !selected },
+    { keys: ["V"], label: "Add a variant", run: () => startAdd(selected?.bullet), disabled: !selected },
+    {
+      keys: ["M"],
+      label: "Make it the text",
+      run: () => void makeMain(selected),
+      disabled: selected?.wording.variant == null,
+    },
+    ...(view?.masters.length ? [{ keys: [view.masters.length > 1 ? "1–9" : "1"], label: "Show in a master" }] : []),
+    {
+      keys: ["⌫"],
+      label: "Remove variant",
+      run: () => void remove(selected),
+      disabled: selected?.wording.variant == null,
+    },
+    ...((view?.bullets.length ?? 0) > 1
+      ? [
+          {
+            keys: ["F"],
+            label: "Fold into…",
+            run: () => selected && openMenu(`fold:${selected.bullet.id}`),
+            disabled: !selected,
+          },
+        ]
+      : []),
+    ...((view?.masters.length ?? 0) > 1 ? [{ keys: ["P"], label: "Preview in", run: () => openMenu("preview") }] : []),
+    { keys: ["Esc"], label: "Cancel" },
+  ]);
+
   // ── Keys ──
   const interactive = (target: EventTarget | null) =>
     target instanceof Element && target.closest("button, a, input, textarea, select") !== null;
@@ -290,7 +311,7 @@
 
 <Toolbar>
   {#snippet crumbs()}
-    <a href="/bank">Experience bank</a><Icon icon={ChevronRight} size={14} weight="medium" /><b
+    <a href="/bank">Experience</a><Icon icon={ChevronRight} size={14} weight="medium" /><b
       >{view?.name || "Entry"}</b
     >
   {/snippet}
@@ -307,7 +328,7 @@
         <Empty title="Couldn’t open this entry" body={failed}>
           {#snippet action()}
             <div class="actions">
-              <Button variant="primary" size="lg" onclick={() => goto("/bank")}>Back to Experience bank</Button>
+              <Button variant="primary" size="lg" onclick={() => goto("/bank")}>Back to Experience</Button>
               <Button size="lg" onclick={open}>Try again</Button>
             </div>
           {/snippet}

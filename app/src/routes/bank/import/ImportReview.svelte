@@ -36,6 +36,7 @@
     Icon,
     Input,
     KeyFooter,
+    type KeyCommand,
     Menu,
     Segmented,
     Thinking,
@@ -45,10 +46,6 @@
 
   /** The master menu's value for a new master. */
   const NEW = "";
-  const KEYS = [
-    { keys: ["⌘", "⏎"], label: "Add to bank" },
-    { keys: ["Esc"], label: "Discard" },
-  ];
   const PANES = [
     { value: "import", label: "Import" },
     { value: "preview", label: "Preview" },
@@ -104,6 +101,11 @@
       if (!added) void discardImport().catch(() => {});
     };
   });
+
+  const KEYS: KeyCommand[] = $derived([
+    { keys: ["⌘", "⏎"], label: "Add to bank", run: () => void add(), disabled: !choices || adding },
+    { keys: ["Esc"], label: "Discard", run: () => void goto("/bank") },
+  ]);
 
   $effect(() => bindKeys({ "mod+Enter": () => void add(), Escape: () => void goto("/bank") }));
 
@@ -194,7 +196,7 @@
 
 <Toolbar>
   {#snippet crumbs()}
-    <a href="/bank">Experience bank</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{file}</b>
+    <a href="/bank">Experience</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{file}</b>
   {/snippet}
   <Button variant="ghost" kbd="Esc" onclick={() => goto("/bank")}>Discard</Button>
   <Button variant="primary" icon={Check} kbd="⌘⏎" disabled={!view || adding} onclick={add}>Add to bank</Button>

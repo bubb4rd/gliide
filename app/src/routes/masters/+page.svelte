@@ -1,6 +1,6 @@
 <!--
-  Masters: one card per master (a track's resume over the bank) with its template and page limit, saved as you choose
-  them, and the pages it takes now.
+  Resumes (/masters): one card per master (a track's resume over the bank) with its template and page limit, saved as
+  you choose them, and the pages it takes now.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -34,7 +34,7 @@
 
   $effect(() => {
     if (masters.length || !loaded) return;
-    return bindKeys({ b: () => goto("/bank") });
+    return bindKeys({ e: () => goto("/bank") });
   });
 
   async function save(master: MasterRow, template: string, pageLimit: number) {
@@ -60,7 +60,7 @@
 </script>
 
 <Toolbar>
-  {#snippet crumbs()}<b>Masters</b>{/snippet}
+  {#snippet crumbs()}<b>Resumes</b>{/snippet}
 </Toolbar>
 
 {#if masters.length}
@@ -119,10 +119,10 @@
 {:else if loaded}
   <div class="center">
     <Empty
-      title="No masters yet"
-      body="Import your ATS Fit resume in the experience bank; it becomes your first master."
+      title="No resumes yet"
+      body="Import your ATS Fit resume in Experience; it becomes your first master."
     >
-      {#snippet action()}<Button variant="primary" size="lg" kbd="B" onclick={() => goto("/bank")}>Go to the bank</Button>{/snippet}
+      {#snippet action()}<Button variant="primary" size="lg" kbd="E" onclick={() => goto("/bank")}>Go to Experience</Button>{/snippet}
     </Empty>
   </div>
 {/if}

@@ -54,3 +54,15 @@ export const FITS = [SHEET(HEAD + WORK + PROJECTS + EDUCATION + SKILLS)];
 
 /** Two pages: over a one-page limit. */
 export const OVER = [SHEET(HEAD + WORK + PROJECTS + WORK.replace("WORK EXPERIENCE", "LEADERSHIP")), SHEET(EDUCATION + SKILLS)];
+
+/** A made-up company's logo as it would publish it: its own colors, a square mark. */
+export const LOGO = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f766e"/>` +
+    `<path d="M18 46V18h7l14 17V18h7v28h-7L25 29v17z" fill="#fff"/></svg>`,
+)}`;
+
+/** A wide logo (a wordmark-like bar): scaled to fit the square, never cropped. */
+export const WIDE_LOGO = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect width="120" height="40" rx="6" fill="#c2410c"/>` +
+    `<circle cx="20" cy="20" r="9" fill="#fff"/><rect x="36" y="15" width="70" height="10" rx="2" fill="#fff"/></svg>`,
+)}`;

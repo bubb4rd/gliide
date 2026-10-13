@@ -1,27 +1,30 @@
-<!-- The `a` picker: an edit of your own (a skill, a bullet, a line's wording or the summary) on the open review. -->
+<!--
+  The `a` picker: something new of your own on the open review: a skill, a bullet, or a summary when the master has
+  none. Existing lines are edited in place (the review's Other lines).
+-->
 <script lang="ts">
   import type { CustomEdit, EditTargets } from "$lib/api";
   import { Button, Input, Menu, Segmented } from "$lib/ui";
 
   interface Props {
     targets: EditTargets;
+    /** The master has a summary (edited in place), so the picker doesn't offer one. */
+    hasSummary: boolean;
     /** Resolves true once the edit is in. */
     onadd: (edit: CustomEdit) => Promise<boolean>;
   }
 
-  let { targets, onadd }: Props = $props();
+  let { targets, hasSummary, onadd }: Props = $props();
 
-  type Kind = CustomEdit["kind"];
-  const KINDS: { value: Kind; label: string }[] = [
+  type Kind = "skill" | "bullet" | "summary";
+  const kinds = $derived<{ value: Kind; label: string }[]>([
     { value: "skill", label: "Skill" },
     { value: "bullet", label: "Bullet" },
-    { value: "line", label: "Line" },
-    { value: "summary", label: "Summary" },
-  ];
+    ...(hasSummary ? [] : [{ value: "summary" as const, label: "Summary" }]),
+  ]);
   const COPY = {
     skill: { target: "Skills line", placeholder: "The skill, as the posting says it" },
     bullet: { target: "Entry", placeholder: "The new bullet" },
-    line: { target: "Line", placeholder: "The line as it should read" },
     summary: { target: "", placeholder: "Your summary" },
   } as const;
 
@@ -30,23 +33,13 @@
   let text = $state("");
   let busy = $state(false);
 
-  const list = $derived(
-    kind === "skill" ? targets.groups : kind === "bullet" ? targets.entries : kind === "line" ? targets.lines : [],
-  );
+  const list = $derived(kind === "skill" ? targets.groups : kind === "bullet" ? targets.entries : []);
   const options = $derived(list.map((t) => ({ value: t.id, label: t.label })));
 
   // Each kind starts on its first target.
   $effect(() => {
-    if (!list.some((t) => t.id === target)) pick(list[0]?.id ?? "");
+    if (!list.some((t) => t.id === target)) target = list[0]?.id ?? "";
   });
-
-  /** A line starts from its current wording (a note line's label isn't part of it). */
-  function pick(id: string) {
-    target = id;
-    if (kind !== "line") return;
-    const label = list.find((t) => t.id === id)?.label ?? "";
-    text = id.includes("#") ? label.replace(/^[^:]*:\s*/, "") : label;
-  }
 
   function edit(): CustomEdit {
     switch (kind) {
@@ -54,8 +47,6 @@
         return { kind, group: target, item: text };
       case "bullet":
         return { kind, entry: target, text };
-      case "line":
-        return { kind, line: target, text };
       case "summary":
         return { kind, text };
     }
@@ -77,7 +68,7 @@
   <p class="label">Add your own</p>
   <div class="kinds">
     <Segmented
-      options={KINDS}
+      options={kinds}
       bind:value={kind}
       label="What to add"
       onchange={() => {
@@ -87,7 +78,7 @@
   </div>
   {#if kind !== "summary"}
     {#if options.length}
-      <Menu value={target} {options} label={COPY[kind].target} onchange={pick} />
+      <Menu value={target} {options} label={COPY[kind].target} onchange={(id) => (target = id)} />
     {:else}
       <p class="meta">Nothing on this master to add it to.</p>
     {/if}

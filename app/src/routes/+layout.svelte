@@ -9,9 +9,9 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import Archive from "@lucide/svelte/icons/archive";
-  import Briefcase from "@lucide/svelte/icons/briefcase";
   import FileText from "@lucide/svelte/icons/file-text";
   import ListChecks from "@lucide/svelte/icons/list-checks";
+  import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
   import Palette from "@lucide/svelte/icons/palette";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import { bindKeys } from "$lib/keys";
@@ -66,17 +66,17 @@
     <div class="sidebar__top" data-tauri-drag-region></div>
 
     <Nav label="Main">
-      <NavItem href="/jobs" icon={Briefcase} current={path === "/jobs"} meta={count(app.jobs.length)}>Jobs</NavItem>
+      <NavItem href="/" icon={LayoutDashboard} current={path === "/"}>Overview</NavItem>
       <NavItem
         href="/applications"
         icon={ListChecks}
         current={within("/applications")}
-        meta={count(app.applications.length)}
+        meta={count(app.applications.length + app.unsent.length)}
       >
         Applications
       </NavItem>
-      <NavItem href="/bank" icon={Archive} current={within("/bank")}>Experience bank</NavItem>
-      <NavItem href="/masters" icon={FileText} current={within("/masters")}>Masters</NavItem>
+      <NavItem href="/bank" icon={Archive} current={within("/bank")}>Experience</NavItem>
+      <NavItem href="/masters" icon={FileText} current={within("/masters")}>Resumes</NavItem>
     </Nav>
 
     {#if app.jobs.length}
@@ -95,7 +95,7 @@
               {status}
               title="{job.company} · {job.role}{status ? ` · ${status.label}` : ''}"
             >
-              {#snippet lead()}<CompanyMark size={28} />{/snippet}
+              {#snippet lead()}<CompanyMark size={28} src={app.logos[job.companyKey]} />{/snippet}
               {job.company}
             </NavItem>
           {/each}

@@ -7,12 +7,12 @@
   import { untrack } from "svelte";
   import { page } from "$app/state";
   import Archive from "@lucide/svelte/icons/archive";
-  import Briefcase from "@lucide/svelte/icons/briefcase";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileText from "@lucide/svelte/icons/file-text";
   import ListChecks from "@lucide/svelte/icons/list-checks";
+  import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -32,13 +32,17 @@
     Checkbox,
     Chip,
     CompanyMark,
+    dayKey,
     Desk,
     Empty,
     GroupHead,
+    Heatmap,
     Icon,
     Input,
     Kbd,
     KeyFooter,
+    type KeyCommand,
+    LogoDrop,
     Marked,
     Menu,
     Nav,
@@ -53,7 +57,12 @@
     Toolbar,
     toast,
   } from "$lib/ui";
-  import { FITS, OVER } from "./sample";
+  import { FITS, LOGO, OVER, WIDE_LOGO } from "./sample";
+
+  // ── Company photo: the job header's mark opens the panel; Paste sets the square logo, Choose file the wide one ──
+  let logoOpen = $state(false);
+  let logoMark = $state<HTMLElement>();
+  let demoLogo = $state<string | null>(null);
 
   // ── Theme preview ──
   const THEMES: { value: Theme; label: string }[] = [
@@ -170,7 +179,7 @@
   let draft = $state("");
   let noting = $state<string | null>(null);
   let note = $state("");
-  let mode = $state<"master" | "bank">("bank");
+  let doc = $state<"resume" | "cover">("resume");
   let master = $state("swe");
   let zoom = $state(100);
   let pickerOpen = $state(false);
@@ -243,12 +252,13 @@
     { label: "Education", value: 1, weight: 0.1, present: true, detail: "B.S. Computer Science" },
     { label: "Format", value: 0, weight: 0.05, present: false, detail: "Not in the posting" },
   ];
-  const reviewKeys = [
+  // Every command state: keys only (Select), can't run now (Toggle, Edit), runnable (Add your own, Export).
+  const reviewKeys: KeyCommand[] = [
     { keys: ["↑", "↓"], label: "Select" },
-    { keys: ["Space"], label: "Toggle" },
-    { keys: ["⏎"], label: "Edit" },
-    { keys: ["A"], label: "Add your own" },
-    { keys: ["E"], label: "Export" },
+    { keys: ["Space"], label: "Toggle", run: () => {}, disabled: true },
+    { keys: ["⏎"], label: "Edit", run: () => {}, disabled: true },
+    { keys: ["A"], label: "Add your own", run: () => (pickerOpen = true) },
+    { keys: ["E"], label: "Export", run: exportDemo },
   ];
 
   // ── States gallery ──
@@ -306,6 +316,16 @@
     { key: "resume", label: "Resume", width: "22%" },
   ];
 
+  // ── Heatmap: nine weeks of made-up activity ending on a fixed day, so the specimen never shifts ──
+  const heatEnd = new Date(2026, 9, 13);
+  const heatBusy = new Map<string, number>();
+  for (let i = 0, seed = 7; i < 63; i++) {
+    seed = (seed * 48271) % 2147483647;
+    const n = (seed % 7) - 2;
+    if (n > 0) heatBusy.set(dayKey(new Date(2026, 9, 13 - i)), n);
+  }
+  const heatNone = new Map<string, number>();
+
   const swatches = [
     ["Surfaces", [["Paper", "--paper"], ["Surface", "--surface"], ["Sunken", "--sunken"], ["Desk", "--desk"], ["Sidebar", "--sidebar"]]],
     ["Ink", [["Ink · 16.6:1", "--ink"], ["Ink 2 · 7.4:1", "--ink-2"], ["Ink 3 · ≥4.6:1", "--ink-3"], ["Ink 4 · disabled", "--ink-4"]]],
@@ -344,10 +364,10 @@
         <aside class="frame__sidebar">
           <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
           <Nav label="Main (specimen)">
-            <NavItem href="#review" icon={Briefcase} meta={12}>Jobs</NavItem>
-            <NavItem href="#review" icon={ListChecks} meta={41}>Applications</NavItem>
-            <NavItem href="#review" icon={Archive}>Experience bank</NavItem>
-            <NavItem href="#review" icon={FileText}>Masters</NavItem>
+            <NavItem href="#review" icon={LayoutDashboard}>Overview</NavItem>
+            <NavItem href="#review" icon={ListChecks} meta={53}>Applications</NavItem>
+            <NavItem href="#review" icon={Archive}>Experience</NavItem>
+            <NavItem href="#review" icon={FileText}>Resumes</NavItem>
           </Nav>
           <div class="frame__recent">
             <p class="label">Recent</p>
@@ -399,18 +419,18 @@
         <div class="frame__main">
           <Toolbar>
             {#snippet crumbs()}
-              <a href="#review">Jobs</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>Globex</b>
+              <a href="#review">Applications</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>Globex</b>
             {/snippet}
             <Segmented
               options={[
-                { value: "master", label: "Master only" },
-                { value: "bank", label: "Bank-aware" },
+                { value: "resume", label: "Resume" },
+                { value: "cover", label: "Cover letter" },
               ]}
-              bind:value={mode}
-              label="Suggestions from"
+              bind:value={doc}
+              label="Document"
             />
-            <hr />
             <Menu bind:value={master} options={masters} label="Master" placement="bottom-end" />
+            <hr />
             <Button variant="primary" icon={Download} kbd="E" onclick={exportDemo}>Export</Button>
           </Toolbar>
 
@@ -420,10 +440,11 @@
                 <div class="job enter" style:--i="0">
                   <div class="row">
                     <Badge tone="accent">Tailor first</Badge>
-                    <span class="meta">Globex · Remote, US · read from globex.com</span>
+                    <span class="meta">Remote, US · read from globex.com</span>
                   </div>
                   <div class="named">
-                    <span class="lead"><CompanyMark size={32} /></span>
+                    <span class="lead"><CompanyMark size={48} /></span>
+                    <p class="company">Globex</p>
                     <h1 class="headline">Junior Software Engineer</h1>
                   </div>
                 </div>
@@ -597,7 +618,7 @@
         <div class="ramp">
           <div><code>--text-score · serif</code><span class="score-sample num">78<small>%</small></span></div>
           <div><code>--text-headline · serif</code><span class="headline">Junior Software Engineer</span></div>
-          <div><code>--text-title · serif</code><span class="title">Experience bank</span></div>
+          <div><code>--text-title · serif</code><span class="title">Experience</span></div>
           <div><code>--text-lg · 16/24</code><span class="lg">Section heading inside a screen</span></div>
           <div><code>--text-md · 14/22</code><span class="md">Resume lines you read and edit: bullets, rewrites, notes.</span></div>
           <div><code>--text-base · 13/20</code><span>Controls, labels, menus, everything you operate.</span></div>
@@ -843,14 +864,63 @@
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">Company mark · 16 sidebar · 20 table · 32 job header · with its name</p>
+            <p class="label">Company mark · 16 sidebar · 20 beside a name · 28 two lines · 48 job header · with its name</p>
             <div class="row">
               <CompanyMark size={16} />
               <CompanyMark size={20} />
-              <CompanyMark size={32} />
+              <CompanyMark size={28} />
+              <CompanyMark size={48} />
+            </div>
+            <div class="row">
+              <CompanyMark size={16} src={LOGO} />
+              <CompanyMark size={20} src={LOGO} />
+              <CompanyMark size={28} src={LOGO} />
+              <CompanyMark size={48} src={LOGO} />
+              <CompanyMark size={48} src={WIDE_LOGO} />
             </div>
             <CompanyMark>Northwind Traders, a company name long enough that it truncates in a narrow cell</CompanyMark>
-            <p class="meta">Blank until logos are fetched. A logo shows as the company publishes it, never recolored.</p>
+            <CompanyMark src={LOGO}>Northwind Traders, with its logo</CompanyMark>
+            <p class="meta">Blank until you set a logo. A logo shows as the company publishes it: scaled to fit, rounded like the tile, never recolored.</p>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Company mark as a button · blank (hover or focus: the icon) · set · files over it</p>
+            <div class="row">
+              <CompanyMark
+                size={48}
+                src={demoLogo}
+                label="Upload company photo"
+                bind:element={logoMark}
+                popovertarget="specimen-logo-panel"
+              />
+              <CompanyMark size={48} src={LOGO} label="Change Northwind's photo" />
+              <CompanyMark size={48} label="Upload company photo" over />
+              <CompanyMark size={48} src={LOGO} label="Change Northwind's photo" over />
+              {#if !demoLogo}
+                <Button variant="ghost" size="sm" popovertarget="specimen-logo-panel">Upload company photo</Button>
+              {/if}
+            </div>
+            <Popover bind:open={logoOpen} anchor={logoMark} id="specimen-logo-panel" aria-label="Company photo">
+              <LogoDrop
+                set={demoLogo !== null}
+                onpaste={() => ((demoLogo = LOGO), (logoOpen = false))}
+                onchoose={() => ((demoLogo = WIDE_LOGO), (logoOpen = false))}
+                onremove={() => ((demoLogo = null), (logoOpen = false))}
+              />
+            </Popover>
+            <p class="meta">The first opens the panel: Paste sets a square logo, Choose file a wide one.</p>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Logo drop · ready · files over it · setting · with a logo set</p>
+            <div class="drops">
+              <div class="drop-panel"><LogoDrop onpaste={() => {}} onchoose={() => {}} onremove={() => {}} /></div>
+              <div class="drop-panel"><LogoDrop over onpaste={() => {}} onchoose={() => {}} onremove={() => {}} /></div>
+              <div class="drop-panel"><LogoDrop busy onpaste={() => {}} onchoose={() => {}} onremove={() => {}} /></div>
+              <div class="drop-panel"><LogoDrop set onpaste={() => {}} onchoose={() => {}} onremove={() => {}} /></div>
+            </div>
           </div>
         </Card>
       </div>
@@ -877,6 +947,34 @@
           </Table>
         </div>
       </Card>
+    </section>
+
+    <!-- ═══════════ Heatmap ═══════════ -->
+    <section class="section">
+      <h2 class="title">Heatmap</h2>
+      <p class="meta lede">
+        Postings added and applications sent, by day. Shades step against the busiest day shown; a day's title says
+        what happened.
+      </p>
+      <Card pad>
+        <Heatmap counts={heatBusy} end={heatEnd} label="Activity (specimen), last 26 weeks">
+          {#snippet caption()}Most of your activity lands on Tuesdays.{/snippet}
+        </Heatmap>
+      </Card>
+      <div class="grid cols-2">
+        <Card pad>
+          <div class="tile">
+            <p class="label">No activity yet</p>
+            <Heatmap counts={heatNone} end={heatEnd} weeks={12} label="No activity (specimen), last 12 weeks" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">12 weeks, no caption</p>
+            <Heatmap counts={heatBusy} end={heatEnd} weeks={12} label="Activity (specimen), last 12 weeks" />
+          </div>
+        </Card>
+      </div>
     </section>
 
     <!-- ═══════════ Feedback ═══════════ -->
@@ -933,7 +1031,7 @@
         <div class="chrome">
           <div class="nav-sample">
             <Nav label="Nav states (specimen)">
-              <NavItem href="#review" icon={Briefcase} current meta={12}>Current</NavItem>
+              <NavItem href="#review" icon={ListChecks} current meta={12}>Current</NavItem>
               <NavItem href="#review" icon={Archive}>Default</NavItem>
               <NavItem href="#review" quiet meta={78}>
                 {#snippet lead()}<CompanyMark size={16} />{/snippet}Quiet entry with a long title that truncates
@@ -1149,14 +1247,26 @@
     gap: var(--space-2);
     padding-inline: var(--space-1);
   }
+  /* As the job header: the 48px mark spans the company and the title, from the company's cap height to its baseline. */
   .named {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-3);
+    row-gap: var(--space-0-5);
+    align-items: start;
   }
-  /* The mark centers on the headline's first line. */
   .lead {
-    padding-top: calc((var(--leading-headline) - 32px) / 2);
+    display: flex;
+    grid-row: span 2;
+    margin-top: 6px;
+  }
+  .company {
+    margin: 0;
+    font-size: var(--text-lg);
+    line-height: var(--leading-lg);
+    letter-spacing: var(--tracking-lg);
+    font-weight: var(--weight-medium);
+    color: var(--ink-2);
   }
   .skills {
     display: grid;
@@ -1184,6 +1294,18 @@
   }
   .picker .label {
     padding-bottom: var(--space-1);
+  }
+  .drops {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+  /* LogoDrop as its popover holds it. */
+  .drop-panel {
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-popover);
   }
   .keys-wrap {
     position: sticky;

@@ -9,14 +9,24 @@
   import BookmarkPlus from "@lucide/svelte/icons/bookmark-plus";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
+  import ImagePlus from "@lucide/svelte/icons/image-plus";
   import Pencil from "@lucide/svelte/icons/pencil";
   import PenLine from "@lucide/svelte/icons/pen-line";
   import Plus from "@lucide/svelte/icons/plus";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sparkles from "@lucide/svelte/icons/sparkles";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
-  import { appError, editTargets, type ChangeView, type CustomEdit, type EditTargets, type Mode } from "$lib/api";
+  import {
+    appError,
+    editTargets,
+    type ChangeView,
+    type CustomEdit,
+    type EditTargets,
+    type LineView,
+  } from "$lib/api";
   import { bindKeys } from "$lib/keys";
+  import { logo } from "$lib/logo.svelte";
   import { app } from "$lib/stores/app.svelte";
   import { shell } from "$lib/stores/shell.svelte";
   import {
@@ -30,8 +40,11 @@
     Icon,
     Input,
     KeyFooter,
+    type KeyCommand,
+    LogoDrop,
     Marked,
     Menu,
+    PartRow,
     Popover,
     ScoreHeader,
     Segmented,
@@ -63,10 +76,6 @@
     };
   });
 
-  const MODES: { value: Mode; label: string }[] = [
-    { value: "master-only", label: "Master only" },
-    { value: "bank-aware", label: "Bank-aware" },
-  ];
   const STAGES = {
     extracting: "Reading the requirements…",
     suggesting: "Suggesting edits…",
@@ -94,27 +103,14 @@
     stretch: { label: "Stretch", tone: "warn" },
     skip: { label: "Skip", tone: "neutral" },
   } as const;
-  const KEYS = [
-    { keys: ["↑", "↓"], label: "Select" },
-    { keys: ["Space"], label: "Toggle" },
-    { keys: ["⏎"], label: "Edit" },
-    { keys: ["S"], label: "Save as variant" },
-    { keys: ["A"], label: "Add your own" },
-    { keys: ["E"], label: "Export" },
-    { keys: ["R"], label: "Re-run" },
-    { keys: ["⌘Z"], label: "Undo" },
-    { keys: ["⇧⌘Z"], label: "Redo" },
-    { keys: ["Tab"], label: "Cover letter" },
-  ];
 
   const review = $derived(s.review);
   const ready = $derived(s.phase === "ready" && review !== null);
   const head = $derived(review?.head ?? s.view?.head ?? null);
   const row = $derived(app.jobs.find((j) => j.id === job));
   const company = $derived(head?.company || row?.company || "Posting");
-  const metaLine = $derived(
-    head ? [head.company, head.location, head.url ? null : head.source].filter(Boolean).join(" · ") : "",
-  );
+  /** Where and from where: the company has its own line, above the title. */
+  const metaLine = $derived(head ? [head.location, head.url ? null : head.source].filter(Boolean).join(" · ") : "");
   const masters = $derived(
     (review?.masters ?? s.view?.masters ?? []).map((m) => ({
       value: m.id,
@@ -124,6 +120,9 @@
   );
   const skills = $derived(review?.skills ?? s.view?.skills ?? []);
   const rows = $derived(review?.groups.flatMap((g) => g.changes) ?? []);
+  /** Lines no change touches ("Other lines"): edited or rewritten, each becomes your edit. */
+  const others = $derived(review?.lines ?? []);
+  const lineKey = (line: LineView) => `line:${line.line ?? "summary"}`;
   const counted = (c: ChangeView) => c.state === "in" || c.state === "forced";
   const changesIn = $derived(rows.filter(counted).length);
   const gain = $derived(review ? Math.round(review.projected.total) - Math.round(review.now.total) : 0);
@@ -138,9 +137,17 @@
   });
 
   // ── Selection and editing ──
+  /** What ↑↓ moves through: every change, then every other line. */
+  type Item = { key: string; change: ChangeView; line?: never } | { key: string; line: LineView; change?: never };
+  const items = $derived<Item[]>([
+    ...rows.map((change) => ({ key: change.key, change })),
+    ...others.map((line) => ({ key: lineKey(line), line })),
+  ]);
   let selectedKey = $state<string | null>(null);
-  const selectedIndex = $derived(Math.max(0, rows.findIndex((c) => c.key === selectedKey)));
-  const selected = $derived(rows[selectedIndex]);
+  const selectedIndex = $derived(Math.max(0, items.findIndex((i) => i.key === selectedKey)));
+  const selectedItem = $derived<Item | undefined>(items[selectedIndex]);
+  const selected = $derived(selectedItem?.change);
+  const selectedLine = $derived(selectedItem?.line);
   let editing = $state<string | null>(null);
   let draft = $state("");
   let noting = $state<string | null>(null);
@@ -190,7 +197,7 @@
   const focus = (element: HTMLElement) => element.focus();
 
   function move(by: number) {
-    const next = rows[Math.min(Math.max(selectedIndex + by, 0), rows.length - 1)];
+    const next = items[Math.min(Math.max(selectedIndex + by, 0), items.length - 1)];
     if (next) selectedKey = next.key;
   }
 
@@ -226,9 +233,61 @@
     if (!text) return;
     noting = null;
     const done = await s.rewrite(change.key, text);
-    if (!done) return;
-    if (done.flags.length) toast(`Check the new wording: ${done.flags.join("; ")}`, { tone: "warn" });
+    if (done) rewrote(done.flags);
+  }
+
+  function rewrote(flags: string[]) {
+    if (flags.length) toast(`Check the new wording: ${flags.join("; ")}`, { tone: "warn" });
     else toast("Rewrote the line from your note");
+  }
+
+  /** Rewrite with a note on the selected row (a change or an other line), when it applies. */
+  function noteSelected(): unknown {
+    if (selected?.rewritable) return startNote(selected);
+    if (selectedLine?.rewritable) return startLineNote(selectedLine);
+    return false;
+  }
+
+  // ── Other lines: editing or rewriting one makes it your edit, selected where it lands in its section ──
+  function startLineEdit(line: LineView | undefined) {
+    if (!ready || !line) return;
+    selectedKey = lineKey(line);
+    noting = null;
+    editing = lineKey(line);
+    draft = line.text;
+  }
+
+  function saveLineEdit(line: LineView) {
+    const text = draft.trim();
+    editing = null;
+    if (!text || text === line.text) return;
+    const edit: CustomEdit = line.line === null ? { kind: "summary", text } : { kind: "line", line: line.line, text };
+    void landing(() => s.add(edit));
+  }
+
+  function startLineNote(line: LineView) {
+    if (!line.rewritable) return;
+    selectedKey = lineKey(line);
+    editing = null;
+    noting = lineKey(line);
+    note = "";
+  }
+
+  async function sendLineNote(line: LineView) {
+    const text = note.trim();
+    if (!text) return;
+    noting = null;
+    const done = await landing(() => s.rewriteLine(line.line, lineKey(line), text));
+    if (done) rewrote(done.flags);
+  }
+
+  /** Runs `call`, then selects the change it added: the line's new row, in its section. */
+  async function landing<T>(call: () => Promise<T>): Promise<T> {
+    const before = new Set(rows.map((c) => c.key));
+    const done = await call();
+    const fresh = rows.find((c) => !before.has(c.key));
+    if (fresh) selectedKey = fresh.key;
+    return done;
   }
 
   function checkboxLabel(change: ChangeView) {
@@ -240,11 +299,6 @@
   }
 
   // ── Toolbar ──
-  function chooseMode(mode: Mode) {
-    s.mode = mode;
-    void s.suggest(s.master, mode);
-  }
-
   function chooseMaster(master: string) {
     s.master = master;
     void s.suggest(master, s.mode);
@@ -297,6 +351,70 @@
     return ok;
   }
 
+  // ── Company photo (the logo) ──
+  let logoOpen = $state(false);
+  let logoMark = $state<HTMLElement>();
+  const logoSrc = $derived(head?.companyKey ? (app.logos[head.companyKey] ?? null) : null);
+
+  /** Closes the panel once `setting` set the logo; a failure leaves it open, with the toast saying why. */
+  async function photo(setting: Promise<boolean>) {
+    if (await setting) logoOpen = false;
+  }
+
+  $effect(() => logo.watch(() => (logoOpen = false)));
+  $effect(() => {
+    const company = head?.company;
+    if (!logoOpen || !company) return;
+    const paste = () => void photo(logo.set(company, { kind: "clipboard" }));
+    return bindKeys({ v: paste, "mod+v": paste });
+  });
+
+  const KEYS: KeyCommand[] = $derived([
+    { keys: ["↑", "↓"], label: "Select" },
+    { keys: ["Space"], label: "Toggle", run: () => selected && void s.toggle(selected.key), disabled: !ready || !selected },
+    {
+      keys: ["⏎"],
+      label: "Edit",
+      run: () => (selectedLine ? startLineEdit(selectedLine) : startEdit(selected)),
+      disabled: !ready || !(selectedLine || selected?.editable),
+    },
+    {
+      keys: ["N"],
+      label: "Rewrite with a note",
+      run: noteSelected,
+      disabled: !ready || s.rewriting !== null || !(selected?.rewritable || selectedLine?.rewritable),
+    },
+    {
+      keys: ["S"],
+      label: "Save as variant",
+      run: () => selected && void keepWording(selected),
+      disabled: !ready || !selected?.savable,
+    },
+    { keys: ["A"], label: "Add your own", run: () => void openPicker(), disabled: !ready },
+    { keys: ["E"], label: "Export", run: () => void exportNow(), disabled: !ready },
+    { keys: ["R"], label: "Re-run", run: rerun, disabled: !ready },
+    { keys: ["⌘Z"], label: "Undo", run: () => void s.undo(), disabled: !review?.canUndo },
+    { keys: ["⇧⌘Z"], label: "Redo", run: () => void s.redo(), disabled: !review?.canRedo },
+    { keys: ["⌘⌫"], label: "Delete posting", run: () => void removeJob(), disabled: !row },
+    { keys: ["Tab"], label: "Cover letter", run: switchTab, disabled: !review },
+  ]);
+  /** The letter tab's commands that the review owns; the letter lists its own rows' commands before them. */
+  const LETTER_KEYS: KeyCommand[] = $derived([
+    {
+      keys: ["W"],
+      label: letter?.letter ? "Rewrite letter" : "Write letter",
+      run: writeLetter,
+      disabled: !ready || s.drafting !== null,
+    },
+    {
+      keys: ["E"],
+      label: "Export",
+      run: () => void exportLetter(),
+      disabled: !ready || !letter?.letter || s.drafting !== null,
+    },
+    { keys: ["Tab"], label: "Resume", run: switchTab },
+  ]);
+
   // ── Keys ──
   const interactive = (target: EventTarget | null) =>
     target instanceof Element && target.closest("button, a, input, textarea, select") !== null;
@@ -307,18 +425,20 @@
       ArrowDown: () => move(1),
       ArrowUp: () => move(-1),
       " ": (e) => {
-        if (interactive(e.target) || onCover) return false;
-        if (selected) void s.toggle(selected.key);
+        if (interactive(e.target) || onCover || !selected) return false;
+        void s.toggle(selected.key);
       },
       Enter: (e) => {
         if (interactive(e.target)) return false;
-        startEdit(selected);
+        if (selectedLine) startLineEdit(selectedLine);
+        else startEdit(selected);
       },
       Tab: (e) => {
         if (interactive(e.target) || !review) return false;
         switchTab();
       },
       a: () => (onCover ? false : void openPicker()),
+      n: () => (onCover || !ready || s.rewriting !== null ? false : noteSelected()),
       e: () => void (onCover ? exportLetter() : exportNow()),
       r: () => (onCover ? false : rerun()),
       w: () => (onCover ? writeLetter() : false),
@@ -331,20 +451,49 @@
         if (interactive(e.target) || onCover) return false;
         void s.redo();
       },
+      // In a field, ⌘⌫ deletes the line instead.
+      "mod+Backspace": (e) => {
+        if (e.target instanceof Element && e.target.closest("input, textarea, [contenteditable]")) return false;
+        void removeJob();
+      },
     }),
   );
+
+  /** Back to Applications, then the posting is deleted, with Undo in the toast. */
+  async function removeJob() {
+    const current = row;
+    if (!current) return;
+    await goto("/applications");
+    app.deleteJob(current);
+  }
 </script>
 
 <Toolbar>
   {#snippet crumbs()}
-    <a href="/jobs">Jobs</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{company}</b>
+    <a href="/applications">Applications</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{company}</b>
   {/snippet}
+  <!-- What you're working on (the document, and its master or a rewrite), then a divider, then export and delete. -->
+  {#if review}
+    <Segmented options={TABS} bind:value={tab} label="Document" />
+  {/if}
   {#if onCover}
     {#if letter?.letter}
       <Button icon={PenLine} kbd="W" disabled={!ready || s.drafting !== null} onclick={writeLetter}
         >Rewrite letter</Button
       >
     {/if}
+  {:else if masters.length}
+    <Menu
+      value={s.master ?? ""}
+      options={masters}
+      label="Master"
+      placement="bottom-end"
+      disabled={!ready}
+      onchange={chooseMaster}
+    />
+  {/if}
+  {#if review || masters.length}<hr />{/if}
+  {#if onCover}
     <Button
       variant="primary"
       icon={Download}
@@ -353,26 +502,17 @@
       onclick={exportLetter}>Export letter</Button
     >
   {:else}
-    <Segmented
-      options={MODES}
-      value={s.mode ?? app.settings?.defaultMode ?? "bank-aware"}
-      label="Suggestions from"
-      disabled={!ready}
-      onchange={chooseMode}
-    />
-    <hr />
-    {#if masters.length}
-      <Menu
-        value={s.master ?? ""}
-        options={masters}
-        label="Master"
-        placement="bottom-end"
-        disabled={!ready}
-        onchange={chooseMaster}
-      />
-    {/if}
     <Button variant="primary" icon={Download} kbd="E" disabled={!ready} onclick={exportNow}>Export</Button>
   {/if}
+  <Button
+    variant="ghost"
+    square
+    icon={Trash2}
+    aria-label="Delete posting"
+    title="Delete posting (⌘⌫)"
+    disabled={!row}
+    onclick={removeJob}
+  />
 </Toolbar>
 
 <div class={["split", shell.compact && "split--compact"]}>
@@ -404,23 +544,51 @@
                 }}>{head.source}</a
               >{/if}
           </span>
+          {#if head.companyKey && !logoSrc}
+            <Button variant="ghost" size="sm" icon={ImagePlus} class="upload" popovertarget="logo-panel"
+              >Upload company photo</Button
+            >
+          {/if}
         </div>
-        <div class="named">
-          <span class="lead"><CompanyMark size={32} /></span>
+        <div class={["named", !head.company && "named--solo"]}>
+          <span class="lead">
+            {#if head.companyKey}
+              <CompanyMark
+                size={48}
+                src={logoSrc}
+                label={logoSrc ? `Change ${head.company}'s photo` : "Upload company photo"}
+                over={logo.over === head.company}
+                bind:element={logoMark}
+                popovertarget="logo-panel"
+                data-logo-drop={head.company}
+              />
+            {:else}
+              <CompanyMark size={48} />
+            {/if}
+          </span>
+          {#if head.company}<p class="company" title={head.company}>{head.company}</p>{/if}
           <h1 class="headline">{head.role}</h1>
         </div>
         {#if review?.headline}<p class="lede">{review.headline}</p>{/if}
       </div>
+      {#if head.companyKey}
+        {@const company = head.company}
+        <Popover bind:open={logoOpen} anchor={logoMark} id="logo-panel" aria-label="Company photo">
+          <LogoDrop
+            data-logo-drop={company}
+            over={logo.over === company}
+            busy={logo.busy}
+            set={logoSrc !== null}
+            onpaste={() => photo(logo.set(company, { kind: "clipboard" }))}
+            onchoose={() => photo(logo.choose(company))}
+            onremove={() => photo(logo.remove(company, head.companyKey).then(() => true))}
+          />
+        </Popover>
+      {/if}
     {:else if s.phase === "opening"}
       <div class="job" aria-hidden="true">
         <span class="bone bone--meta"></span>
         <span class="bone bone--headline"></span>
-      </div>
-    {/if}
-
-    {#if review}
-      <div class="doc-tabs">
-        <Segmented options={TABS} bind:value={tab} label="Document" />
       </div>
     {/if}
 
@@ -442,7 +610,7 @@
           {#if s.error.kind === "agent"}
             <Button variant="primary" onclick={() => goto("/settings")}>Open Settings</Button>
           {:else if !app.library?.bank}
-            <Button variant="primary" onclick={() => goto("/bank")}>Open Experience bank</Button>
+            <Button variant="primary" onclick={() => goto("/bank")}>Open Experience</Button>
           {/if}
           <Button icon={RotateCcw} onclick={() => (s.view ? s.suggest(null, null) : s.open())}>Try again</Button>
         </div>
@@ -459,7 +627,7 @@
     {/if}
 
     {#if onCover && ready}
-      <Letter {s} />
+      <Letter {s} commands={LETTER_KEYS} />
     {:else if review && (s.phase === "ready" || s.phase === "suggesting")}
       <!-- While another master, mode or a re-run is suggesting, the current review stays, inert, under the progress. -->
       <div class={["review", !ready && "review--stale"]} inert={!ready}>
@@ -495,6 +663,53 @@
           {/if}
 
           <div class="changes enter" style:--i="2">
+            <!-- Shared by change rows and other lines: the wording field, the note for a rewrite, its progress. -->
+            {#snippet wording(save: () => void)}
+              <Textarea
+                size="lg"
+                bind:value={draft}
+                aria-label="Your wording"
+                {@attach focus}
+                onkeydown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    editing = null;
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    save();
+                  }
+                }}
+              />
+            {/snippet}
+            {#snippet noteFor(key: string, send: () => void)}
+              {#if noting === key}
+                <form
+                  class="note"
+                  onsubmit={(e) => {
+                    e.preventDefault();
+                    send();
+                  }}
+                >
+                  <Input
+                    size="md"
+                    bind:value={note}
+                    placeholder="What should change? “Shorter”, “mention Kafka”…"
+                    aria-label="Note for the rewrite"
+                    {@attach focus}
+                    onkeydown={(e) => {
+                      if (e.key !== "Escape") return;
+                      e.stopPropagation();
+                      noting = null;
+                    }}
+                  />
+                  <Button type="submit" variant="primary" size="sm" disabled={!note.trim()}>Rewrite</Button>
+                </form>
+              {:else if s.rewriting === key && s.running}
+                <div class="note">
+                  <Thinking label={STAGES.rewriting} startedAt={s.running.startedAt} oncancel={() => s.cancel()} />
+                </div>
+              {/if}
+            {/snippet}
             {#each review.groups as group (group.id)}
               {@const noun = group.id === "bank" ? "suggestion" : "change"}
               <GroupHead
@@ -502,23 +717,7 @@
                 meta="{group.changes.length} {noun}{group.changes.length === 1 ? '' : 's'} · {signed(Math.round(group.points))}"
               />
               {#each group.changes as change (change.key)}
-                {#snippet editor()}
-                  <Textarea
-                    size="lg"
-                    bind:value={draft}
-                    aria-label="Your wording"
-                    {@attach focus}
-                    onkeydown={(e) => {
-                      if (e.key === "Escape") {
-                        e.stopPropagation();
-                        editing = null;
-                      } else if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        saveEdit(change);
-                      }
-                    }}
-                  />
-                {/snippet}
+                {#snippet editor()}{@render wording(() => saveEdit(change))}{/snippet}
                 <ChangeRow
                   state={change.state}
                   checked={counted(change)}
@@ -548,6 +747,7 @@
                         variant="ghost"
                         size="sm"
                         icon={Sparkles}
+                        kbd="N"
                         disabled={s.rewriting !== null}
                         onclick={() => startNote(change)}>Rewrite with a note</Button
                       >
@@ -575,50 +775,57 @@
                     {/if}
                   {/snippet}
                 </ChangeRow>
-                {#if noting === change.key}
-                  <form
-                    class="note"
-                    onsubmit={(e) => {
-                      e.preventDefault();
-                      void sendNote(change);
-                    }}
-                  >
-                    <Input
-                      size="md"
-                      bind:value={note}
-                      placeholder="What should change? “Shorter”, “mention Kafka”…"
-                      aria-label="Note for the rewrite"
-                      {@attach focus}
-                      onkeydown={(e) => {
-                        if (e.key !== "Escape") return;
-                        e.stopPropagation();
-                        noting = null;
-                      }}
-                    />
-                    <Button type="submit" variant="primary" size="sm" disabled={!note.trim()}>Rewrite</Button>
-                  </form>
-                {:else if s.rewriting === change.key && s.running}
-                  <div class="note">
-                    <Thinking
-                      label={STAGES.rewriting}
-                      startedAt={s.running.startedAt}
-                      oncancel={() => s.cancel()}
-                    />
-                  </div>
-                {/if}
+                {@render noteFor(change.key, () => void sendNote(change))}
               {:else}
                 <p class="meta quiet-row">No changes in this group.</p>
               {/each}
             {:else}
-              <p class="meta quiet-row">No suggested edits for this master. Add your own with A.</p>
+              <p class="meta quiet-row">
+                No suggested edits for this master. {others.length
+                  ? "Edit any of its lines below, or add your own with A."
+                  : "Add your own with A."}
+              </p>
             {/each}
+
+            {#if others.length}
+              <GroupHead label="Other lines" meta="{others.length} line{others.length === 1 ? '' : 's'} as on the master" />
+              {#each others as line (lineKey(line))}
+                {@const key = lineKey(line)}
+                {#snippet lineEditor()}{@render wording(() => saveLineEdit(line))}{/snippet}
+                <PartRow
+                  label={line.place}
+                  selected={key === selectedItem?.key}
+                  busy={s.rewriting === key}
+                  onselect={() => (selectedKey = key)}
+                  editor={editing === key ? lineEditor : undefined}
+                >
+                  {#snippet text()}{line.text}{/snippet}
+                  {#snippet actions()}
+                    <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startLineEdit(line)}
+                      >Edit</Button
+                    >
+                    {#if line.rewritable}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={Sparkles}
+                        kbd="N"
+                        disabled={s.rewriting !== null}
+                        onclick={() => startLineNote(line)}>Rewrite with a note</Button
+                      >
+                    {/if}
+                  {/snippet}
+                </PartRow>
+                {@render noteFor(key, () => void sendLineNote(line))}
+              {/each}
+            {/if}
           </div>
 
           {#if review.gaps.length || review.knockouts.length}
             <div class="quiet enter" style:--i="3">
               {#if review.gaps.length}
                 <section>
-                  <p class="label">Gaps</p>
+                  <p class="label">Gaps your resume can't back</p>
                   <ul>
                     {#each review.gaps as gap (gap.skill)}
                       <li><span class="term">{gap.skill}</span> <span class="meta">{gap.fix}</span></li>
@@ -644,7 +851,13 @@
           >
         </div>
         <Popover bind:open={pickerOpen} anchor={addButton} placement="top-start" aria-label="Add your own">
-          {#if targets}<AddEdit {targets} onadd={addOwn} />{/if}
+          {#if targets}
+            <AddEdit
+              {targets}
+              hasSummary={others.some((l) => l.line === null) || rows.some((c) => c.op === "summary")}
+              onadd={addOwn}
+            />
+          {/if}
         </Popover>
 
         <div class="keys-wrap"><KeyFooter keys={KEYS} /></div>
@@ -761,10 +974,6 @@
   .column .tabs {
     padding: 0;
   }
-  .doc-tabs {
-    display: flex;
-    padding-inline: var(--space-1);
-  }
   .row {
     display: flex;
     flex-wrap: wrap;
@@ -776,17 +985,46 @@
     gap: var(--space-2);
     padding-inline: var(--space-1);
   }
+  /*
+   * As the sidebar's Recent: the 48px mark spans the company and the title's first line, its edges on the company's
+   * cap height (6px into its 24px line) and the title's baseline (2px below the company line, 28.5px into its own).
+   * Without a company it centers on the title's first line.
+   */
   .named {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-3);
+    row-gap: var(--space-0-5);
+    align-items: start;
   }
-  /* The mark centers on the headline's first line. */
   .lead {
-    padding-top: calc((var(--leading-headline) - 32px) / 2);
+    display: flex;
+    grid-row: span 2;
+    margin-top: 6px;
+  }
+  .named--solo .lead {
+    grid-row: auto;
+    margin-top: calc((var(--leading-headline) - 48px) / 2);
+  }
+  .company {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-lg);
+    line-height: var(--leading-lg);
+    letter-spacing: var(--tracking-lg);
+    font-weight: var(--weight-medium);
+    color: var(--ink-2);
   }
   .job .meta {
     margin: 0;
+  }
+  /* At the meta line's end, its text centered on the line's. */
+  .job :global(.upload) {
+    margin-block: calc((var(--leading-sm) - var(--control-sm)) / 2);
+    margin-inline-start: auto;
   }
   .source {
     color: var(--accent-text);

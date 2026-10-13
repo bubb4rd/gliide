@@ -1,7 +1,8 @@
 <!--
   The screen's toolbar (52px): crumbs at the leading edge, the screen's controls trailing with the primary action
-  last. Drags the window from any empty part. An `<hr>` among the controls draws a short divider. When the window
-  is compact the sidebar becomes a sheet, and the toolbar makes room for the traffic lights and its toggle.
+  last (only a delete follows it). Drags the window from any empty part. An `<hr>` among the controls draws a short
+  divider. When the window is compact the sidebar becomes a sheet, and the toolbar makes room for the traffic lights
+  and its toggle.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";

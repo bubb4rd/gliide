@@ -1,7 +1,7 @@
 <!--
-  Experience bank: everything you've done, by section, with which masters show each entry. Import picks a resume file
-  (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its review (/bank/import). Each entry (not a skills
-  line) opens its editor (/bank/entries/<id>): its bullets and their variants.
+  Experience (/bank): everything you've done, by section, with which masters show each entry. Import picks a resume
+  file (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its review (/bank/import). Each entry (not a
+  skills line) opens its editor (/bank/entries/<id>): its bullets and their variants.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -40,7 +40,7 @@
 </script>
 
 <Toolbar>
-  {#snippet crumbs()}<b>Experience bank</b>{/snippet}
+  {#snippet crumbs()}<b>Experience</b>{/snippet}
   {#if bank}
     <Button icon={FileUp} kbd="I" onclick={pick}>Import resume</Button>
   {/if}

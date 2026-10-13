@@ -15,9 +15,9 @@ export interface Toast {
   action?: ToastAction;
 }
 
-/** How long a toast stays: long enough to read and reach its action. */
+/** How long a toast stays: long enough to read and reach its action. Its action (Undo) lasts as long. */
 const LIFETIME_MS = 5000;
-const LIFETIME_WITH_ACTION_MS = 8000;
+export const LIFETIME_WITH_ACTION_MS = 8000;
 
 let next = 0;
 export const toasts: Toast[] = $state([]);

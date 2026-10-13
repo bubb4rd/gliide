@@ -15,6 +15,7 @@ import {
   redo,
   removeEdit,
   rewrite,
+  rewriteLine,
   saveVariant,
   rewriteCoverParagraph,
   setCoverPart,
@@ -78,7 +79,7 @@ export class Session {
   running = $state<Running | null>(null);
   /** The model calls of this run already done (Extract while Suggest runs), for the status's trail. */
   steps = $state<Step[]>([]);
-  /** The change being rewritten from a note. */
+  /** The row being rewritten from a note: a change's key, or an Other line's (`lineKey`). */
   rewriting = $state<string | null>(null);
   /** What the toolbar shows: the review's master and mode, or the ones just asked for. */
   master = $state<string | null>(null);
@@ -205,14 +206,23 @@ export class Session {
     return this.#edit((id, review) => (review.canRedo ? redo(id) : null));
   }
 
-  /** One model call; resolves with the validator's flags (null when it didn't run). */
+  /** One model call on a change's line; resolves with the validator's flags (null when it didn't run). */
   rewrite(key: string, note: string): Promise<Rewritten | null> {
+    return this.#rewrite(key, (id) => rewrite(id, key, note));
+  }
+
+  /** One model call on a line no change touches (null: the summary); it comes back as your edit. */
+  rewriteLine(line: string | null, key: string, note: string): Promise<Rewritten | null> {
+    return this.#rewrite(key, (id) => rewriteLine(id, line, note));
+  }
+
+  #rewrite(key: string, call: (review: string) => Promise<Rewritten>): Promise<Rewritten | null> {
     return this.#queue(async () => {
       const review = this.review;
       if (!review || !this.#alive) return null;
       this.rewriting = key;
       try {
-        const done = await rewrite(review.id, key, note);
+        const done = await call(review.id);
         if (this.#alive) this.#show(done.review);
         return done;
       } catch (e) {

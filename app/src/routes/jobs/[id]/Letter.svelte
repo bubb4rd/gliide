@@ -9,10 +9,21 @@
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import type { CoverPart } from "$lib/api";
   import { bindKeys } from "$lib/keys";
-  import { Button, Empty, GroupHead, Input, KeyFooter, PartRow, Textarea, Thinking } from "$lib/ui";
+  import {
+    Button,
+    Empty,
+    GroupHead,
+    Input,
+    KeyFooter,
+    PartRow,
+    Textarea,
+    Thinking,
+    type KeyCommand,
+  } from "$lib/ui";
   import type { Session } from "./session.svelte";
 
-  let { s }: { s: Session } = $props();
+  /** The tab's commands the review owns (write, export, back to the resume), listed after the letter's own. */
+  let { s, commands }: { s: Session; commands: KeyCommand[] } = $props();
 
   interface Part {
     key: string;
@@ -40,14 +51,6 @@
     ];
   });
   const writing = $derived(s.drafting === "letter");
-  const KEYS = [
-    { keys: ["↑", "↓"], label: "Select" },
-    { keys: ["⏎"], label: "Edit" },
-    { keys: ["N"], label: "Rewrite with a note" },
-    { keys: ["W"], label: "Rewrite letter" },
-    { keys: ["E"], label: "Export" },
-    { keys: ["Tab"], label: "Resume" },
-  ];
 
   let selectedKey = $state<string | null>(null);
   const selectedIndex = $derived(Math.max(0, parts.findIndex((p) => p.key === selectedKey)));
@@ -97,6 +100,18 @@
     noting = null;
     void s.rewriteParagraph(index, note.trim());
   }
+
+  const KEYS: KeyCommand[] = $derived([
+    { keys: ["↑", "↓"], label: "Select" },
+    { keys: ["⏎"], label: "Edit", run: () => startEdit(selected), disabled: !selected || s.drafting !== null },
+    {
+      keys: ["N"],
+      label: "Rewrite with a note",
+      run: () => selected?.part.kind === "paragraph" && startNote(selected, selected.part.index),
+      disabled: selected?.part.kind !== "paragraph" || s.drafting !== null,
+    },
+    ...commands,
+  ]);
 
   const interactive = (target: EventTarget | null) =>
     target instanceof Element && target.closest("button, a, input, textarea, select") !== null;
