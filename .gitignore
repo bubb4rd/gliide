@@ -1,0 +1,27 @@
+# Rust
+/target/
+**/target/
+
+# Node / Svelte / Tauri
+node_modules/
+dist/
+build/
+.svelte-kit/
+app/src-tauri/gen/
+
+# Rendered output from ez render / tailor
+/out/
+*.pdf
+!fixtures/**/*.pdf
+
+# Local data: your real resumes, postings and API logs never go in the repo
+/local/
+.env
+.env.*
+
+# OS / editors
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json

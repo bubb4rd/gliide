@@ -1,0 +1,211 @@
+/*
+ * easyshmeezy design tokens: "Paper & Ink".
+ * The only file allowed to hold raw colors, shadows, font stacks and easing curves (design/lint.mjs enforces it).
+ * Spec and rationale: design/DESIGN.md.
+ */
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-Variable-Italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("fonts/SourceSerif4Variable-Roman.ttf.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("fonts/SourceSerif4Variable-Italic.ttf.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: block;
+}
+:root {
+  color-scheme: light;
+
+  /* ── Surfaces: warm paper, white sheets, a darker desk under the resume ── */
+  --paper: oklch(0.985 0.004 95);          /* window background */
+  --surface: oklch(1 0 0);                 /* cards, rows, popovers */
+  --sunken: oklch(0.97 0.004 95);          /* inputs, wells, kbd */
+  --desk: oklch(0.955 0.005 95);           /* behind the resume page */
+  --sidebar: oklch(0.965 0.005 95 / 0.82); /* over native vibrancy; opaque fallback below */
+  --hover: oklch(0.22 0.008 85 / 0.045);   /* row/button hover wash */
+  --pressed: oklch(0.22 0.008 85 / 0.08);
+  --selected: oklch(0.5 0.19 262 / 0.08);
+  --page: oklch(1 0 0);                    /* the resume sheet: always white, in both themes */
+  --page-ink: oklch(0.15 0 0);
+  --page-mark: oklch(0.93 0.09 95);        /* inserted keywords on the sheet, both themes */
+
+  /* ── Ink: one warm graphite family ── */
+  --ink: oklch(0.22 0.008 85);             /* primary text  16.6:1 on paper */
+  --ink-2: oklch(0.44 0.009 85);           /* secondary     7.4:1 */
+  --ink-3: oklch(0.53 0.009 85);           /* tertiary, placeholders  ≥4.6:1 on every surface */
+  --ink-4: oklch(0.7 0.007 85);            /* disabled and decorative only, never text that must be read */
+  --line: oklch(0.22 0.008 85 / 0.08);     /* hairline separators */
+  --line-strong: oklch(0.22 0.008 85 / 0.16); /* input borders (3:1 non-text with --sunken) */
+  --input-border: oklch(0.6 0.008 85);
+
+  /* ── One accent: cobalt ink ── */
+  --accent: oklch(0.5 0.19 262);           /* primary buttons, focus, selection */
+  --accent-text: oklch(0.48 0.19 262);     /* links and accent text */
+  --accent-soft: oklch(0.95 0.03 262);
+  --on-accent: oklch(1 0 0);
+
+  /* ── Meaning ── */
+  --gain: oklch(0.52 0.13 150);            /* score gain, "you have it", applied */
+  --gain-text: oklch(0.48 0.13 150);
+  --gain-soft: oklch(0.955 0.04 150);
+  --warn: oklch(0.53 0.12 65);             /* left out by the fit check or validator */
+  --warn-soft: oklch(0.96 0.04 75);
+  --danger: oklch(0.53 0.19 27);           /* cut, remove, errors */
+  --danger-soft: oklch(0.955 0.03 27);
+  --mark: oklch(0.93 0.09 95);             /* inserted keywords: change rows and the resume preview */
+
+  /* ── Elevation (better-ui recipes, exact values) ── */
+  --shadow-border:
+    0px 0px 0px 1px oklch(0 0 0 / 0.06),
+    0px 1px 2px -1px oklch(0 0 0 / 0.06),
+    0px 2px 4px 0px oklch(0 0 0 / 0.04);
+  --shadow-border-hover:
+    0px 0px 0px 1px oklch(0 0 0 / 0.08),
+    0px 1px 2px -1px oklch(0 0 0 / 0.08),
+    0px 2px 4px 0px oklch(0 0 0 / 0.06);
+  --shadow-popover:
+    0px 0px 0px 1px oklch(0 0 0 / 0.08),
+    0px 4px 8px -2px oklch(0 0 0 / 0.08),
+    0px 16px 32px -8px oklch(0 0 0 / 0.12);
+  --shadow-page:
+    0px 0px 0px 1px oklch(0 0 0 / 0.05),
+    0px 2px 6px -2px oklch(0 0 0 / 0.08),
+    0px 24px 48px -16px oklch(0 0 0 / 0.16);
+  --image-outline: oklch(0 0 0 / 0.1);
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+
+  /* ── Type ── */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Source Serif 4", ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* size / line-height / tracking. UI base is 13px, the macOS native size. */
+  --text-xs: 11px;    --leading-xs: 16px;    --tracking-xs: 0.005em;
+  --text-sm: 12px;    --leading-sm: 16px;    --tracking-sm: 0em;
+  --text-base: 13px;  --leading-base: 20px;  --tracking-base: -0.003em;
+  --text-md: 14px;    --leading-md: 22px;    --tracking-md: -0.006em;
+  --text-lg: 16px;    --leading-lg: 24px;    --tracking-lg: -0.011em;
+  /* Serif display sizes */
+  --text-title: 22px;   --leading-title: 28px;   --tracking-title: -0.01em;
+  --text-headline: 30px; --leading-headline: 36px; --tracking-headline: -0.015em;
+  --text-score: 56px;   --leading-score: 56px;   --tracking-score: -0.02em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* ── Space: 4px grid ── */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Radius: concentric (outer = inner + padding + border) ── */
+  --radius-xs: 4px;   /* kbd, mark, inner chips */
+  --radius-sm: 6px;   /* buttons, inputs, menu items */
+  --radius-md: 8px;   /* rows, segmented control */
+  --radius-lg: 12px;  /* cards, panels, popovers */
+  --radius-xl: 16px;  /* sheets, the window's inset panels */
+  --radius-full: 9999px;
+
+  /* ── Sizes ── */
+  --control-sm: 24px;
+  --control-md: 28px;
+  --control-lg: 36px;
+  --sidebar-width: 232px;
+  --toolbar-height: 52px;
+  --column-min: 420px;
+  --column-max: 640px;
+
+  /* ── Motion (better-ui exact values) ── */
+  --dur-instant: 100ms;   /* row hover background */
+  --dur-fast: 150ms;      /* press, exits, high-frequency state */
+  --dur-base: 300ms;      /* entrances, icon cross-fades */
+  --stagger: 100ms;
+  --ease-out: ease-out;
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --press-scale: 0.96;
+  --enter-y: 12px;
+  --exit-y: -12px;
+  --enter-blur: 4px;
+
+  /* ── Icon stroke, matched to adjacent text weight ── */
+  --stroke-regular: 1.5px;
+  --stroke-medium: 2px;
+  --stroke-bold: 2.5px;
+}
+
+/*
+ * Dark: Linear-grade charcoal, the same warm hue. Light is the default; dark applies only when the root carries
+ * data-theme="dark" (Settings → Dark, or Settings → System while the OS is dark).
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: oklch(0.165 0.003 85);
+  --surface: oklch(0.2 0.003 85);
+  --sunken: oklch(0.185 0.003 85);
+  --desk: oklch(0.135 0.003 85);
+  --sidebar: oklch(0.18 0.003 85 / 0.82);
+  --hover: oklch(1 0 0 / 0.05);
+  --pressed: oklch(1 0 0 / 0.09);
+  --selected: oklch(0.68 0.15 262 / 0.14);
+  --ink: oklch(0.95 0.003 85);
+  --ink-2: oklch(0.78 0.005 85);
+  --ink-3: oklch(0.64 0.006 85);
+  --ink-4: oklch(0.48 0.006 85);
+  --line: oklch(1 0 0 / 0.07);
+  --line-strong: oklch(1 0 0 / 0.14);
+  --input-border: oklch(0.45 0.005 85);
+  --accent: oklch(0.68 0.15 262);
+  --accent-text: oklch(0.74 0.13 262);
+  --accent-soft: oklch(0.26 0.06 262);
+  --on-accent: oklch(0.165 0.003 85);
+  --gain: oklch(0.76 0.15 150);
+  --gain-text: oklch(0.76 0.15 150);
+  --gain-soft: oklch(0.26 0.05 150);
+  --warn: oklch(0.8 0.13 75);
+  --warn-soft: oklch(0.27 0.05 75);
+  --danger: oklch(0.7 0.17 27);
+  --danger-soft: oklch(0.26 0.06 27);
+  --mark: oklch(0.45 0.09 95);
+  --shadow-border: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
+  --shadow-popover: 0 0 0 1px oklch(1 0 0 / 0.1), 0px 16px 32px -8px oklch(0 0 0 / 0.5);
+  --shadow-page: 0 0 0 1px oklch(1 0 0 / 0.06), 0px 24px 48px -16px oklch(0 0 0 / 0.6);
+  --image-outline: oklch(1 0 0 / 0.1);
+}
+
+/* The theme switch must not animate every color at once (better-ui). */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
