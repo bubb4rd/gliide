@@ -536,9 +536,9 @@ The model-call targets are set by the provider spike (M0), not assumed.
 
 | Milestone | Delivers | Done when |
 |---|---|---|
-| M0 Spike: providers | `ez llm` running the extract prompt through `claude -p`, `codex-acp` and `gemini --acp` on 10 postings | Per agent: JSON valid without repair, with one repair, latency p50/p90; go/no-go for each |
+| M0 Spike: providers | `ez llm` running the extract prompt through `claude -p` on the 11 postings in `fixtures/postings/`; `codex-acp` and `gemini --acp` join once core features work | JSON valid without repair, with one repair, latency p50/p90; go/no-go per agent |
 | M1 Core + render | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez render` | Your current `master.json` renders identically to ATS Fit's PDF |
-| M2 Requirements + score | Ingest, extract, matcher, composite score, master ranking, `ez score <url> --master swe` | Score components for the 10 fixture postings |
+| M2 Requirements + score | Ingest, extract, matcher, composite score, master ranking, `ez score <url> --master swe` | Score components for the 11 fixture postings |
 | M3 Tailor | Suggest, validator, change engine, measure + fit, both modes, `ez tailor` | One-page tailored PDFs for the fixtures; the bank-aware ceiling measured beside master-only |
 | M4 macOS app | Bank, masters, job, review with live preview, export, applications log, agent settings | You use it instead of ATS Fit |
 | M5 Experience | PDF/DOCX import into the bank, variants, second template (design track), the mode experiment's report | Decision on the default mode |
@@ -551,7 +551,7 @@ The model-call targets are set by the provider spike (M0), not assumed.
 | Decision | Status |
 |---|---|
 | UI stack | **Decided:** Tauri 2 + Svelte over a Rust core |
-| Model access on desktop | **Decided:** your own agents: ACP (Codex, Gemini CLI, registry) and `claude -p`; no API keys |
+| Model access on desktop | **Decided:** your own agents: `claude -p` first; ACP (Codex, Gemini CLI, registry) added after core features work; no API keys |
 | Bank-aware vs master-only suggestions | **Experiment** in M3–M5 on one data model; default chosen from the metrics |
 | Sync | **Not yet** |
 | Model access on iOS | Open until M7: Mac relay (needs pairing, close to sync) or your own API key |
