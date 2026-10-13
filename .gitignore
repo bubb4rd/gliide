@@ -25,3 +25,10 @@ app/src-tauri/gen/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Agent and tool state (the shared skills in .agents/skills stay tracked)
+.claude/settings.local.json
+.omp/
+.cursor/
+*.tsbuildinfo
+.eslintcache
