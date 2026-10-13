@@ -12,7 +12,13 @@ Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 | [`design/DESIGN.md`](design/DESIGN.md) | The "Paper & Ink" design system: tokens, components, motion, screen recipes |
 | [`AGENTS.md`](AGENTS.md) | Rules for coding agents working in this repo |
 
-Design specimen: `cd design && python3 -m http.server`, then open `http://localhost:8000/specimen.html`.
+The app (macOS): `cd app && pnpm install && pnpm tauri dev` (needs `cargo install tauri-cli --version "^2"` or the
+pnpm `tauri` script, and Claude Code signed in). Its data lives in `~/Library/Application Support/dev.bubb4rd.easyshmeezy/`;
+exports and `applications.csv` go to `~/Documents/Resumes` (Settings → Export folder). Release build:
+`pnpm tauri build`. After changing `app/src-tauri/src/dto.rs`, `cargo test -p easyshmeezy` regenerates the TypeScript
+bindings in `app/src/lib/api/bindings/`.
+
+Design specimen: **Specimen** in the app's sidebar (dev builds; the `/specimen` route).
 Design lint: `node design/lint.mjs`.
 
 Core and rendering (`cargo run -p ez-cli --bin ez -- …`; outputs belong under the gitignored `local/`):

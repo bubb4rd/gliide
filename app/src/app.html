@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>easyshmeezy</title>
+    <script>
+      // Before first paint: the native sidebar material (set by window.rs) and the last theme, so a dark window
+      // never flashes light. The theme store keeps `ez-theme` current; settings stay the source of truth.
+      (() => {
+        const root = document.documentElement;
+        if (window.__EZ_VIBRANCY__) root.dataset.vibrancy = "";
+        const theme = localStorage.getItem("ez-theme");
+        const dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) root.dataset.theme = "dark";
+      })();
+    </script>
+    %sveltekit.head%
+  </head>
+  <body>
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

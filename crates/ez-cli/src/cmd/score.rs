@@ -4,14 +4,12 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, bail};
-use resume_core::{
-    Bank, Master, PageFacts, Posting, Requirements, Resume, Score, rank, resolve, score,
-};
+use resume_core::{Bank, Master, PageFacts, Posting, Requirements, Score, rank, score};
 use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
-use resume_render::{FontOptions, Renderer};
+use resume_pipeline::{heading, master_page as page, today};
 use serde::Serialize;
 
-use super::job::{self, Source, heading, runtime, today};
+use super::job::{self, Source, runtime};
 
 #[derive(clap::Args)]
 pub struct ScoreArgs {
@@ -43,7 +41,7 @@ pub fn score_cmd(args: ScoreArgs) -> anyhow::Result<()> {
     let (posting, req) = runtime()?.block_on(job::requirements(&args.source, &args.model))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let master: Master = super::read_json(&args.master)?;
-    let (resume, facts) = page(&bank, &master)?;
+    let (resume, facts) = page(&bank, &master).with_context(|| format!("master {}", master.id))?;
     let s = score(&resume, &req, &facts, today());
     print_score(&posting, &req, &master, &facts, &s);
     if let Some(path) = &args.json {
@@ -85,7 +83,8 @@ pub fn rank_cmd(args: RankArgs) -> anyhow::Result<()> {
     let start = Instant::now();
     for path in &paths {
         let master: Master = super::read_json(path)?;
-        let (resume, facts) = page(&bank, &master)?;
+        let (resume, facts) =
+            page(&bank, &master).with_context(|| format!("master {}", master.id))?;
         candidates.push((format!("{} ({})", master.id, master.title), resume, facts));
     }
     let ranked = rank(&candidates, &req, today());
@@ -99,22 +98,6 @@ pub fn rank_cmd(args: RankArgs) -> anyhow::Result<()> {
         start.elapsed().as_secs_f64() * 1000.0
     );
     Ok(())
-}
-
-/// The master resolved and rendered with the bundled fonts: its page facts for the score.
-fn page(bank: &Bank, master: &Master) -> anyhow::Result<(Resume, PageFacts)> {
-    let resume =
-        resolve(bank, master).with_context(|| format!("resolving master {}", master.id))?;
-    let template = job::template(master)?;
-    let rendered = Renderer::new(&template, FontOptions::default())
-        .render(&serde_json::to_string(&resume)?, false)?;
-    let facts = PageFacts {
-        pages: rendered.metrics.pages,
-        page_limit: master.page_limit,
-        ats_safe: template.manifest.ats_safe,
-        pdf_text: None,
-    };
-    Ok((resume, facts))
 }
 
 fn print_score(

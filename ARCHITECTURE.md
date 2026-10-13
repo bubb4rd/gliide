@@ -473,7 +473,8 @@ Rows use UUIDs and `updated_at` so sync can be added later without a migration. 
 ## 9. UI
 
 Visual language, tokens, components, motion and screen recipes: [`design/DESIGN.md`](design/DESIGN.md), binding for
-every screen. `design/specimen.html` shows every component state and the composed Review screen.
+every screen. The components live in `app/src/lib/ui/`; the app's `/specimen` route shows every component state and the
+composed Review screen.
 
 | Screen | Content |
 |---|---|
@@ -506,13 +507,15 @@ easyshmeezy/
     resume-render/           Typst World, fonts, templates, measure, PDF/SVG/PNG, PDF text read-back
     resume-llm/              Llm trait, ACP client provider, claude CLI provider, agent discovery, JSON repair, prompts
     resume-ingest/           posting fetch/parse, PDF/DOCX import
-    resume-store/            SQLite schema, migrations, queries
+    resume-store/            SQLite schema, migrations, queries; the draft event log; applications.csv
+    resume-tailor/           the fit check: states, page loop, now / projected / ceiling, points
+    resume-pipeline/         per-posting steps the CLI and the app share: posting files, Extract/Suggest cache keys, templates, today
     ez-cli/                  `ez render | score | tailor | import | eval` for development and evals
   app/
-    src-tauri/               Tauri commands over the crates
-    src/                     Svelte UI
+    src-tauri/               Tauri commands over the crates (dto.rs → TypeScript bindings via ts-rs)
+    src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen)
   templates/                 *.typ + manifests; fonts/
-  design/                    DESIGN.md, tokens.css, components.css, specimen.html, lint.mjs, UI fonts
+  design/                    DESIGN.md, tokens.css, lint.mjs, UI fonts
   prompts/                   extract, suggest, rewrite, import, cover (.md + .schema.json)
   data/aliases.json          skill alias dictionary
   fixtures/                  banks, masters, postings, recorded model outputs
@@ -549,9 +552,9 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to ATS Fit with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 fixture postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (waymark 74.2 → 84.2); a real bank with roles outside the master is needed to settle the mode experiment |
-| M4 macOS app | Bank, masters, job, review with live preview, export, applications log, agent settings | You use it instead of ATS Fit |
+| M4 macOS app (built; in use test) | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv` (ATS Fit's rows imported), agent settings; `resume-store` (SQLite), `resume-pipeline` | You use it instead of ATS Fit. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` give identical scores, states and points on the recorded fixtures |
 | M5 Experience | PDF/DOCX import into the bank, variants, second template (design track), the mode experiment's report | Decision on the default mode |
-| M6 Around the application | Cover letters, application statuses, CSV, rewrite-with-note | Parity with ATS Fit, plus tracking |
+| M6 Around the application | Cover letters (rewrite-with-note per paragraph); statuses, CSV and rewrite-with-note on bullets shipped in M4 | Parity with ATS Fit, plus tracking |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
 | M8 Distribution | Signing, notarization, auto-update; labs' written OK for subscription use | Installable by someone else |
 

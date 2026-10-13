@@ -1,0 +1,133 @@
+/*
+ * The app's base: the tokens, the root type, and the few global utilities DESIGN.md names (.num, .label, .title,
+ * .headline, .meta, .enter). Every primitive owns its styles in app/src/lib/ui/.
+ */
+
+@import "../../design/tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  letter-spacing: var(--tracking-base);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "calt";
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The native sidebar material sits behind a transparent webview (window.rs); the main area paints its own paper. */
+html[data-vibrancy] {
+  background: transparent;
+}
+
+body {
+  height: 100%;
+  margin: 0;
+}
+
+::selection {
+  background: var(--selected);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: var(--weight-medium);
+  color: var(--ink-3);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  line-height: var(--leading-title);
+  letter-spacing: var(--tracking-title);
+  font-weight: var(--weight-regular);
+  font-optical-sizing: auto;
+  text-wrap: balance;
+}
+
+.headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-headline);
+  line-height: var(--leading-headline);
+  letter-spacing: var(--tracking-headline);
+  font-weight: var(--weight-regular);
+  font-optical-sizing: auto;
+  text-wrap: balance;
+}
+
+.meta {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--ink-3);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * Entrance: infrequent moments only (first result, export success, empty state). Groups set --i for the 100ms
+ * stagger. The hidden state lives in the keyframe, so an element whose animation never runs stays visible.
+ */
+.enter {
+  animation: fade var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .enter {
+    animation-name: enter;
+  }
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    filter: blur(var(--enter-blur));
+    translate: 0 var(--enter-y);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}

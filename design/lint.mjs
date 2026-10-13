@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Design-system lint: keeps every screen on the tokens and the better-ui rules.
-// Usage: node design/lint.mjs [paths…]   (default: design/ and app/src/ when present)
+// Design-system lint: keeps the components (app/src/lib/ui/) and every screen on the tokens and the better-ui rules.
+// Usage: node design/lint.mjs [paths…]   (default: design/ (tokens.css) and app/src/ when present)
 // Exit code 1 on any finding. No dependencies.
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";

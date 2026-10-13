@@ -149,6 +149,7 @@
   --dur-instant: 100ms;   /* row hover background */
   --dur-fast: 150ms;      /* press, exits, high-frequency state */
   --dur-base: 300ms;      /* entrances, icon cross-fades */
+  --dur-loop: 1600ms;     /* one sweep of an indeterminate progress bar */
   --stagger: 100ms;
   --ease-out: ease-out;
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);

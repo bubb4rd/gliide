@@ -6,6 +6,7 @@
 
 mod claude;
 pub mod extract;
+pub mod rewrite;
 pub mod suggest;
 
 use std::path::PathBuf;

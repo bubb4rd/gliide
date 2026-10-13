@@ -5,8 +5,8 @@ Binding for every screen, page and component. When this document and a screen di
 | File | Role |
 |---|---|
 | `design/tokens.css` | The only place raw colors, shadows, font stacks and easing curves live. Light and dark |
-| `design/components.css` | Reference implementation of every primitive and its states. Moves into Svelte components in M4 (`app/src/lib/ui/`), then is deleted |
-| `design/specimen.html` | Every primitive in every state, plus the composed Review screen, in both themes. Serve `design/` and open it |
+| `app/src/lib/ui/` | The primitives as Svelte 5 components, each owning its styles; screens import them from `$lib/ui`. `app/src/app.css` imports the tokens and holds the base and the global utilities (`.num`, `.label`, `.title`, `.headline`, `.meta`, `.enter`) |
+| `app/src/routes/specimen/` | The specimen: every component in every state, plus the composed Review screen, with a Light/Dark/System preview. `cd app && pnpm tauri dev`, then **Specimen** in the sidebar (dev builds), or `/specimen?theme=dark` |
 | `design/lint.mjs` | Enforces the tokens and the better-ui rules on `design/` and `app/src/`. `node design/lint.mjs` must exit 0 |
 | `design/fonts/` | Inter (UI, Fontsource latin subset) and Source Serif 4 (display, Adobe's official 4.005 release, unmodified: its OFL reserves the name "Source", so never subset or rename it), variable, with their OFL licenses; bundled, never loaded from a CDN |
 | `.agents/skills/better-ui/` | The polish rules (radius, shadows, motion, icons) with exact values; this system adopts them unchanged |
@@ -118,6 +118,8 @@ Borders are for structure only: separators (`--line`), inputs (`--input-border`)
 | First result arriving, export success, empty state | `.enter`: opacity + 4px blur + 12px rise over 300ms, groups 100ms apart |
 | Exit of a transient element | Opacity + 4px blur + `-12px` over 150ms, or instant |
 | Icon swap on an infrequent state (copy → copied, export → done) | Cross-fade: scale 0.25→1, opacity, blur 4px→0, 300ms `--ease-emphasized` |
+| Opening a menu or popover | Opacity in over `--dur-instant` 100ms (`@starting-style`); closes instantly |
+| A model call of unknown length (indeterminate progress) | A segment sweeps the track every `--dur-loop` 1600ms; reduced motion: an opacity pulse. Determinate progress fills from elapsed time, no animation |
 | Theme switch | No transitions at all (`.theme-switching` on the root for two frames) |
 
 Movement, scale and blur run only under `prefers-reduced-motion: no-preference`; reduced motion gets the opacity fade.
@@ -127,32 +129,40 @@ Transitions name their properties, never `all`. Every animated change also leave
 
 - **Lucide**, one library everywhere. Outline by default; filled only for an active state.
 - Rendered stroke matches the adjacent text: 1.5px beside 400, 2px beside 500–600 (buttons, chips), 2.5px for bold or
-  a standalone emphasized icon. Strokes are non-scaling (`vector-effect`), so these are real pixels.
+  a standalone emphasized icon. `Icon.svelte` renders Lucide with `absoluteStrokeWidth` (`weight="regular" | "medium" |
+  "bold"`), so these are real pixels.
 - Sizes: 16 (default), 14 (small buttons, meta), 12 (inside chips). `currentColor` only; state comes from CSS.
 
 ## Components
 
-Every primitive, its states, and its class. New screens compose these; a new primitive is added to
-`components.css` and shown in the specimen in every state before any screen uses it.
+Every primitive and its states. Screens compose these from `$lib/ui` (`app/src/lib/ui/`); a new primitive is added
+there and shown in the `/specimen` route in every state before any screen uses it.
 
-| Component | Class | States |
+| Component | Key props | States |
 |---|---|---|
-| Button | `.btn` + `--primary` `--ghost` `--danger`, `--sm` `--lg` `--square`, `--icon-start` `--icon-end` | default, hover, pressed, focus, disabled; optional `.kbd` hint |
-| Keyboard hint | `.kbd` | inside buttons (primary variant tints itself), in the key footer |
-| Segmented control | `.seg` > `button[aria-pressed]` | on, off, hover |
-| Input / textarea | `.input`, `.textarea` | placeholder, focus (accent border + 3px ring), disabled |
-| Checkbox | `.check` | off, on, focus |
-| Skill chip | `.chip` + `--have` `--add` `--missing` `--not-mine`, `--p1` | press, hover |
-| Badge | `.badge` + `--accent` `--gain` `--warn` | optional `.dot` |
-| Inserted keyword | `.mark` (rows), `.page .mark` (sheet) | |
-| Change row | `.change` + `--off` `--left-out` `--forced`, `[aria-selected]` | actions appear on hover, focus or selection; reason line; "Your edit" owner |
-| Change group | `.group__head` | label + count + points |
-| Score | `.score`, `.score__value--now` / `--projected`, `.score__ceiling`, `.bar` | updates instantly |
-| Sidebar nav | `.nav`, `.nav__item[aria-current]` | hover, current, count |
-| Card | `.card` | |
-| Desk and page | `.desk`, `.page` | fits / over the page limit (badge) |
-| Toast | `.toast` | enters with `.enter` |
-| Empty state | `.empty` | title (serif), one sentence, one primary action with its key |
+| `Icon` | `icon` (Lucide), `size` 12/14/16, `weight` | stroke per weight |
+| `Button` | `variant` default/primary/ghost/danger, `size` sm/md/lg, `square`, `icon`, `iconEnd`, `kbd`, `static` | default, hover, pressed, focus, disabled; optional `Kbd` hint (primary tints it); 2px less padding on the icon side |
+| `Kbd` | children | inside buttons, in the key footer |
+| `Segmented` | `options`, `value`, `label` | on, off, hover, disabled |
+| `Input` / `Textarea` | `value`, `size` | placeholder, focus (accent border + 3px ring), disabled; `Textarea size="lg"` is the reading size for inline edits |
+| `Checkbox` | `checked`, `label` | off, on, focus, disabled |
+| `Chip` | `state` have/add/missing/not-mine, `p1` | press, hover, disabled |
+| `Badge` | `tone` neutral/accent/gain/warn/danger, `dot` | |
+| `Marked` | `text`, `marks` | inserted keywords in `<mark class="mark">`; the sheet's own highlight comes from the renderer |
+| `ChangeRow` | `state` in/off/left-out/forced, `checked`, `selected`, `points`, snippets `text`/`actions`/`editor` | actions appear on hover, focus or selection; reason line ("Left out: …", "Kept on by you · …"); warning; "Your edit" owner; editing |
+| `GroupHead` | `label`, `meta` | label + count + points |
+| `ScoreHeader` | `now`, `projected`, `ceiling`, `components` | updates instantly; the parts in a popover on hover or focus |
+| `Nav` / `NavItem` | `href`, `icon`, `current`, `meta`, `quiet` | hover, current, count; `quiet` for list entries (Recent) |
+| `Card` | `pad` | |
+| `Desk` | `pages` (SVG), `status` snippet, `zoom` | fits / over the page limit (badge); zoom 50–200, 100% fits the desk |
+| `Toaster` + `toast()` | `tone` neutral/gain/warn/danger, `action` | enters with `.enter`, exits with blur and -12px; errors stay until dismissed |
+| `Empty` | `title`, `body`, `action` snippet | title (serif), one sentence, one primary action with its key; staggered `.enter` |
+| `Toolbar` | `crumbs` snippet, trailing children | drags the window; `<hr>` draws a divider; compact: room for the traffic lights and the sidebar toggle |
+| `KeyFooter` | `keys` | sticky at the column's foot |
+| `Menu` | `value`, `options` (`label`, `meta`), `label` | closed, open, active option, chosen (check), disabled; ↑↓ Home End ⏎ Esc |
+| `Popover` | `open`, `anchor`, `placement`, `mode` auto/manual | anchored, flips when it would overflow; `--shadow-popover` |
+| `Progress` | `label`, `expectedMs`, `oncancel` | determinate (fills to 90% by the expected time, then creeps), indeterminate |
+| `Table` | `columns`, `rows`, `cell` snippet | sticky header, tabular numbers, hover wash, no zebra |
 
 ## Layout
 
@@ -172,23 +182,28 @@ Every primitive, its states, and its class. New screens compose these; a new pri
   232 (vibrancy)   column 420–640                 rest
 ```
 
-- **Window:** Tauri `titleBarStyle: "Overlay"` with the traffic lights inset into the sidebar; sidebar translucency
-  from the `window-vibrancy` crate (macOS sidebar material, Windows Mica), with `--sidebar` as the tinted, opaque
-  enough fallback. To verify at M4: vibrancy behind a transparent webview on both platforms.
+- **Window:** Tauri `titleBarStyle: "Overlay"`, transparent, with the traffic lights inset into the sidebar
+  (`trafficLightPosition` 20, 28: centered on the 52px toolbar line). `app/src-tauri/src/window.rs` puts the macOS
+  sidebar material (`window-vibrancy`, `NSVisualEffectMaterial::Sidebar`, dims when inactive) behind the webview and
+  sets `data-vibrancy` on the root; only then is the page background transparent, so `--sidebar` shows the material
+  and the main area paints `--paper`. Without it the sidebar is `--sidebar` over paper. Verified on macOS 26; the
+  window's appearance follows the app theme so the material matches. Windows (Mica) is unverified until M7.
+- **Dragging:** the `Toolbar` (`data-tauri-drag-region="deep"`: any empty part) and the sidebar's top 52px.
 - **One primary action per screen**, in the toolbar's trailing edge, with its key.
 - **Keys:** every row action has a key; the sticky key footer lists the screen's keys.
-- **Compact (iOS, narrow windows under 960px):** the sidebar collapses to a sheet, the desk becomes a tab.
+- **Compact (iOS, narrow windows under 960px):** the sidebar collapses to a sheet (the toolbar's sidebar button,
+  Esc or a click outside closes it), the desk becomes a tab.
 
 ### Screen recipes
 
 | Screen | Composition |
 |---|---|
-| Job (empty) | `.empty` centered on paper: "No postings yet", one sentence, **Paste from clipboard** `V` |
+| Job (empty) | `Empty` centered on paper: "No postings yet", one sentence, **Paste from clipboard** `V` |
 | Job → Review | As the specimen: job header (badge, meta, headline), score, skill chips, change groups, key footer; desk with page |
 | Experience bank | Column: entries grouped by section with tag filter chips; selecting an entry opens its editor (bullets as rows with variants); desk previews the entry in the default template |
 | Masters | Column: a master's sections as checkbox rows over the bank, drag to order; desk previews the resolved master |
-| Applications | Full-width table on `--surface`: tabular numbers, status as `.badge`, row hover wash, no zebra stripes |
-| Settings | Single column of cards (max 640): agents with signed-in `.badge`, models, export folder, theme `.seg` (Light, Dark, System) |
+| Applications | Full-width `Table` on `--surface`: tabular numbers, status as a `Badge`, row hover wash, no zebra stripes |
+| Settings | Single column of cards (max 640): agents with signed-in `Badge`, models, export folder, theme `Segmented` (Light, Dark, System) |
 
 ## Voice
 
@@ -197,8 +212,8 @@ Short, specific, sentence case. Say what happened and what to do next: "Left out
 
 ## Adding a feature or screen
 
-1. Compose from the components table. If something's missing, add the primitive to `components.css` and every state
-   to `specimen.html` first.
+1. Compose from `$lib/ui` (the components table). If something's missing, add the primitive to `app/src/lib/ui/`
+   (export it from `index.ts`) and every state to the `/specimen` route first.
 2. Need a value that isn't a token? Use the nearest token. If none fits, add a token to `tokens.css` (both themes)
    and a row in this document, with the reason.
 3. `node design/lint.mjs` exits 0.

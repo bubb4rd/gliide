@@ -14,6 +14,7 @@ clap = { version = "4", features = ["derive"] }
 resume-core = { path = "../resume-core" }
 resume-ingest = { path = "../resume-ingest" }
 resume-llm = { path = "../resume-llm" }
+resume-pipeline = { path = "../resume-pipeline" }
 resume-render = { path = "../resume-render" }
 resume-tailor = { path = "../resume-tailor" }
 serde = "1"

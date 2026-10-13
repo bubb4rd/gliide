@@ -218,6 +218,76 @@ pub struct Draft {
     pub custom: Vec<Change>,
 }
 
+/// One step of your work on a draft. A draft is stored as its append-only event log, so undo and redo move a cursor
+/// over the log and [`Draft::replay`] rebuilds the draft from the events before it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DraftEvent {
+    /// Your choice on a change; `None` goes back to the default.
+    Decide {
+        key: String,
+        decision: Option<Decision>,
+    },
+    /// Your wording for a change; `None` goes back to the suggested wording.
+    Word { key: String, text: Option<String> },
+    /// One of your own edits (`origin: yours`), added in; an edit with the same key is replaced where it stands.
+    AddCustom { change: Change },
+    /// One of your own edits removed, with your decision and wording on it.
+    RemoveCustom { key: String },
+    /// Several events from one action of yours (a skill chip that turns off every change adding it), so one undo
+    /// takes them all back.
+    Batch { events: Vec<DraftEvent> },
+}
+
+impl Draft {
+    /// The draft `events` make, in order, from an empty one.
+    pub fn replay(events: &[DraftEvent]) -> Self {
+        let mut draft = Self::default();
+        for e in events {
+            draft.apply(e);
+        }
+        draft
+    }
+
+    /// Applies one event.
+    pub fn apply(&mut self, event: &DraftEvent) {
+        match event {
+            DraftEvent::Decide { key, decision } => match decision {
+                Some(d) => {
+                    self.decisions.insert(key.clone(), *d);
+                }
+                None => {
+                    self.decisions.remove(key);
+                }
+            },
+            DraftEvent::Word { key, text } => match text {
+                Some(t) => {
+                    self.wording.insert(key.clone(), t.clone());
+                }
+                None => {
+                    self.wording.remove(key);
+                }
+            },
+            DraftEvent::AddCustom { change } => {
+                match self.custom.iter_mut().find(|c| c.key == change.key) {
+                    Some(c) => *c = change.clone(),
+                    None => self.custom.push(change.clone()),
+                }
+            }
+            DraftEvent::RemoveCustom { key } => {
+                self.custom.retain(|c| &c.key != key);
+                self.decisions.remove(key);
+                self.wording.remove(key);
+            }
+            DraftEvent::Batch { events } => {
+                for e in events {
+                    self.apply(e);
+                }
+            }
+        }
+    }
+}
+
 /// Whether a change is in the tailored resume, and why not.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -233,4 +303,62 @@ pub enum State {
     Forced {
         warning: Option<String>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn custom(item: &str) -> Change {
+        Change::new(
+            Op::SkillAdd {
+                group: "tools".into(),
+                item: item.into(),
+            },
+            Origin::Yours,
+            String::new(),
+            vec![item.into()],
+            String::new(),
+            1,
+            "skills".into(),
+        )
+    }
+
+    #[test]
+    fn replay_rebuilds_each_step_and_removal_forgets_its_choices() {
+        let kafka = custom("Kafka");
+        let events = [
+            DraftEvent::Decide {
+                key: "a".into(),
+                decision: Some(Decision::Off),
+            },
+            DraftEvent::AddCustom {
+                change: kafka.clone(),
+            },
+            DraftEvent::Word {
+                key: kafka.key.clone(),
+                text: Some("Apache Kafka".into()),
+            },
+            DraftEvent::Decide {
+                key: kafka.key.clone(),
+                decision: Some(Decision::On),
+            },
+            DraftEvent::RemoveCustom {
+                key: kafka.key.clone(),
+            },
+            DraftEvent::Decide {
+                key: "a".into(),
+                decision: None,
+            },
+        ];
+
+        // Undo to after the wording: the custom change and its wording, `a` still off.
+        let mid = Draft::replay(&events[..3]);
+        assert_eq!(mid.custom, vec![kafka.clone()]);
+        assert_eq!(mid.wording[&kafka.key], "Apache Kafka");
+        assert_eq!(mid.decisions["a"], Decision::Off);
+
+        // The whole log: the removed change takes its decision and wording with it; `a` is back to the default.
+        assert_eq!(Draft::replay(&events), Draft::default());
+    }
 }

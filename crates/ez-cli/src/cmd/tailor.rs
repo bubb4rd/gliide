@@ -5,23 +5,19 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Context;
-use resume_core::candidates::bank_candidates;
 use resume_core::change::{Change, Draft, Mode, Op, State};
 use resume_core::changes::{changes_of, draft_changes};
-use resume_core::posting::text_hash;
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, resolve};
 use resume_llm::ClaudeCli;
 use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
 use resume_llm::suggest::{self, DEFAULT_SUGGEST_MODEL, SuggestInput};
+use resume_pipeline::{heading, mode_name, suggest_key, today};
 use resume_render::{FontOptions, Renderer};
 use resume_tailor::{Tailored, tailor};
 use serde::Serialize;
 
-use super::job::{self, Source, heading, runtime, today};
-
-/// Bank entries outside the master Suggest sees in bank-aware mode (ARCHITECTURE.md §2).
-const CANDIDATES: usize = 5;
+use super::job::{self, Source, runtime};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -76,10 +72,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let mode = Mode::from(args.mode);
     let resume =
         resolve(&bank, &master).with_context(|| format!("resolving master {}", master.id))?;
-    let candidates = match mode {
-        Mode::MasterOnly => Vec::new(),
-        Mode::BankAware => bank_candidates(&bank, &master, &req, CANDIDATES),
-    };
+    let candidates = resume_pipeline::candidates(&bank, &master, &req, mode);
     let input = SuggestInput {
         posting: &posting,
         requirements: &req,
@@ -89,7 +82,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     };
     let suggestions = rt.block_on(suggestions(&args, &input, mode))?;
 
-    let mut renderer = Renderer::new(&job::template(&master)?, FontOptions::default());
+    let mut renderer = Renderer::new(&resume_pipeline::template(&master)?, FontOptions::default());
     let start = Instant::now();
     let changes = changes_of(&suggestions, &bank, &master, &req, mode);
     let changes = draft_changes(&changes, &draft);
@@ -125,24 +118,13 @@ async fn suggestions(
     input: &SuggestInput<'_>,
     mode: Mode,
 ) -> anyhow::Result<Suggestions> {
-    let prompt = &text_hash(&format!("{}\n{}", suggest::PROMPT, suggest::SCHEMA))[..12];
-    let master = &text_hash(&suggest::input(&SuggestInput {
-        posting: &Posting::pasted(String::new()),
-        ..*input
-    }))[..12];
-    let mode_name = match mode {
-        Mode::MasterOnly => "master-only",
-        Mode::BankAware => "bank-aware",
-    };
+    let mode_name = mode_name(mode);
     let cached = args
         .source
         .cache
         .join("suggestions")
         .join(&args.model)
-        .join(format!(
-            "{}-{master}-{mode_name}-{prompt}.json",
-            &input.posting.hash[..16]
-        ));
+        .join(format!("{}.json", suggest_key(input, mode)));
     if !args.source.fresh && cached.exists() {
         eprintln!("suggestions: cached ({})", cached.display());
         return super::read_json(&cached);
