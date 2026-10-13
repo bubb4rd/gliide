@@ -1,9 +1,10 @@
-//! The easyshmeezy desktop app: Tauri commands over the resume crates (ARCHITECTURE.md, M4).
+//! The gliide desktop app: Tauri commands over the resume crates (ARCHITECTURE.md, M4).
 //!
 //! `commands` is the bridge; the modules under it hold the work and run without a webview (`App::open` with any
 //! [`state::Emit`]), which is how they're smoke-tested.
 
 mod commands;
+pub mod cover;
 pub mod dto;
 pub mod error;
 pub mod export;
@@ -65,7 +66,12 @@ pub fn run() {
             commands::export_pdf,
             commands::applications,
             commands::set_status,
+            commands::cover,
+            commands::write_cover,
+            commands::set_cover_part,
+            commands::rewrite_cover_paragraph,
+            commands::export_cover,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running easyshmeezy");
+        .expect("error while running gliide");
 }

@@ -118,9 +118,7 @@ impl Link {
                 };
                 format!("https://{host}/v0/postings/{company}/{id}")
             }
-            Self::Ashby { org, .. } => {
-                format!("https://api.ashbyhq.com/posting-api/job-board/{org}")
-            }
+            Self::Ashby { org, id } => format!("https://jobs.ashbyhq.com/{org}/{id}"),
             Self::Linkedin { id } => {
                 format!("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{id}")
             }
@@ -286,7 +284,7 @@ mod tests {
         );
         assert_eq!(
             l.request_url(),
-            "https://api.ashbyhq.com/posting-api/job-board/runpod"
+            "https://jobs.ashbyhq.com/runpod/b64a3935-931a-4b7f-9899-7ebe152164c5"
         );
     }
 

@@ -65,11 +65,11 @@ async fn greenhouse_api() {
 }
 
 #[tokio::test]
-async fn ashby_api_matches_the_job_on_the_board() {
+async fn ashby_job_page_names_the_company() {
     let p = ok_case("ashby-pariveda").await;
     assert_eq!(p.method, Method::Ashby);
     assert_eq!(p.title.as_deref(), Some("Entry-Level Software Engineer"));
-    assert_eq!(p.company, None);
+    assert_eq!(p.company.as_deref(), Some("Pariveda"));
     assert!(
         p.location
             .as_deref()
@@ -93,16 +93,34 @@ async fn ashby_api_matches_the_job_on_the_board() {
 }
 
 #[tokio::test]
-async fn ashby_job_missing_from_the_board_is_not_a_posting() {
-    let dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/ingest/ashby-pariveda");
-    let replay = Replay::load(&dir).unwrap();
+async fn ashby_link_with_tracking_query() {
+    let p = ok_case("ashby-spoton").await;
+    assert_eq!(p.method, Method::Ashby);
+    assert_eq!(p.title.as_deref(), Some("Associate Salesforce Engineer"));
+    assert_eq!(p.company.as_deref(), Some("SpotOn"));
+    assert_eq!(p.location.as_deref(), Some("Remote, United States"));
+    assert_eq!(
+        p.url.as_deref(),
+        Some("https://jobs.ashbyhq.com/spoton/cdd0a5c0-4e1f-462d-b92c-ab9e3fe1208d")
+    );
+    assert!(p.text.starts_with("About SpotOn\n"));
+    assert!(has_line(&p.text, "Summary"));
+}
+
+#[tokio::test]
+async fn ashby_closed_job_is_not_a_posting() {
+    let err = case("ashby-closed").await.unwrap_err();
     let gone = "https://jobs.ashbyhq.com/pariveda/00000000-0000-4000-8000-000000000000";
-    let err = read_with(&replay, gone).await.unwrap_err();
     assert!(
         matches!(&err, IngestError::NotAPosting { url, reason } if url == gone && reason.contains("may have closed")),
         "{err:?}"
     );
+}
+
+#[test]
+fn ashby_page_without_app_data_is_read_as_a_page() {
+    assert!(boards::ashby("<html><body><main>Jobs</main></body></html>").is_none());
+    assert!(boards::ashby("<script>window.__appData = {\"posting\": 1};</script>").is_none());
 }
 
 #[tokio::test]

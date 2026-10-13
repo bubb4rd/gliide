@@ -1,5 +1,5 @@
 [package]
-name = "easyshmeezy"
+name = "gliide"
 version = "0.1.0"
 description = "Tailor a one-page resume to a job posting, honestly"
 edition.workspace = true
@@ -7,7 +7,7 @@ publish.workspace = true
 
 [lib]
 # The `_lib` suffix keeps the lib name apart from the bin's (cargo#8519 on Windows).
-name = "easyshmeezy_lib"
+name = "gliide_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

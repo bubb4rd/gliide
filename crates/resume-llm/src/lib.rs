@@ -5,6 +5,7 @@
 //! errors, then the call fails with the raw text.
 
 mod claude;
+pub mod cover;
 pub mod extract;
 pub mod rewrite;
 pub mod suggest;

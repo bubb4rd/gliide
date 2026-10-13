@@ -1,4 +1,4 @@
-# easyshmeezy: architecture and plan
+# gliide: architecture and plan
 
 A desktop and mobile app that takes a job posting (link or text) and one of your master resumes, scores the fit,
 proposes the smallest set of honest edits that raise it, lets you accept, reject or edit each one with a click, and
@@ -21,7 +21,7 @@ through the subscription you already pay for.
 
 ## What changes from ATS Fit
 
-| ATS Fit | easyshmeezy | Why |
+| ATS Fit | gliide | Why |
 |---|---|---|
 | One `master.json` | An experience bank (everything you've done) and masters that select from it (SWE, IT, design…) | Relevant experience outside a master isn't lost |
 | `claude -p` only | `Llm` trait over your own agent CLIs: ACP agents (Codex, Gemini CLI, any registry agent) and `claude -p` | Your subscription, no API bill |
@@ -361,6 +361,13 @@ separately as "with near forms".
 
 Gaps you mark "I meet this off the resume" show as a separate `+n`, so the page score stays honest.
 
+**PDF read-back:** every number (and every change's points) is scored on its own compile's PDF, read back as an ATS
+would read the exported file: `resume_render::pdf_text` (pure Rust, over `hayro`) maps glyphs through their fonts'
+`ToUnicode` maps and lays them out in lines as PDFKit does. The format check fails for any matched skill that text
+lacks, e.g. `front-end` broken after its hyphen at a line end. The review's renderer remembers read-backs by compile,
+so a toggle rereads only resumes it hasn't seen. *On file* reads the exported file again: with PDFKit on macOS, with
+the same extractor elsewhere.
+
 **Best master:** every master's literal score against the requirements is computed in milliseconds and the best is
 preselected.
 
@@ -454,7 +461,7 @@ only the page count needs the loop.
 
 | Source | How |
 |---|---|
-| Pasted link | Board APIs where public (Greenhouse, Lever, Ashby job JSON), else schema.org `JobPosting` JSON-LD, else `<main>` text; LinkedIn search links rewritten to the job page, as in ATS Fit |
+| Pasted link | Board APIs where public (Greenhouse, Lever), Ashby's job page data (its board API has no company name), else schema.org `JobPosting` JSON-LD, else `<main>` text; LinkedIn search links rewritten to the job page, as in ATS Fit |
 | Pasted text | Used as is |
 | macOS | Global hotkey "evaluate clipboard"; share extension from Safari |
 | iOS | Share extension from Safari and the LinkedIn app (a native Swift target beside the Tauri app) |
@@ -464,7 +471,7 @@ only the page count needs the loop.
 
 | Where | What |
 |---|---|
-| App data `easyshmeezy.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings`, `requirements`, `analyses`, `drafts`, `applications`, `covers`, `settings` |
+| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings`, `requirements`, `analyses`, `drafts`, `applications`, `covers`, `settings` |
 | User-chosen folder (default `~/Documents/Resumes`) | Exported PDFs `<company>_<short_role>_<surname>_resume.pdf` (`-2`… when taken), `applications.csv` |
 | The agents' own config | Their sign-ins; the app stores none |
 
@@ -500,7 +507,7 @@ Compact layout (iOS, narrow windows): the preview becomes a tab.
 ## 10. Repository layout
 
 ```
-easyshmeezy/
+gliide/
   Cargo.toml                 workspace
   crates/
     resume-core/             bank/master types (serde + JSON Schema), resolve, ids, change engine, apply, matcher, score, validator
@@ -514,7 +521,7 @@ easyshmeezy/
   app/
     src-tauri/               Tauri commands over the crates (dto.rs → TypeScript bindings via ts-rs)
     src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen)
-  templates/                 *.typ + manifests; fonts/
+  templates/                 *.typ + manifests (classic-serif, cover-letter); fonts/
   design/                    DESIGN.md, tokens.css, lint.mjs, UI fonts
   prompts/                   extract, suggest, rewrite, import, cover (.md + .schema.json)
   data/aliases.json          skill alias dictionary
@@ -554,7 +561,7 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 fixture postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (waymark 74.2 → 84.2); a real bank with roles outside the master is needed to settle the mode experiment |
 | M4 macOS app (built; in use test) | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv` (ATS Fit's rows imported), agent settings; `resume-store` (SQLite), `resume-pipeline` | You use it instead of ATS Fit. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` give identical scores, states and points on the recorded fixtures |
 | M5 Experience | PDF/DOCX import into the bank, variants, second template (design track), the mode experiment's report | Decision on the default mode |
-| M6 Around the application | Cover letters (rewrite-with-note per paragraph); statuses, CSV and rewrite-with-note on bullets shipped in M4 | Parity with ATS Fit, plus tracking |
+| M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (ATS Fit's `cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Parity with ATS Fit, plus tracking |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
 | M8 Distribution | Signing, notarization, auto-update; labs' written OK for subscription use | Installable by someone else |
 

@@ -1,9 +1,9 @@
 //! Postings in (ARCHITECTURE.md §7): a pasted link is fetched and parsed, anything else is the posting's text.
 //!
-//! A link is read from the best source that has it: the Greenhouse, Lever or Ashby job APIs, LinkedIn's guest job
-//! page (search and feed links rewritten to the job), else the page's schema.org `JobPosting` JSON-LD, else the
-//! page's main text. Sites that refuse automated requests, or only show the posting in a browser, end in an error
-//! that says to paste the text instead.
+//! A link is read from the best source that has it: the Greenhouse or Lever job APIs, Ashby's job page data,
+//! LinkedIn's guest job page (search and feed links rewritten to the job), else the page's schema.org `JobPosting`
+//! JSON-LD, else the page's main text. Sites that refuse automated requests, or only show the posting in a browser,
+//! end in an error that says to paste the text instead.
 
 mod boards;
 mod fetch;
@@ -118,7 +118,10 @@ async fn read_link(
         Link::Lever { .. } => {
             boards::lever(&resp.body).ok_or_else(|| not_a_posting("Lever returned no posting"))?
         }
-        Link::Ashby { id, .. } => boards::ashby(&resp.body, id).map_err(|r| not_a_posting(&r))?,
+        Link::Ashby { .. } => match boards::ashby(&resp.body) {
+            Some(found) => found.map_err(|r| not_a_posting(&r))?,
+            None => page::read(&resp.body, MIN_PAGE_TEXT),
+        },
         Link::Linkedin { .. } => {
             let found = boards::linkedin(&resp.body).ok_or_else(|| IngestError::TooLittleText {
                 host: host.clone(),

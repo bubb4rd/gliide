@@ -1,5 +1,5 @@
 // The app's commands, typed. Every call goes through here; screens never call `invoke` themselves.
-// Types come from `bindings/` (generated from app/src-tauri/src/dto.rs by `cargo test -p easyshmeezy`).
+// Types come from `bindings/` (generated from app/src-tauri/src/dto.rs by `cargo test -p gliide`).
 // A failed command rejects with an `AppError` ({ kind, message }); show `message` as is.
 
 import { invoke } from "@tauri-apps/api/core";
@@ -9,6 +9,8 @@ import type { AgentStatus } from "./bindings/AgentStatus";
 import type { AppError } from "./bindings/AppError";
 import type { ApplicationRow } from "./bindings/ApplicationRow";
 import type { AppStatus } from "./bindings/AppStatus";
+import type { CoverPart } from "./bindings/CoverPart";
+import type { CoverView } from "./bindings/CoverView";
 import type { CustomEdit } from "./bindings/CustomEdit";
 import type { Decision } from "./bindings/Decision";
 import type { EditTargets } from "./bindings/EditTargets";
@@ -32,6 +34,8 @@ export type * from "./bindings/ChangeState";
 export type * from "./bindings/ChangeView";
 export type * from "./bindings/ChipState";
 export type * from "./bindings/ComponentView";
+export type * from "./bindings/CoverPart";
+export type * from "./bindings/CoverView";
 export type * from "./bindings/CustomEdit";
 export type * from "./bindings/Decision";
 export type * from "./bindings/EditTargets";
@@ -42,6 +46,7 @@ export type * from "./bindings/GapView";
 export type * from "./bindings/JobHead";
 export type * from "./bindings/JobRow";
 export type * from "./bindings/JobView";
+export type * from "./bindings/Letter";
 export type * from "./bindings/Library";
 export type * from "./bindings/MasterChoice";
 export type * from "./bindings/MasterRow";
@@ -111,6 +116,20 @@ export const rewrite = (review: string, key: string, note: string) =>
   invoke<Rewritten>("rewrite", { review, key, note });
 /** The PDF (no highlights) into the export folder, its application row, and the score read back from it. */
 export const exportPdf = (review: string) => invoke<Exported>("export_pdf", { review });
+
+// ── Cover letter (the open review's; each returns the letter, rendered) ──
+/** The letter and its page; `letter` is null until it's written. */
+export const cover = (review: string) => invoke<CoverView>("cover", { review });
+/** One model call: the whole letter from the tailored resume as the draft has it now and the posting. Emits `progress`. */
+export const writeCover = (review: string) => invoke<CoverView>("write_cover", { review });
+/** One part of the letter in your own words. */
+export const setCoverPart = (review: string, part: CoverPart, text: string) =>
+  invoke<CoverView>("set_cover_part", { review, part, text });
+/** One model call: paragraph `index` (from 0) rewritten per your note (may be empty). Emits `progress`. */
+export const rewriteCoverParagraph = (review: string, index: number, note: string) =>
+  invoke<CoverView>("rewrite_cover_paragraph", { review, index, note });
+/** The letter's PDF into the export folder, recorded on the posting's application. Refuses over one page. */
+export const exportCover = (review: string) => invoke<Exported>("export_cover", { review });
 
 // ── Applications ──
 export const applications = () => invoke<ApplicationRow[]>("applications");

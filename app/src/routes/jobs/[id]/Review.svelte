@@ -9,6 +9,7 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import Pencil from "@lucide/svelte/icons/pencil";
+  import PenLine from "@lucide/svelte/icons/pen-line";
   import Plus from "@lucide/svelte/icons/plus";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sparkles from "@lucide/svelte/icons/sparkles";
@@ -38,6 +39,7 @@
     toast,
   } from "$lib/ui";
   import AddEdit from "./AddEdit.svelte";
+  import Letter from "./Letter.svelte";
   import { Session } from "./session.svelte";
 
   let { job }: { job: string } = $props();
@@ -67,7 +69,13 @@
     extracting: "Reading the requirements…",
     suggesting: "Suggesting edits…",
     rewriting: "Rewriting the line…",
+    writing: "Writing the cover letter…",
+    revising: "Rewriting the paragraph…",
   } as const;
+  const TABS: { value: Tab; label: string }[] = [
+    { value: "resume", label: "Resume" },
+    { value: "cover", label: "Cover letter" },
+  ];
   const VERDICTS = {
     apply: { label: "Apply as is", tone: "accent" },
     tailor: { label: "Tailor first", tone: "accent" },
@@ -83,6 +91,7 @@
     { keys: ["R"], label: "Re-run" },
     { keys: ["⌘Z"], label: "Undo" },
     { keys: ["⇧⌘Z"], label: "Redo" },
+    { keys: ["Tab"], label: "Cover letter" },
   ];
 
   const review = $derived(s.review);
@@ -125,6 +134,38 @@
   let note = $state("");
   let zoom = $state(100);
   let pane = $state<"changes" | "preview">("changes");
+
+  // ── Resume | Cover letter ──
+  type Tab = "resume" | "cover";
+  let tab = $state<Tab>("resume");
+  const onCover = $derived(tab === "cover" && review !== null);
+  const letter = $derived(s.cover && s.cover.review === review?.id ? s.cover : null);
+  const letterFits = $derived(letter ? letter.pageCount <= 1 : true);
+  // The letter loads once per review, when its tab first shows.
+  let letterFor: string | null = null;
+  $effect(() => {
+    if (!onCover || !ready || !review || letterFor === review.id) return;
+    letterFor = review.id;
+    void s.loadCover();
+  });
+
+  function switchTab() {
+    if (review) tab = tab === "resume" ? "cover" : "resume";
+  }
+
+  function writeLetter() {
+    if (ready && s.drafting === null) void s.writeCover();
+  }
+
+  async function exportLetter() {
+    if (!ready || !letter?.letter) return;
+    const done = await s.exportCover();
+    if (!done) return;
+    toast(`Saved ${done.fileName}`, {
+      action: { label: "Show in Finder", run: () => revealItemInDir(done.path) },
+    });
+    void app.refreshApplications();
+  }
 
   // A new review (another master, mode, or a re-run) starts with nothing open.
   $effect(() => {
@@ -243,25 +284,31 @@
 
   $effect(() =>
     bindKeys({
+      // On the letter tab, ↑↓ and ⏎ belong to the letter's own bindings.
       ArrowDown: () => move(1),
       ArrowUp: () => move(-1),
       " ": (e) => {
-        if (interactive(e.target)) return false;
+        if (interactive(e.target) || onCover) return false;
         if (selected) void s.toggle(selected.key);
       },
       Enter: (e) => {
         if (interactive(e.target)) return false;
         startEdit(selected);
       },
-      a: () => void openPicker(),
-      e: () => void exportNow(),
-      r: rerun,
+      Tab: (e) => {
+        if (interactive(e.target) || !review) return false;
+        switchTab();
+      },
+      a: () => (onCover ? false : void openPicker()),
+      e: () => void (onCover ? exportLetter() : exportNow()),
+      r: () => (onCover ? false : rerun()),
+      w: () => (onCover ? writeLetter() : false),
       "mod+z": (e) => {
-        if (interactive(e.target)) return false;
+        if (interactive(e.target) || onCover) return false;
         void s.undo();
       },
       "shift+mod+z": (e) => {
-        if (interactive(e.target)) return false;
+        if (interactive(e.target) || onCover) return false;
         void s.redo();
       },
     }),
@@ -272,25 +319,40 @@
   {#snippet crumbs()}
     <a href="/jobs">Jobs</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{company}</b>
   {/snippet}
-  <Segmented
-    options={MODES}
-    value={s.mode ?? app.settings?.defaultMode ?? "bank-aware"}
-    label="Suggestions from"
-    disabled={!ready}
-    onchange={chooseMode}
-  />
-  <hr />
-  {#if masters.length}
-    <Menu
-      value={s.master ?? ""}
-      options={masters}
-      label="Master"
-      placement="bottom-end"
+  {#if onCover}
+    {#if letter?.letter}
+      <Button icon={PenLine} kbd="W" disabled={!ready || s.drafting !== null} onclick={writeLetter}
+        >Rewrite letter</Button
+      >
+    {/if}
+    <Button
+      variant="primary"
+      icon={Download}
+      kbd="E"
+      disabled={!ready || !letter?.letter || s.drafting !== null}
+      onclick={exportLetter}>Export letter</Button
+    >
+  {:else}
+    <Segmented
+      options={MODES}
+      value={s.mode ?? app.settings?.defaultMode ?? "bank-aware"}
+      label="Suggestions from"
       disabled={!ready}
-      onchange={chooseMaster}
+      onchange={chooseMode}
     />
+    <hr />
+    {#if masters.length}
+      <Menu
+        value={s.master ?? ""}
+        options={masters}
+        label="Master"
+        placement="bottom-end"
+        disabled={!ready}
+        onchange={chooseMaster}
+      />
+    {/if}
+    <Button variant="primary" icon={Download} kbd="E" disabled={!ready} onclick={exportNow}>Export</Button>
   {/if}
-  <Button variant="primary" icon={Download} kbd="E" disabled={!ready} onclick={exportNow}>Export</Button>
 </Toolbar>
 
 <div class={["split", shell.compact && "split--compact"]}>
@@ -333,7 +395,13 @@
       </div>
     {/if}
 
-    {#if s.running && !s.rewriting}
+    {#if review}
+      <div class="doc-tabs">
+        <Segmented options={TABS} bind:value={tab} label="Document" />
+      </div>
+    {/if}
+
+    {#if s.running && !s.rewriting && s.drafting === null}
       <div class="running">
         <Progress
           label={STAGES[s.running.stage]}
@@ -367,7 +435,9 @@
       </div>
     {/if}
 
-    {#if review && (s.phase === "ready" || s.phase === "suggesting")}
+    {#if onCover && ready}
+      <Letter {s} />
+    {:else if review && (s.phase === "ready" || s.phase === "suggesting")}
       <!-- While another master, mode or a re-run is suggesting, the current review stays, inert, under the progress. -->
       <div class={["review", !ready && "review--stale"]} inert={!ready}>
         {#key s.arrival}
@@ -595,9 +665,17 @@
         />
       </div>
     {/if}
-    <Desk pages={review?.pages ?? []} bind:zoom>
+    <Desk pages={onCover ? (letter?.pages ?? []) : (review?.pages ?? [])} bind:zoom>
       {#snippet status()}
-        {#if !review}
+        {#if onCover}
+          {#if !letter?.letter}
+            <Badge>No letter yet</Badge>
+          {:else if letterFits}
+            <Badge tone="gain" dot>Fits on 1 page</Badge>
+          {:else}
+            <Badge tone="warn" dot>{letter.pageCount} pages: over by {letter.pageCount - 1}</Badge>
+          {/if}
+        {:else if !review}
           <Badge>No preview yet</Badge>
         {:else if fits}
           <Badge tone="gain" dot>Fits on {review.pageLimit} page{review.pageLimit === 1 ? "" : "s"}</Badge>
@@ -605,7 +683,7 @@
           <Badge tone="warn" dot>{review.pageCount} pages: over by {review.pageCount - review.pageLimit}</Badge>
         {/if}
       {/snippet}
-      {#if review}Highlights show what changed{/if}
+      {#if onCover}{#if letter?.letter}Dated today{/if}{:else if review}Highlights show what changed{/if}
     </Desk>
   </div>
 </div>
@@ -650,6 +728,10 @@
   }
   .column .tabs {
     padding: 0;
+  }
+  .doc-tabs {
+    display: flex;
+    padding-inline: var(--space-1);
   }
   .row {
     display: flex;

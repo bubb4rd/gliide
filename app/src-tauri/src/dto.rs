@@ -1,7 +1,7 @@
 //! What crosses the bridge: every command's arguments and results, and the events the UI listens to.
 //!
 //! These are view models, not the core's types: the UI gets lines ready to show (a change's text with the terms to
-//! mark, its state and reason), never an `Op` to interpret. `cargo test -p easyshmeezy` regenerates their TypeScript
+//! mark, its state and reason), never an `Op` to interpret. `cargo test -p gliide` regenerates their TypeScript
 //! in `app/src/lib/api/bindings/` (ts-rs); the UI imports only those.
 
 use serde::{Deserialize, Serialize};
@@ -492,6 +492,47 @@ pub struct ApplicationRow {
     pub status: AppStatus,
 }
 
+// ── Cover letter ────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// The open review's cover letter: its parts and its page, rendered under the resume's letterhead.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CoverView {
+    /// The review (analysis) the letter belongs to.
+    pub review: String,
+    /// `None` until it's written.
+    pub letter: Option<Letter>,
+    /// One SVG document per page; empty without a letter.
+    pub pages: Vec<String>,
+    pub page_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Letter {
+    pub greeting: String,
+    /// 3 or 4 as written; yours to edit.
+    pub paragraphs: Vec<String>,
+    pub closing: String,
+    /// Words across the paragraphs (the prompt asks for 250–350).
+    pub words: u32,
+}
+
+/// One part of the letter, for `set_cover_part`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+#[ts(export)]
+pub enum CoverPart {
+    Greeting,
+    /// Paragraph `index`, from 0.
+    Paragraph {
+        index: u32,
+    },
+    Closing,
+}
+
 // ── Events ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// Event `progress`: a model call started for a job. The UI shows it until the command returns.
@@ -513,4 +554,8 @@ pub enum Stage {
     Extracting,
     Suggesting,
     Rewriting,
+    /// The cover letter, written whole.
+    Writing,
+    /// One paragraph of the cover letter, rewritten with a note.
+    Revising,
 }

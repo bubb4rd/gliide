@@ -1392,35 +1392,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
-name = "easyshmeezy"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "objc2",
- "objc2-foundation",
- "objc2-pdf-kit",
- "resume-core",
- "resume-ingest",
- "resume-llm",
- "resume-pipeline",
- "resume-render",
- "resume-store",
- "resume-tailor",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "thiserror 2.0.21",
- "tokio",
- "ts-rs",
- "uuid",
- "window-vibrancy",
-]
-
-[[package]]
 name = "ecow"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2195,6 +2166,35 @@ dependencies = [
  "skrifa",
  "smallvec",
  "vello_common 0.0.9",
+]
+
+[[package]]
+name = "gliide"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "objc2",
+ "objc2-foundation",
+ "objc2-pdf-kit",
+ "resume-core",
+ "resume-ingest",
+ "resume-llm",
+ "resume-pipeline",
+ "resume-render",
+ "resume-store",
+ "resume-tailor",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "thiserror 2.0.21",
+ "tokio",
+ "ts-rs",
+ "uuid",
+ "window-vibrancy",
 ]
 
 [[package]]
@@ -4837,6 +4837,8 @@ dependencies = [
 name = "resume-render"
 version = "0.1.0"
 dependencies = [
+ "hayro-interpret",
+ "kurbo",
  "resume-core",
  "serde",
  "serde_json",

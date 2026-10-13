@@ -1,4 +1,4 @@
-# easyshmeezy
+# gliide
 
 From a job posting to a tailored, one-page resume: score the fit against one of your master resumes, review honest
 edits (rewrites, skills, entries from your experience bank) with a click each, and export a PDF in your design.
@@ -13,10 +13,12 @@ Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 | [`AGENTS.md`](AGENTS.md) | Rules for coding agents working in this repo |
 
 The app (macOS): `cd app && pnpm install && pnpm tauri dev` (needs `cargo install tauri-cli --version "^2"` or the
-pnpm `tauri` script, and Claude Code signed in). Its data lives in `~/Library/Application Support/dev.bubb4rd.easyshmeezy/`;
+pnpm `tauri` script, and Claude Code signed in). Its data lives in `~/Library/Application Support/dev.bubb4rd.gliide/`;
 exports and `applications.csv` go to `~/Documents/Resumes` (Settings → Export folder). Release build:
-`pnpm tauri build`. After changing `app/src-tauri/src/dto.rs`, `cargo test -p easyshmeezy` regenerates the TypeScript
-bindings in `app/src/lib/api/bindings/`.
+`pnpm tauri build`. After changing `app/src-tauri/src/dto.rs`, `cargo test -p gliide` regenerates the TypeScript
+bindings in `app/src/lib/api/bindings/`. App icon: `pnpm tauri icon src-tauri/app-icon.png` from `app/` (the logo on
+macOS's 1024 grid: an 824 rounded square with a soft shadow); `src-tauri/icon-art.png` is the full-bleed art, for
+iOS's own mask later.
 
 Design specimen: **Specimen** in the app's sidebar (dev builds; the `/specimen` route).
 Design lint: `node design/lint.mjs`.

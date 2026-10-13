@@ -1,4 +1,4 @@
-# Paper & Ink: the easyshmeezy design system
+# Paper & Ink: the gliide design system
 
 Binding for every screen, page and component. When this document and a screen disagree, the screen is wrong.
 

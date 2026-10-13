@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    easyshmeezy_lib::run()
+    gliide_lib::run()
 }

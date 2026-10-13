@@ -35,7 +35,7 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         );
         if let Err(e) = applied {
             // Keep the opaque `--sidebar` fallback rather than showing the desktop through the window.
-            eprintln!("easyshmeezy: sidebar vibrancy unavailable ({e}); using the opaque sidebar");
+            eprintln!("gliide: sidebar vibrancy unavailable ({e}); using the opaque sidebar");
             window.eval("delete window.__EZ_VIBRANCY__; document.documentElement.removeAttribute('data-vibrancy');")?;
         }
     }

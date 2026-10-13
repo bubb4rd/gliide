@@ -5,6 +5,9 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+# PDF text read-back; already in the tree through typst-render, with the same (no default) features.
+hayro-interpret = { version = "0.7", default-features = false }
+kurbo = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

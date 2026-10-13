@@ -18,6 +18,7 @@ export { default as Marked } from "./Marked.svelte";
 export { default as Menu } from "./Menu.svelte";
 export { default as Nav } from "./Nav.svelte";
 export { default as NavItem } from "./NavItem.svelte";
+export { default as PartRow } from "./PartRow.svelte";
 export { default as Popover } from "./Popover.svelte";
 export { default as Progress } from "./Progress.svelte";
 export { default as ScoreHeader } from "./ScoreHeader.svelte";

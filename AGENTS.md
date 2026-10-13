@@ -1,4 +1,4 @@
-# easyshmeezy
+# gliide
 
 - Architecture and roadmap: `ARCHITECTURE.md`.
 - Any UI work (screens, components, styles, copy): `design/DESIGN.md` is binding. Read it and

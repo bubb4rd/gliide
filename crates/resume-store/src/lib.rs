@@ -1,5 +1,5 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
-//! applications and settings (ARCHITECTURE.md §8).
+//! cover letters, applications and settings (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -24,7 +24,7 @@ use uuid::Uuid;
 pub use csv::{applications_csv, parse_ats_fit_csv};
 
 /// Schema migrations in order; `PRAGMA user_version` counts the ones applied.
-const MIGRATIONS: &[&str] = &[include_str!("schema.sql")];
+const MIGRATIONS: &[&str] = &[include_str!("schema.sql"), include_str!("covers.sql")];
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -36,7 +36,9 @@ pub enum StoreError {
     Io(#[from] std::io::Error),
     #[error("no {what} `{id}` in the store")]
     NotFound { what: &'static str, id: String },
-    #[error("the store's schema (version {found}) is newer than this app's (version {known})")]
+    #[error(
+        "the data is from a newer gliide (schema version {found}; this app reads up to {known}): install the latest version"
+    )]
     TooNew { found: i64, known: i64 },
 }
 
@@ -168,6 +170,17 @@ pub struct Application {
     pub resume_path: Option<String>,
     pub cover_path: Option<String>,
     pub notes: String,
+    pub updated_at: String,
+}
+
+/// An analysis's cover letter: its parts as last written or edited.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cover {
+    pub id: String,
+    pub analysis_id: String,
+    pub greeting: String,
+    pub paragraphs: Vec<String>,
+    pub closing: String,
     pub updated_at: String,
 }
 
@@ -612,6 +625,67 @@ impl Store {
         let log = read_draft(&tx, analysis_id)?;
         tx.commit()?;
         Ok(log)
+    }
+
+    // Cover letters.
+
+    /// The analysis's cover letter, `None` until one is written.
+    pub fn cover(&self, analysis_id: &str) -> Result<Option<Cover>, StoreError> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT id, analysis_id, greeting, paragraphs, closing, updated_at FROM covers
+                 WHERE analysis_id = ?1",
+                [analysis_id],
+                |r| {
+                    Ok((
+                        Cover {
+                            id: r.get(0)?,
+                            analysis_id: r.get(1)?,
+                            greeting: r.get(2)?,
+                            paragraphs: Vec::new(),
+                            closing: r.get(4)?,
+                            updated_at: r.get(5)?,
+                        },
+                        r.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .optional()?;
+        row.map(|(c, paragraphs)| {
+            Ok(Cover {
+                paragraphs: from_json(&paragraphs)?,
+                ..c
+            })
+        })
+        .transpose()
+    }
+
+    /// Sets the analysis's cover letter (written, rewritten or edited): one per analysis, keeping its id.
+    pub fn put_cover(
+        &self,
+        analysis_id: &str,
+        greeting: &str,
+        paragraphs: &[String],
+        closing: &str,
+    ) -> Result<Cover, StoreError> {
+        let now = now();
+        self.conn.execute(
+            "INSERT INTO covers (id, analysis_id, greeting, paragraphs, closing, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+             ON CONFLICT (analysis_id) DO UPDATE SET greeting = excluded.greeting,
+                 paragraphs = excluded.paragraphs, closing = excluded.closing, updated_at = excluded.updated_at",
+            params![
+                new_id(),
+                analysis_id,
+                greeting,
+                serde_json::to_string(paragraphs)?,
+                closing,
+                now
+            ],
+        )?;
+        self.cover(analysis_id)?
+            .ok_or_else(|| not_found("cover", analysis_id))
     }
 
     // Applications.

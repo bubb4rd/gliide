@@ -233,6 +233,10 @@ fn print(
             "OVER THE PAGE LIMIT"
         }
     );
+    if let Some(f) = t.projected.components.iter().find(|c| c.id == "format") {
+        // Its last check is the PDF read-back's.
+        println!("format: {}", f.detail);
+    }
     let count = |f: fn(&State) -> bool| t.states.values().filter(|s| f(s)).count();
     println!(
         "{} change(s): {} in, {} forced, {} off, {} left out; {} flagged by the validator",

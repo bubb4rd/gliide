@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["greeting", "paragraphs", "closing"],
+  "properties": {
+    "greeting": { "type": "string" },
+    "paragraphs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": { "type": "string" }
+    },
+    "closing": { "type": "string" }
+  }
+}

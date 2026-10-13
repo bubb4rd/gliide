@@ -459,7 +459,7 @@ fn csv_rounds_scores_and_writes_status() {
 #[test]
 fn settings_and_reopening_a_file() {
     let dir = std::env::temp_dir().join(format!("resume-store-{}", std::process::id()));
-    let path = dir.join("nested").join("easyshmeezy.sqlite");
+    let path = dir.join("nested").join("gliide.sqlite");
     {
         let store = Store::open(&path).unwrap();
         assert_eq!(store.setting::<String>("theme").unwrap(), None);
@@ -474,5 +474,90 @@ fn settings_and_reopening_a_file() {
     );
     assert!(store.bank().unwrap().is_some());
     drop(store);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A store written before cover letters (schema version 1) opens with its data and gains `covers`.
+#[test]
+fn migrating_to_covers_keeps_the_data() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v1-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    let (bank, master) = jane();
+    let (posting_id, analysis_id) = {
+        let store = Store::open(&path).unwrap();
+        let bank_rev = store.put_bank(&bank).unwrap();
+        let master_rev = store.put_master(&master).unwrap();
+        let posting_id = store.put_posting(&posting("Backend engineer.")).unwrap();
+        let a = store
+            .put_analysis(&NewAnalysis {
+                posting_id: &posting_id,
+                bank_rev: &bank_rev,
+                master_id: &master.id,
+                master_rev: &master_rev,
+                mode: Mode::MasterOnly,
+                key: "k",
+                model: "sonnet",
+                suggestions: &suggestions(),
+                latency_ms: 15_000,
+            })
+            .unwrap();
+        store.push_draft_event(&a.id, &decide("b1")).unwrap();
+        store
+            .put_application(&Application {
+                posting_id: Some(posting_id.clone()),
+                ..app("a1", "2026-10-01", "Acme")
+            })
+            .unwrap();
+        store.put_setting("theme", &"dark").unwrap();
+        (posting_id, a.id)
+    };
+    // Back to version 1, as the M4 app left it.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("DROP TABLE covers; PRAGMA user_version = 1;")
+        .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.bank().unwrap().unwrap().1, bank);
+    assert_eq!(store.master(&master.id).unwrap().unwrap().1, master);
+    assert!(store.posting(&posting_id).unwrap().is_some());
+    assert_eq!(
+        store.latest_analysis(&posting_id).unwrap().unwrap().id,
+        analysis_id
+    );
+    let log = store.draft(&analysis_id).unwrap();
+    assert_eq!((log.events, log.cursor), (vec![decide("b1")], 1));
+    assert_eq!(store.applications().unwrap()[0].company, "Acme");
+    assert_eq!(
+        store.setting::<String>("theme").unwrap().as_deref(),
+        Some("dark")
+    );
+    assert_eq!(store.cover(&analysis_id).unwrap(), None);
+    let paragraphs = vec!["One.".to_owned(), "Two.".to_owned(), "Three.".to_owned()];
+    let first = store
+        .put_cover(
+            &analysis_id,
+            "Dear Acme Hiring Team,",
+            &paragraphs,
+            "Sincerely,",
+        )
+        .unwrap();
+    let edited = store
+        .put_cover(&analysis_id, "Dear Ms. Lee,", &paragraphs, "Sincerely,")
+        .unwrap();
+    assert_eq!(
+        (edited.id, edited.greeting.as_str()),
+        (first.id, "Dear Ms. Lee,")
+    );
+    assert_eq!(
+        store.cover(&analysis_id).unwrap().unwrap().paragraphs,
+        paragraphs
+    );
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 2);
     std::fs::remove_dir_all(&dir).unwrap();
 }

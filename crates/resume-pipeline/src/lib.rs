@@ -112,7 +112,8 @@ pub fn template(master: &Master) -> Result<Template, PipelineError> {
     }
 }
 
-/// The master resolved and rendered with the bundled fonts: the resume and its page facts for the score.
+/// The master resolved and rendered with the bundled fonts: the resume and its page facts for the score (page count
+/// and PDF read-back, as `resume_tailor` scores *now*).
 pub fn master_page(bank: &Bank, master: &Master) -> Result<(Resume, PageFacts), PipelineError> {
     let resume = resolve(bank, master)?;
     let template = template(master)?;
@@ -122,7 +123,7 @@ pub fn master_page(bank: &Bank, master: &Master) -> Result<(Resume, PageFacts), 
         pages: rendered.metrics.pages,
         page_limit: master.page_limit,
         ats_safe: template.manifest.ats_safe,
-        pdf_text: None,
+        pdf_text: Some(rendered.pdf_text()?),
     };
     Ok((resume, facts))
 }

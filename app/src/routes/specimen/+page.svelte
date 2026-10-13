@@ -42,6 +42,7 @@
     Menu,
     Nav,
     NavItem,
+    PartRow,
     Popover,
     Progress,
     ScoreHeader,
@@ -321,7 +322,7 @@
 <div class="scroll">
   <div class="spec">
     <header class="spec__head">
-      <p class="label">easyshmeezy design system</p>
+      <p class="label">gliide design system</p>
       <h1 class="headline">Paper &amp; Ink</h1>
       <p class="meta">
         Warm paper, graphite ink, one cobalt accent. A serif for the numbers and titles you read; Inter for everything
@@ -708,6 +709,44 @@
       </Card>
     </section>
 
+    <!-- ═══════════ Part rows ═══════════ -->
+    <section class="section">
+      <h2 class="title">Part rows</h2>
+      <p class="meta lede">
+        The parts of a cover letter, edited in place. Like change rows without the checkbox: actions show on hover,
+        focus or selection; a part being rewritten stays, dimmed, under its progress.
+      </p>
+      <Card>
+        <div class="rows">
+          <GroupHead label="Letter" meta="312 words · 4 paragraphs" />
+          {#snippet greeting()}Dear Acme Hiring Team,{/snippet}
+          {#snippet para()}At Acme Widgets I built the REST APIs and webhooks behind the order API, and cut its p95
+            latency from 900 ms to 240 ms with a Redis cache.{/snippet}
+          {#snippet partActs()}
+            <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎">Edit</Button>
+          {/snippet}
+          {#snippet paraActs()}
+            <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎">Edit</Button>
+            <Button variant="ghost" size="sm" icon={Sparkles} kbd="N">Rewrite with a note</Button>
+          {/snippet}
+          <PartRow label="Greeting" text={greeting} actions={partActs} />
+          <PartRow label="Paragraph 2 · selected: actions show" selected text={para} actions={paraActs} />
+          <PartRow label="Paragraph 3 · being rewritten" busy text={para} />
+          <div class="part-progress">
+            <Progress label="Rewriting the paragraph…" expectedMs={15000} oncancel={() => {}} />
+          </div>
+          {#snippet partEditor()}
+            <Textarea
+              size="lg"
+              value="At Acme Widgets I built the REST APIs and webhooks behind the order API."
+              aria-label="Your wording"
+            />
+          {/snippet}
+          <PartRow label="Paragraph 4 · editing: ⏎ saves, Esc cancels" selected text={para} editor={partEditor} />
+        </div>
+      </Card>
+    </section>
+
     <!-- ═══════════ Score ═══════════ -->
     <section class="section">
       <h2 class="title">Score</h2>
@@ -1080,6 +1119,9 @@
   .rows {
     display: grid;
     padding: 0 var(--space-2) var(--space-2);
+  }
+  .part-progress {
+    padding: 0 var(--space-3) var(--space-3);
   }
   .table {
     overflow: hidden;

@@ -1,4 +1,4 @@
-//! Job board APIs: Greenhouse, Lever, Ashby, and LinkedIn's guest job page.
+//! Job board APIs and pages: Greenhouse, Lever, Ashby, and LinkedIn's guest job page.
 
 use scraper::{Html, Selector};
 use serde::Deserialize;
@@ -87,56 +87,61 @@ pub(crate) fn lever(body: &str) -> Option<Found> {
     })
 }
 
-/// `api.ashbyhq.com/posting-api/job-board/{org}`: every listed job of the board; the one with `id` is the posting.
-/// The API doesn't name the company. `Err` says why there is no posting.
-pub(crate) fn ashby(body: &str, id: &str) -> Result<Found, String> {
+/// Ashby's job page (`jobs.ashbyhq.com/{org}/{id}`): its `window.__appData` names the organization and holds the
+/// posting. Ashby's public board API names no company and lists only listed jobs, so the page is read instead.
+/// `None` when the page carries no app data in this shape (then it's read like any other page); `Err` says why there
+/// is no posting.
+pub(crate) fn ashby(body: &str) -> Option<Result<Found, String>> {
     #[derive(Deserialize)]
-    struct Board {
-        jobs: Vec<Job>,
+    struct AppData {
+        organization: Option<Org>,
+        posting: Option<Job>,
+    }
+    #[derive(Deserialize)]
+    struct Org {
+        name: Option<String>,
     }
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Job {
-        id: String,
         title: String,
-        location: Option<String>,
+        location_name: Option<String>,
         #[serde(default)]
-        secondary_locations: Vec<Secondary>,
+        secondary_location_names: Vec<String>,
         workplace_type: Option<String>,
-        job_url: Option<String>,
         #[serde(default)]
         description_html: String,
     }
-    #[derive(Deserialize)]
-    struct Secondary {
-        location: Option<String>,
-    }
-    let board: Board =
-        serde_json::from_str(body).map_err(|_| "Ashby returned no job board".to_owned())?;
-    let job = board
-        .jobs
+    const MARK: &str = "window.__appData";
+    let rest = &body[body.find(MARK)? + MARK.len()..];
+    let rest = rest.trim_start().strip_prefix('=')?;
+    // The object is followed by more script; read the first JSON value only.
+    let data: AppData = serde_json::Deserializer::from_str(rest)
         .into_iter()
-        .find(|j| j.id.eq_ignore_ascii_case(id))
-        .ok_or_else(|| {
-            "the job isn't on the company's Ashby board; it may have closed".to_owned()
-        })?;
+        .next()?
+        .ok()?;
+    let Some(job) = data.posting else {
+        return Some(Err(
+            "Ashby has no such job on the company's board; it may have closed".to_owned(),
+        ));
+    };
     let places: Vec<String> = job
-        .location
+        .location_name
         .into_iter()
-        .chain(
-            job.secondary_locations
-                .into_iter()
-                .filter_map(|s| s.location),
-        )
+        .chain(job.secondary_location_names)
         .collect();
-    Ok(Found {
+    Some(Ok(Found {
         method: Method::Ashby,
-        url: job.job_url,
+        url: None,
         title: clean(&job.title),
-        company: None,
+        company: data
+            .organization
+            .and_then(|o| o.name)
+            .as_deref()
+            .and_then(clean),
         location: place(&places, job.workplace_type.as_deref()),
         text: html_to_text(&job.description_html),
-    })
+    }))
 }
 
 /// LinkedIn's guest job page (`/jobs-guest/jobs/api/jobPosting/{id}`): a top card (title, company, place), the

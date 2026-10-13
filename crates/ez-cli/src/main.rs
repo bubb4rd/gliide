@@ -1,11 +1,11 @@
-//! `ez`: easyshmeezy's development CLI.
+//! `ez`: gliide's development CLI.
 
 mod cmd;
 
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "ez", about = "easyshmeezy development CLI")]
+#[command(name = "ez", about = "gliide development CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

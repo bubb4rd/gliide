@@ -3,7 +3,7 @@ name = "resume-ingest"
 version = "0.1.0"
 edition.workspace = true
 publish.workspace = true
-description = "Postings in for easyshmeezy: a job link fetched and parsed, or pasted text"
+description = "Postings in for gliide: a job link fetched and parsed, or pasted text"
 
 [dependencies]
 ego-tree = "0.11"

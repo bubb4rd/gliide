@@ -14,7 +14,7 @@ pub enum Method {
     Greenhouse,
     /// Lever postings API.
     Lever,
-    /// Ashby posting API.
+    /// Ashby's job page (the app data it embeds: company, title, locations, description).
     Ashby,
     /// LinkedIn's public job page (guest API).
     Linkedin,

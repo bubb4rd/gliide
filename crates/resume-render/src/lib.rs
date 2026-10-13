@@ -4,19 +4,24 @@
 //! A [`Renderer`] is long-lived: it keeps the parsed template and loaded fonts, and Typst's memoization makes a
 //! re-render after a small edit incremental.
 
+pub mod cover;
 mod fonts;
+mod readback;
 mod template;
 mod world;
+
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use typst::WorldExt;
 use typst::diag::{Severity, SourceDiagnostic};
 use typst::foundations::{Dict, IntoValue, Label, Selector};
 use typst::introspection::{Introspector, MetadataElem};
-use typst::utils::{PicoStr, Scalar};
+use typst::utils::{PicoStr, Scalar, hash128};
 use typst_layout::PagedDocument;
 
 pub use fonts::FontOptions;
+pub use readback::pdf_text;
 pub use template::{Manifest, Template};
 use world::ResumeWorld;
 
@@ -33,6 +38,8 @@ pub enum RenderError {
     Png(String),
     #[error("template metadata: {0}")]
     Metrics(String),
+    #[error("PDF read-back: the exported PDF doesn't parse")]
+    ReadBack,
 }
 
 /// A wrapped-line count the template recorded: a bullet's or skills line's `id`, its `lines`, and `orig`, the count of
@@ -87,10 +94,17 @@ pub enum LineKind {
     Group,
 }
 
+/// Read-backs a [`Renderer`] remembers before it starts over: a review's toggles revisit the same resumes.
+const READ_BACKS: usize = 256;
+
 /// Compiles resumes through one template.
 pub struct Renderer {
     world: ResumeWorld,
     manifest: Manifest,
+    /// What a compile depends on besides its inputs: the template and the fonts.
+    id: u128,
+    /// PDF read-backs by [`Rendered::key`].
+    texts: HashMap<u128, String>,
 }
 
 impl Renderer {
@@ -98,6 +112,8 @@ impl Renderer {
         Self {
             world: ResumeWorld::new(&template.source, fonts::load(fonts)),
             manifest: template.manifest.clone(),
+            id: hash128(&(&template.source, fonts.system)),
+            texts: HashMap::new(),
         }
     }
 
@@ -120,7 +136,22 @@ impl Renderer {
             doc,
             metrics,
             warnings,
+            key: hash128(&(self.id, data, highlight)),
         })
+    }
+
+    /// [`Rendered::pdf_text`], remembered: a compile is a function of the template, fonts and inputs, and its PDF
+    /// carries no timestamp, so the same resume reads back the same text and each distinct one is read once.
+    pub fn pdf_text(&mut self, rendered: &Rendered) -> Result<String, RenderError> {
+        if let Some(text) = self.texts.get(&rendered.key) {
+            return Ok(text.clone());
+        }
+        let text = rendered.pdf_text()?;
+        if self.texts.len() >= READ_BACKS {
+            self.texts.clear();
+        }
+        self.texts.insert(rendered.key, text.clone());
+        Ok(text)
     }
 
     /// Every candidate's wrapped line count at the width of the line it targets, in order, from one compile in the
@@ -187,6 +218,8 @@ pub struct Rendered {
     pub metrics: Metrics,
     /// Compiler warnings, formatted.
     pub warnings: Vec<String>,
+    /// The compile's identity: its renderer's template and fonts, and its inputs.
+    key: u128,
 }
 
 impl Rendered {
@@ -198,6 +231,12 @@ impl Rendered {
     pub fn pdf(&self) -> Result<Vec<u8>, RenderError> {
         typst_pdf::pdf(&self.doc, &typst_pdf::PdfOptions::default())
             .map_err(|errs| RenderError::Pdf(errs.iter().map(|d| d.message.to_string()).collect()))
+    }
+
+    /// The text a parser reads back from [`Self::pdf`]'s bytes (see [`pdf_text`]): what the score's format check
+    /// looks for the matched skills in.
+    pub fn pdf_text(&self) -> Result<String, RenderError> {
+        pdf_text(self.pdf()?).ok_or(RenderError::ReadBack)
     }
 
     /// One SVG document per page.

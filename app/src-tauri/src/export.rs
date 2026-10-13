@@ -1,14 +1,18 @@
-//! Export and the applications log: the tailored PDF (no highlight) into the export folder, its text read back for
-//! the on-file score, the posting's application, and `applications.csv` mirrored from the store.
+//! Export and the applications log: the tailored PDF (no highlight) and the cover letter into the export folder, the
+//! resume's text read back for the on-file score, the posting's application, and `applications.csv` mirrored from the
+//! store.
 
 use std::path::{Path, PathBuf};
 
 use resume_core::{PageFacts, score};
 use resume_pipeline::today;
 use resume_store::{AppStatus, Application, applications_csv, parse_ats_fit_csv};
+use resume_tailor::Tailored;
 
+use crate::cover;
 use crate::dto::{ApplicationRow, Exported};
 use crate::error::{AppError, Result};
+use crate::review::Review;
 use crate::state::{App, lock};
 
 /// The log mirrored for spreadsheets, in the export folder.
@@ -50,17 +54,7 @@ pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
     // Before the PDF: an unreadable log stops the export rather than being overwritten after it.
     import_applications_csv(app)?;
 
-    let company = non_empty(&r.req.company)
-        .or(r.posting.posting.company.as_deref())
-        .unwrap_or("company");
-    let surname = r.bank.name.split_whitespace().last().unwrap_or("resume");
-    let stem = format!(
-        "{}_{}_{}_resume",
-        slug(company),
-        slug(non_empty(&r.req.short_role).unwrap_or("role")),
-        slug(surname)
-    );
-    let path = free_path(&dir, &stem);
+    let path = free_path(&dir, &file_stem(r, "resume"));
     std::fs::write(&path, t.rendered.pdf()?)?;
     let ats_safe = app.with_renderer(&r.master, |renderer| Ok(renderer.manifest().ats_safe))?;
     let on_file = pdf_text(&path).map(|text| {
@@ -75,42 +69,114 @@ pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
 
     let store = lock(&app.store);
     let previous = store.application_for_posting(&r.posting_id)?;
+    let fresh = new_application(r, t);
+    let base = match previous {
+        Some(p) => Application {
+            id: p.id,
+            date: p.date,
+            status: p.status,
+            cover_path: p.cover_path,
+            notes: p.notes,
+            ..fresh
+        },
+        None => fresh,
+    };
     let a = Application {
-        id: previous
-            .as_ref()
-            .map_or_else(|| uuid::Uuid::new_v4().to_string(), |a| a.id.clone()),
+        on_file,
+        resume_path: Some(path.display().to_string()),
+        ..base
+    };
+    store.put_application(&a)?;
+    drop(store);
+    recorded(app, r, a, &path, on_file)
+}
+
+/// Saves the open review's cover letter as a PDF in the export folder, records it on the posting's application (a new
+/// one when the resume wasn't exported yet) and rewrites `applications.csv`. Refuses a letter over one page.
+pub fn export_cover(app: &App, review: &str) -> Result<Exported> {
+    let slot = lock(&app.review);
+    let r = slot
+        .as_ref()
+        .filter(|r| r.id == review)
+        .ok_or_else(AppError::replaced)?;
+    let t = &r.last.as_ref().ok_or_else(AppError::replaced)?.t;
+    let letter = lock(&app.store)
+        .cover(&r.id)?
+        .ok_or_else(|| AppError::missing("Write the cover letter first"))?;
+    let (pages, pdf) = cover::render(app, r, &letter, |d| Ok((d.metrics.pages, d.pdf()?)))?;
+    if pages > 1 {
+        return Err(AppError::other(format!(
+            "The letter runs to {pages} pages: shorten a paragraph to fit one page"
+        )));
+    }
+    let dir = PathBuf::from(app.settings().export_dir);
+    std::fs::create_dir_all(&dir)?;
+    // Before the PDF: an unreadable log stops the export rather than being overwritten after it.
+    import_applications_csv(app)?;
+    let path = free_path(&dir, &file_stem(r, "cover_letter"));
+    std::fs::write(&path, pdf)?;
+
+    let store = lock(&app.store);
+    let previous = store.application_for_posting(&r.posting_id)?;
+    let a = Application {
+        cover_path: Some(path.display().to_string()),
+        ..previous.unwrap_or_else(|| new_application(r, t))
+    };
+    store.put_application(&a)?;
+    drop(store);
+    recorded(app, r, a, &path, None)
+}
+
+/// `<company>_<short_role>_<surname>_<kind>`, ATS Fit's file name for an export.
+fn file_stem(r: &Review, kind: &str) -> String {
+    let company = non_empty(cover::company(r)).unwrap_or("company");
+    let surname = r.bank.name.split_whitespace().last().unwrap_or("resume");
+    format!(
+        "{}_{}_{}_{kind}",
+        slug(company),
+        slug(non_empty(&r.req.short_role).unwrap_or("role")),
+        slug(surname)
+    )
+}
+
+/// A new application for the review's posting: dated today, `saved`, with the review's scores now and projected and
+/// no files yet.
+fn new_application(r: &Review, t: &Tailored) -> Application {
+    Application {
+        id: uuid::Uuid::new_v4().to_string(),
         posting_id: Some(r.posting_id.clone()),
         analysis_id: Some(r.id.clone()),
-        date: previous.as_ref().map_or_else(
-            || chrono::Local::now().format("%Y-%m-%d").to_string(),
-            |a| a.date.clone(),
-        ),
-        company: non_empty(&r.req.company).unwrap_or(company).to_owned(),
-        role: non_empty(&r.req.role)
-            .or(r.posting.posting.title.as_deref())
-            .unwrap_or_default()
-            .to_owned(),
+        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        company: non_empty(cover::company(r)).unwrap_or("company").to_owned(),
+        role: cover::role(r).to_owned(),
         url: r
             .posting
             .posting
             .url
             .clone()
             .or_else(|| r.posting.posting.source.clone()),
-        status: previous.as_ref().map_or(AppStatus::Saved, |a| a.status),
+        status: AppStatus::Saved,
         now: Some(t.now.total),
         projected: Some(t.projected.total),
-        on_file,
-        resume_path: Some(path.display().to_string()),
-        cover_path: previous.as_ref().and_then(|a| a.cover_path.clone()),
-        notes: previous
-            .as_ref()
-            .map(|a| a.notes.clone())
-            .unwrap_or_default(),
+        on_file: None,
+        resume_path: None,
+        cover_path: None,
+        notes: String::new(),
         updated_at: String::new(),
-    };
-    store.put_application(&a)?;
-    let saved = store.application_for_posting(&r.posting_id)?.unwrap_or(a);
-    drop(store);
+    }
+}
+
+/// After an export stored `a`: `applications.csv` rewritten, and what the UI shows.
+fn recorded(
+    app: &App,
+    r: &Review,
+    a: Application,
+    path: &Path,
+    on_file: Option<f64>,
+) -> Result<Exported> {
+    let saved = lock(&app.store)
+        .application_for_posting(&r.posting_id)?
+        .unwrap_or(a);
     write_csv(app)?;
     Ok(Exported {
         file_name: path
@@ -244,7 +310,9 @@ fn free_path(dir: &Path, stem: &str) -> PathBuf {
     path
 }
 
-/// The PDF's text layer as PDFKit reads it (what Preview copies and many ATS parsers see).
+/// The text layer of the PDF file at `path`, for the on-file score: on macOS as PDFKit reads it (what Preview copies
+/// and many ATS parsers see), a reader independent of the read-back every other score uses, so on file checks the
+/// file itself.
 #[cfg(target_os = "macos")]
 pub fn pdf_text(path: &Path) -> Option<String> {
     use objc2::AllocAnyThread;
@@ -261,10 +329,12 @@ pub fn pdf_text(path: &Path) -> Option<String> {
     })
 }
 
-/// No PDF reader off macOS yet: the on-file score is unknown.
+/// The text layer of the PDF file at `path`, for the on-file score: off macOS, the file's bytes read back as every
+/// other score reads its compile (`resume_render::pdf_text`).
 #[cfg(not(target_os = "macos"))]
-pub fn pdf_text(_path: &Path) -> Option<String> {
-    None
+pub fn pdf_text(path: &Path) -> Option<String> {
+    let text = resume_render::pdf_text(std::fs::read(path).ok()?)?;
+    Some(text).filter(|t| !t.trim().is_empty())
 }
 
 #[cfg(test)]

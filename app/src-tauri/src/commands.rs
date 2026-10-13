@@ -6,11 +6,11 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::dto::{
-    AgentStatus, AppError, AppStatus, ApplicationRow, CustomEdit, Decision, EditTargets, Exported,
-    JobRow, JobView, Library, Mode, ReviewView, Rewritten, Settings,
+    AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit, Decision,
+    EditTargets, Exported, JobRow, JobView, Library, Mode, ReviewView, Rewritten, Settings,
 };
 use crate::state::{App, blocking};
-use crate::{export, jobs, library as lib, review, settings};
+use crate::{cover, export, jobs, library as lib, review, settings};
 
 type Res<T> = Result<T, AppError>;
 type St<'a> = State<'a, Arc<App>>;
@@ -175,4 +175,44 @@ pub async fn set_status(
         export::set_status(app, &application, status)
     })
     .await
+}
+
+// ── Cover letter ──
+
+#[tauri::command]
+pub async fn cover(app: St<'_>, review: String) -> Res<CoverView> {
+    blocking(&app, move |app| cover::cover_view(app, &review)).await
+}
+
+#[tauri::command]
+pub async fn write_cover(app: St<'_>, review: String) -> Res<CoverView> {
+    cover::write_cover(&app, &review).await
+}
+
+#[tauri::command]
+pub async fn set_cover_part(
+    app: St<'_>,
+    review: String,
+    part: CoverPart,
+    text: String,
+) -> Res<CoverView> {
+    blocking(&app, move |app| {
+        cover::set_cover_part(app, &review, part, &text)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn rewrite_cover_paragraph(
+    app: St<'_>,
+    review: String,
+    index: u32,
+    note: String,
+) -> Res<CoverView> {
+    cover::rewrite_cover_paragraph(&app, &review, index, note).await
+}
+
+#[tauri::command]
+pub async fn export_cover(app: St<'_>, review: String) -> Res<Exported> {
+    blocking(&app, move |app| export::export_cover(app, &review)).await
 }

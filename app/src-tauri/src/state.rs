@@ -23,7 +23,7 @@ use crate::export;
 use crate::review::Review;
 
 /// The store file inside the app's data folder.
-pub const STORE_FILE: &str = "easyshmeezy.sqlite";
+pub const STORE_FILE: &str = "gliide.sqlite";
 /// The settings' key in the store.
 const SETTINGS: &str = "settings";
 /// The template every master gets unless it names another (the only one so far).
@@ -126,7 +126,8 @@ impl App {
         let _ = self.with_renderer(&master, |_| Ok(()));
     }
 
-    /// `master` resolved against `bank` and rendered once per revision pair: the score's inputs for its page now.
+    /// `master` resolved against `bank` and rendered once per revision pair: the score's inputs for its page now (page
+    /// count and PDF read-back, as `resume_tailor` scores it).
     pub fn master_page(
         &self,
         bank_rev: &Rev,
@@ -140,9 +141,10 @@ impl App {
         }
         let resume = resolve(bank, master)?;
         let json = serde_json::to_string(&resume)?;
-        let (pages, ats_safe) = self.with_renderer(master, |r| {
+        let (pages, ats_safe, pdf_text) = self.with_renderer(master, |r| {
             let rendered = r.render(&json, false)?;
-            Ok((rendered.metrics.pages, r.manifest().ats_safe))
+            let text = r.pdf_text(&rendered)?;
+            Ok((rendered.metrics.pages, r.manifest().ats_safe, text))
         })?;
         let page = MasterPage {
             resume,
@@ -150,7 +152,7 @@ impl App {
                 pages,
                 page_limit: master.page_limit,
                 ats_safe,
-                pdf_text: None,
+                pdf_text: Some(pdf_text),
             },
         };
         lock(&self.pages).insert(key, page.clone());

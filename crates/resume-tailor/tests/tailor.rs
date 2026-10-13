@@ -3,7 +3,7 @@ use std::path::Path;
 use resume_core::change::{Change, Decision, Draft, Mode, Op, Origin, State};
 use resume_core::changes::changes_of;
 use resume_core::suggestions::Suggestions;
-use resume_core::{Bank, Master, Requirements, migrate_v1};
+use resume_core::{Bank, Master, PageFacts, Requirements, migrate_v1, resolve, resume_text, score};
 use resume_render::{FontOptions, Renderer, Template};
 use resume_tailor::{MAX_ROUNDS, Tailored, tailor};
 
@@ -310,6 +310,77 @@ fn scores_now_projected_ceiling_and_points() {
     let mongo_points = t.points[&changes[1].key];
     assert!(c_points > 0.0 && mongo_points > 0.0, "{:?}", t.points);
     assert!((t.projected.total - t.now.total - c_points).abs() < 0.11);
+}
+
+/// Every score reads the PDF back: a rewrite that brings in `front-end` where the page breaks it after the hyphen
+/// matches the term on the page but fails the format check, and its points carry both.
+#[test]
+fn scores_read_the_pdf_back() {
+    let (bank, master) = fixture();
+    let mut req: serde_json::Value = serde_json::from_str(REQ).unwrap();
+    req["skills"].as_array_mut().unwrap().push(serde_json::json!({
+        "term": "front-end", "aliases": [], "kind": "hard", "priority": 2, "required": false, "group": null
+    }));
+    let req: Requirements = serde_json::from_value(req).unwrap();
+    let mut r = Renderer::new(&Template::classic_serif(), FontOptions::default());
+    // The first bullet's rewrite, padded until its line breaks after `front-`.
+    let text = (0..60)
+        .map(|pad| {
+            format!(
+                "Worked closely with the team{} and built the front-end",
+                " daily".repeat(pad)
+            )
+        })
+        .find(|text| {
+            let mut resume = resolve(&bank, &master).unwrap();
+            resume.sections[0].entries[0].bullets[0].text = text.clone();
+            let rendered = r
+                .render(&serde_json::to_string(&resume).unwrap(), false)
+                .unwrap();
+            r.pdf_text(&rendered).unwrap().contains("front-\nend")
+        })
+        .expect("some padding breaks the line after `front-`");
+    let bullet = resolve(&bank, &master).unwrap().sections[0].entries[0].bullets[0]
+        .id
+        .clone();
+    let changes = [change(rewrite(&bullet, &text), 1)];
+    let t = tailor(
+        &bank,
+        &master,
+        &req,
+        &changes,
+        &Draft::default(),
+        &mut r,
+        TODAY,
+    )
+    .unwrap();
+    assert_eq!(t.states[&changes[0].key], State::In);
+
+    let format = |s: &resume_core::Score| {
+        s.components
+            .iter()
+            .find(|c| c.id == "format")
+            .unwrap()
+            .detail
+            .clone()
+    };
+    assert!(format(&t.now).ends_with("PDF text carries every matched skill"));
+    assert!(format(&t.ceiling).ends_with("PDF text lacks: front-end"));
+    assert!(format(&t.projected).ends_with("PDF text lacks: front-end"));
+    // The page's own text would have passed.
+    let own = PageFacts {
+        pages: t.rendered.metrics.pages,
+        page_limit: master.page_limit,
+        ats_safe: true,
+        pdf_text: Some(resume_text(&t.resume)),
+    };
+    assert!(t.projected.total < score(&t.resume, &req, &own, TODAY).total);
+    // Its points are measured against the same read-back: projected minus the master's score.
+    let points = t.points[&changes[0].key];
+    assert!(
+        (t.projected.total - t.now.total - points).abs() < 0.11,
+        "{points}"
+    );
 }
 
 /// Recorded Suggest outputs for the jane-doe master, through `changes_of` and the fit check: every one fits its page.

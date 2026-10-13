@@ -6,20 +6,27 @@ import {
   addEdit,
   appError,
   cancel,
+  cover,
   decide,
+  exportCover,
   exportPdf,
   onProgress,
   openJob,
   redo,
   removeEdit,
   rewrite,
+  rewriteCoverParagraph,
+  setCoverPart,
   setWording,
   startReview,
   toggleSkill,
   undo,
+  writeCover,
   type AppError,
   type ChangeState,
   type ChangeView,
+  type CoverPart,
+  type CoverView,
   type CustomEdit,
   type Decision,
   type Exported,
@@ -72,6 +79,10 @@ export class Session {
   pending = $state(0);
   /** Bumped when a review arrives from Suggest (not from an edit): the column enters once per arrival. */
   arrival = $state(0);
+  /** The open review's cover letter, once loaded for it. */
+  cover = $state<CoverView | null>(null);
+  /** A model call on the letter: the whole letter, or paragraph `n` (from 0). */
+  drafting = $state<"letter" | number | null>(null);
 
   /** Reports a command's failure (the screen toasts it). */
   onerror: (e: AppError) => void = () => {};
@@ -205,6 +216,62 @@ export class Session {
       } catch (e) {
         if (this.#alive) this.#report(appError(e));
         return null;
+      }
+    });
+  }
+
+  // ── Cover letter ──
+
+  /** Loads the open review's letter (and its page). */
+  loadCover() {
+    return this.#letter((id) => cover(id));
+  }
+
+  /** One model call: the whole letter, written (again). */
+  writeCover() {
+    return this.#letter((id) => writeCover(id), "letter");
+  }
+
+  /** One part of the letter in your own words. */
+  setCoverPart(part: CoverPart, text: string) {
+    return this.#letter((id) => setCoverPart(id, part, text));
+  }
+
+  /** One model call: paragraph `index` rewritten per `note` (may be empty). */
+  rewriteParagraph(index: number, note: string) {
+    return this.#letter((id) => rewriteCoverParagraph(id, index, note), index);
+  }
+
+  exportCover(): Promise<Exported | null> {
+    return this.#queue(async () => {
+      const review = this.review;
+      if (!review || !this.#alive) return null;
+      try {
+        return await exportCover(review.id);
+      } catch (e) {
+        if (this.#alive) this.#report(appError(e));
+        return null;
+      }
+    });
+  }
+
+  /** A letter command for the open review; `drafting` marks a model call while it runs. Resolves true when it landed. */
+  #letter(call: (id: string) => Promise<CoverView>, drafting: "letter" | number | null = null) {
+    return this.#queue(async () => {
+      const review = this.review;
+      if (!review || !this.#alive || this.phase !== "ready") return false;
+      this.drafting = drafting;
+      try {
+        const next = await call(review.id);
+        if (!this.#alive || this.review?.id !== next.review) return false;
+        this.cover = next;
+        return true;
+      } catch (e) {
+        if (this.#alive) this.#report(appError(e));
+        return false;
+      } finally {
+        this.drafting = null;
+        if (drafting !== null) this.running = null;
       }
     });
   }

@@ -14,12 +14,14 @@
 //! compiles.
 //!
 //! **Scores.** *Now* is the master as rendered; *projected* the draft, fitted; *ceiling* every change the validator
-//! didn't flag (your decisions aside; bank changes included, which only bank-aware mode proposes), fitted.
+//! didn't flag (your decisions aside; bank changes included, which only bank-aware mode proposes), fitted. Each is
+//! scored with its compile's page count and PDF read-back ([`Renderer::pdf_text`]), so the format check sees what an
+//! ATS reads from the exported file.
 //!
 //! **Points** are a change's marginal value against the draft as fitted: for a change that is in, projected minus
 //! the score with only that change taken out; for one that isn't, the score with only that change put in minus
-//! projected. Each is measured, not estimated: `apply`, one compile for the page count, `score`; the fit check doesn't
-//! re-run, so a change that would push the page over shows its cost in the Format component.
+//! projected. Each is measured, not estimated: `apply`, one compile for the page count and PDF read-back, `score`;
+//! the fit check doesn't re-run, so a change that would push the page over shows its cost in the Format component.
 
 use std::collections::BTreeMap;
 
@@ -98,7 +100,7 @@ pub fn tailor(
     let mut compiles = Compiles::default();
     let now_page = renderer.render(&serde_json::to_string(&base)?, false)?;
     compiles.fit += 1;
-    let now = cx.score(&base, &now_page.metrics);
+    let now = cx.score(&base, &now_page, renderer)?;
 
     let edits: Vec<LineEdit> = changes.iter().map(|c| cx.line_edit(c)).collect();
     let after = changes
@@ -122,11 +124,11 @@ pub fn tailor(
         .map(|c| Slot::draft(c, draft.decisions.get(&c.key).copied()))
         .collect();
     let drafted = cx.fit(changes, &edits, start, renderer, &mut compiles)?;
-    let projected = cx.score(&drafted.resume, &drafted.rendered.metrics);
+    let projected = cx.score(&drafted.resume, &drafted.rendered, renderer)?;
 
     let start = changes.iter().map(Slot::ceiling).collect();
     let ceiling_fit = cx.fit(changes, &edits, start, renderer, &mut compiles)?;
-    let ceiling = cx.score(&ceiling_fit.resume, &ceiling_fit.rendered.metrics);
+    let ceiling = cx.score(&ceiling_fit.resume, &ceiling_fit.rendered, renderer)?;
 
     let points = cx.points(
         changes,
@@ -267,14 +269,20 @@ struct Cx<'a> {
 }
 
 impl Cx<'_> {
-    fn score(&self, resume: &Resume, metrics: &Metrics) -> Score {
+    /// `resume`'s score as `rendered` puts it on the page: its page count and its PDF's text read back.
+    fn score(
+        &self,
+        resume: &Resume,
+        rendered: &Rendered,
+        renderer: &mut Renderer,
+    ) -> Result<Score, TailorError> {
         let facts = PageFacts {
-            pages: metrics.pages,
+            pages: rendered.metrics.pages,
             page_limit: self.master.page_limit,
             ats_safe: self.ats_safe,
-            pdf_text: None,
+            pdf_text: Some(renderer.pdf_text(rendered)?),
         };
-        score(resume, self.req, &facts, self.today)
+        Ok(score(resume, self.req, &facts, self.today))
     }
 
     fn apply<'c>(
@@ -543,7 +551,7 @@ impl Cx<'_> {
             };
             let rendered = renderer.render(&serde_json::to_string(&resume)?, false)?;
             compiles.points += 1;
-            let other = self.score(&resume, &rendered.metrics).total;
+            let other = self.score(&resume, &rendered, renderer)?.total;
             let gain = if on {
                 projected - other
             } else {

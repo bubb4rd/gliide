@@ -1,12 +1,14 @@
 //! Extract spike: Extract through `claude -p` on every fixture posting, sequentially, compared with a baseline run.
 //!
-//! `cargo run -p resume-llm --example spike -- [--model sonnet] [--only <id>] [--baseline <dir>] [--report]`
+//! `cargo run -p resume-llm --example spike -- [--model sonnet] [--only <id>] [--baseline <dir>] [--out <dir>]
+//! [--no-golden] [--report]`
 //!
-//! Each fixture becomes a `Posting`: front matter `method: pasted text` is pasted text with no metadata; any other
-//! method passes the front matter's title, company and location as hints. Writes each run to
-//! `local/m2/extract/<model>/<id>.json`, copies its output to `fixtures/requirements/<model>/<id>.json` (golden-test
-//! inputs), and rewrites `local/m2/extract/report.md`, comparing the runs recorded there with the baseline's (default
-//! `local/m0/sonnet`, the M0 spike's sonnet runs). `--report` only rewrites the report.
+//! Each fixture becomes a `Posting`: front matter `method: pasted text`, or no front matter, is pasted text with no
+//! metadata; any other method passes the front matter's title, company and location as hints. Writes each run to
+//! `<out>/<model>/<id>.json` (default out `local/m2/extract`), copies its output to
+//! `fixtures/requirements/<model>/<id>.json` (golden-test inputs) unless `--no-golden`, and rewrites
+//! `<out>/report.md`, comparing the runs recorded there with the baseline's (default `local/m0/sonnet`, the M0
+//! spike's sonnet runs). `--report` only rewrites the report.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -89,6 +91,8 @@ async fn main() {
     let mut model = DEFAULT_EXTRACT_MODEL.to_owned();
     let mut only = None;
     let mut baseline = root.join("local/m0/sonnet");
+    let mut out_dir = root.join("local/m2/extract");
+    let mut golden = true;
     let mut report_only = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -96,15 +100,17 @@ async fn main() {
             "--model" => model = args.next().expect("--model needs a name"),
             "--only" => only = Some(args.next().expect("--only needs an id")),
             "--baseline" => baseline = PathBuf::from(args.next().expect("--baseline needs a dir")),
+            "--out" => out_dir = PathBuf::from(args.next().expect("--out needs a dir")),
+            "--no-golden" => golden = false,
             "--report" => report_only = true,
             _ => panic!(
-                "unknown argument {a}; usage: spike [--model sonnet] [--only <id>] [--baseline <dir>] [--report]"
+                "unknown argument {a}; usage: spike [--model sonnet] [--only <id>] [--baseline <dir>] [--out <dir>] \
+                 [--no-golden] [--report]"
             ),
         }
     }
 
     let fixtures = fixtures(&root.join("fixtures/postings"));
-    let out_dir = root.join("local/m2/extract");
     let raw_dir = out_dir.join(&model);
     std::fs::create_dir_all(&raw_dir).unwrap();
 
@@ -124,7 +130,9 @@ async fn main() {
         eprintln!("claude: {}", provider.bin().display());
         let schema = extract::schema();
         let golden_dir = root.join("fixtures/requirements").join(&model);
-        std::fs::create_dir_all(&golden_dir).unwrap();
+        if golden {
+            std::fs::create_dir_all(&golden_dir).unwrap();
+        }
         for f in chosen {
             eprint!("{model} {} … ", f.id);
             let started = Instant::now();
@@ -165,7 +173,7 @@ async fn main() {
                 latency.as_secs_f64(),
                 first.map(|e| format!(" ({e})")).unwrap_or_default()
             );
-            if let (Some(v), true) = (&output, outcome != Outcome::Failed) {
+            if let (Some(v), true, true) = (&output, outcome != Outcome::Failed, golden) {
                 write_json(&golden_dir.join(format!("{}.json", f.id)), v);
             }
             let costs: Vec<f64> = attempts.iter().filter_map(|a| a.usage.cost_usd).collect();
@@ -225,8 +233,8 @@ fn fixtures(dir: &Path) -> Vec<Fixture> {
             };
             let id = field("id")
                 .unwrap_or_else(|| path.file_stem().unwrap().to_string_lossy().into_owned());
-            let method = field("method").unwrap_or_else(|| panic!("{id}: no method"));
-            let posting = match method_of(&method) {
+            let method = field("method").map_or(Method::Pasted, |m| method_of(&m));
+            let posting = match method {
                 Method::Pasted => Posting::pasted(body.to_owned()),
                 m => {
                     let source = field("source");
@@ -338,6 +346,9 @@ struct Metrics {
     /// Groups whose members disagree on `required` or `priority`.
     uneven_groups: Vec<String>,
     role: String,
+    title_terms: Vec<String>,
+    /// Title terms found neither in the role nor in the posting text, case-insensitively.
+    title_non_literal: Vec<String>,
     company: String,
     location: String,
     seniority: String,
@@ -407,6 +418,14 @@ fn measure(posting: &Posting, v: &Value) -> Metrics {
             .map(|(g, _)| g.clone())
             .collect(),
         groups,
+        title_terms: strings(&v["title_terms"]),
+        title_non_literal: strings(&v["title_terms"])
+            .into_iter()
+            .filter(|t| {
+                let t = t.to_lowercase();
+                !text.contains(&t) && !s("role").to_lowercase().contains(&t)
+            })
+            .collect(),
         role: s("role"),
         company: s("company"),
         location: s("location"),
@@ -430,6 +449,16 @@ fn measure(posting: &Posting, v: &Value) -> Metrics {
             .as_u64()
             .map_or("none".to_owned(), |y| y.to_string()),
     }
+}
+
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .map(|xs| {
+            xs.iter()
+                .filter_map(|x| x.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Whether a skill term describes the candidate ("Strong communicators", "Pragmatic self-starter").
@@ -644,6 +673,13 @@ fn render_report(
             m.role,
             empty(&m.company),
             empty(&m.location)
+        )
+    });
+    per_posting(&mut md, "Title terms · not in the role or text", &|m| {
+        format!(
+            "{} · not literal: {}",
+            cell(&m.title_terms),
+            cell(&m.title_non_literal)
         )
     });
     per_posting(&mut md, "Seniority · years · degree", &|m| {

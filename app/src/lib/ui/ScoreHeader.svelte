@@ -86,7 +86,7 @@
 </div>
 
 {#if components.length}
-  <Popover bind:open anchor={numbers} mode="manual" id="{id}-parts" role="tooltip" class="parts">
+  <Popover bind:open anchor={numbers} mode="manual" id="{id}-parts" role="tooltip">
     <div class="parts__body">
       <p class="label">What the score counts</p>
       {#each components as part (part.label)}
@@ -190,10 +190,9 @@
     font-weight: var(--weight-medium);
   }
 
-  :global(.parts) {
-    width: 320px;
-  }
+  /* Width on the body, not the popover: a global `.parts` rule would reach every screen's `.parts`. */
   .parts__body {
+    width: 320px;
     display: grid;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4) var(--space-4);
