@@ -5,9 +5,12 @@
 -->
 <script lang="ts">
   import { untrack } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import { page } from "$app/state";
   import Archive from "@lucide/svelte/icons/archive";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import ChevronsDownUp from "@lucide/svelte/icons/chevrons-down-up";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileText from "@lucide/svelte/icons/file-text";
@@ -176,6 +179,21 @@
     }),
   );
 
+  // Folded sections, as on the job screen (which remembers them in $lib/stores/folds; the specimen keeps its own).
+  const folded = new SvelteSet<string>();
+  const sections = $derived(["skills", ...groups.map((g) => g.label)]);
+  const allFolded = $derived(sections.every((id) => folded.has(id)));
+  function fold(ids: string[], on: boolean) {
+    for (const id of ids) {
+      if (on) folded.add(id);
+      else folded.delete(id);
+    }
+  }
+  const foldAll = () => fold(sections, !allFolded);
+  // GroupHead states, on their own.
+  let headFolded = $state(true);
+  let headOpen = $state(false);
+
   let selected = $state(0);
   let editing = $state<string | null>(null);
   let draft = $state("");
@@ -238,6 +256,7 @@
       Enter: () => startEdit(changes[selected]),
       a: () => (pickerOpen = true),
       e: exportDemo,
+      c: foldAll,
     }),
   );
 
@@ -255,13 +274,14 @@
     { label: "Format", value: 0, weight: 0.05, present: false, detail: "Not in the posting" },
   ];
   // Every command state: keys only (Select), can't run now (Toggle, Edit), runnable (Add your own, Export).
-  const reviewKeys: KeyCommand[] = [
+  const reviewKeys: KeyCommand[] = $derived([
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["Space"], label: "Toggle", run: () => {}, disabled: true },
     { keys: ["⏎"], label: "Edit", run: () => {}, disabled: true },
     { keys: ["A"], label: "Add your own", run: () => (pickerOpen = true) },
+    { keys: ["C"], label: allFolded ? "Expand all" : "Collapse all", run: foldAll },
     { keys: ["E"], label: "Export", run: exportDemo },
-  ];
+  ]);
 
   // ── States gallery ──
   let seg = $state("light");
@@ -465,100 +485,130 @@
                   </ScoreHeader>
                 </div>
 
+                <div class="fold-all enter" style:--i="2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={allFolded ? ChevronsUpDown : ChevronsDownUp}
+                    kbd="C"
+                    onclick={foldAll}>{allFolded ? "Expand all" : "Collapse all"}</Button
+                  >
+                </div>
+
                 <div class="skills enter" style:--i="2">
-                  <p class="label">Skills and Keywords</p>
-                  <div class="row">
-                    <Chip state="have" p1>React</Chip>
-                    <Chip state="have" p1>TypeScript</Chip>
-                    <Chip state="add" p1>REST APIs</Chip>
-                    <Chip state="add">CI/CD</Chip>
-                    <Chip state="have">Postgres</Chip>
-                    <Chip state="missing" p1>SQL Server</Chip>
-                    <Chip state="add">Code review</Chip>
-                    <Chip state="missing">Kafka</Chip>
-                    <Chip state="have">Git</Chip>
-                    <Chip state="not-mine">.NET</Chip>
+                  <GroupHead
+                    label="Skills and keywords"
+                    meta="7 of 10 on the page"
+                    collapsed={folded.has("skills")}
+                    controls="spec-fold-skills"
+                    ontoggle={(c) => fold(["skills"], c)}
+                  />
+                  <div class="fold" id="spec-fold-skills">
+                    {#if !folded.has("skills")}
+                      <div class="row chips">
+                        <Chip state="have" p1>React</Chip>
+                        <Chip state="have" p1>TypeScript</Chip>
+                        <Chip state="add" p1>REST APIs</Chip>
+                        <Chip state="add">CI/CD</Chip>
+                        <Chip state="have">Postgres</Chip>
+                        <Chip state="missing" p1>SQL Server</Chip>
+                        <Chip state="add">Code review</Chip>
+                        <Chip state="missing">Kafka</Chip>
+                        <Chip state="have">Git</Chip>
+                        <Chip state="not-mine">.NET</Chip>
+                      </div>
+                    {/if}
                   </div>
                 </div>
 
                 <div class="changes enter" style:--i="3">
-                  {#each groups as group (group.label)}
-                    <GroupHead label={group.label} meta={group.meta} />
-                    {#each group.rows as change (change.key)}
-                      {@const index = changes.indexOf(change)}
-                      {#snippet editor()}
-                        <Textarea
-                          size="lg"
-                          bind:value={draft}
-                          aria-label="Your wording"
-                          {@attach focus}
-                          onkeydown={(e) => {
-                            if (e.key === "Escape") editing = null;
-                            if (e.key === "Enter" && e.metaKey) saveEdit(change);
-                          }}
-                        />
-                      {/snippet}
-                      <ChangeRow
-                        state={change.state}
-                        checked={counted(change)}
-                        selected={index === selected}
-                        points={change.points}
-                        label={change.label}
-                        ontoggle={(on) => toggle(change, on)}
-                        onselect={() => (selected = index)}
-                        was={change.was}
-                        reason={change.reason}
-                        warning={change.warning}
-                        yours={change.yours}
-                        meta={change.meta}
-                        editor={editing === change.key ? editor : undefined}
-                      >
-                        {#snippet text()}<Marked text={change.text} marks={change.marks} />{/snippet}
-                        {#snippet actions()}
-                          {#if change.editable}
-                            <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(change)}
-                              >Edit</Button
-                            >
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={Sparkles}
-                              onclick={() => ((noting = change.key), (note = ""))}>Rewrite with a note</Button
-                            >
-                          {/if}
-                          {#if change.yours}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              square
-                              icon={X}
-                              aria-label="Remove your edit"
-                              onclick={() => changes.splice(changes.indexOf(change), 1)}
+                  {#each groups as group, g (group.label)}
+                    <GroupHead
+                      label={group.label}
+                      meta={group.meta}
+                      collapsed={folded.has(group.label)}
+                      controls="spec-fold-{g}"
+                      ontoggle={(c) => fold([group.label], c)}
+                    />
+                    <div class="fold" id="spec-fold-{g}">
+                      {#if !folded.has(group.label)}
+                        {#each group.rows as change (change.key)}
+                          {@const index = changes.indexOf(change)}
+                          {#snippet editor()}
+                            <Textarea
+                              size="lg"
+                              bind:value={draft}
+                              aria-label="Your wording"
+                              {@attach focus}
+                              onkeydown={(e) => {
+                                if (e.key === "Escape") editing = null;
+                                if (e.key === "Enter" && e.metaKey) saveEdit(change);
+                              }}
                             />
+                          {/snippet}
+                          <ChangeRow
+                            state={change.state}
+                            checked={counted(change)}
+                            selected={index === selected}
+                            points={change.points}
+                            label={change.label}
+                            ontoggle={(on) => toggle(change, on)}
+                            onselect={() => (selected = index)}
+                            was={change.was}
+                            reason={change.reason}
+                            warning={change.warning}
+                            yours={change.yours}
+                            meta={change.meta}
+                            editor={editing === change.key ? editor : undefined}
+                          >
+                            {#snippet text()}<Marked text={change.text} marks={change.marks} />{/snippet}
+                            {#snippet actions()}
+                              {#if change.editable}
+                                <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(change)}
+                                  >Edit</Button
+                                >
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  icon={Sparkles}
+                                  onclick={() => ((noting = change.key), (note = ""))}>Rewrite with a note</Button
+                                >
+                              {/if}
+                              {#if change.yours}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  square
+                                  icon={X}
+                                  aria-label="Remove your edit"
+                                  onclick={() => changes.splice(changes.indexOf(change), 1)}
+                                />
+                              {/if}
+                            {/snippet}
+                          </ChangeRow>
+                          {#if noting === change.key}
+                            <form
+                              class="note"
+                              onsubmit={(e) => {
+                                e.preventDefault();
+                                noting = null;
+                                toast("Rewrote the line from your note", { tone: "gain" });
+                              }}
+                            >
+                              <Input
+                                size="md"
+                                bind:value={note}
+                                placeholder="What should change? “Shorter”, “mention Kafka”…"
+                                aria-label="Note for the rewrite"
+                                {@attach focus}
+                                onkeydown={(e) => e.key === "Escape" && (noting = null)}
+                              />
+                              <Button type="submit" variant="primary" size="sm" disabled={!note.trim()}>Rewrite</Button>
+                            </form>
                           {/if}
-                        {/snippet}
-                      </ChangeRow>
-                      {#if noting === change.key}
-                        <form
-                          class="note"
-                          onsubmit={(e) => {
-                            e.preventDefault();
-                            noting = null;
-                            toast("Rewrote the line from your note", { tone: "gain" });
-                          }}
-                        >
-                          <Input
-                            size="md"
-                            bind:value={note}
-                            placeholder="What should change? “Shorter”, “mention Kafka”…"
-                            aria-label="Note for the rewrite"
-                            {@attach focus}
-                            onkeydown={(e) => e.key === "Escape" && (noting = null)}
-                          />
-                          <Button type="submit" variant="primary" size="sm" disabled={!note.trim()}>Rewrite</Button>
-                        </form>
+                        {/each}
                       {/if}
-                    {/each}
+                    </div>
                   {/each}
                 </div>
               {/key}
@@ -764,6 +814,24 @@
             <Textarea size="lg" value="Built REST APIs and webhooks for the order API" aria-label="Your wording" />
           {/snippet}
           <ChangeRow state="in" checked selected points={9} label="Editing" ontoggle={() => {}} text={line} editor={editingSnippet} meta="Editing: ⌘⏎ saves, Esc cancels" />
+        </div>
+      </Card>
+    </section>
+
+    <!-- ═══════════ Group heads ═══════════ -->
+    <section class="section">
+      <h2 class="title">Group heads</h2>
+      <p class="meta lede">
+        Plain (a letter's parts), or a toggle that folds its section: the whole head is the button, the chevron after
+        the label points down while open and right while folded, the meta stays. Hover lifts the label to ink 2.
+      </p>
+      <Card>
+        <div class="rows">
+          <GroupHead label="Letter" meta="312 words · 4 paragraphs" />
+          <GroupHead label="Work · Acme Widgets Co." meta="3 changes · +12" bind:collapsed={headOpen} controls="spec-head-open" />
+          <div id="spec-head-open">{#if !headOpen}<p class="meta demo-body">The group's rows.</p>{/if}</div>
+          <GroupHead label="Other lines" meta="6 lines as on the master" bind:collapsed={headFolded} controls="spec-head-folded" />
+          <div id="spec-head-folded">{#if !headFolded}<p class="meta demo-body">The group's rows.</p>{/if}</div>
         </div>
       </Card>
     </section>
@@ -1276,14 +1344,22 @@
     font-weight: var(--weight-medium);
     color: var(--ink-2);
   }
-  .skills {
-    display: grid;
-    gap: var(--space-3);
-    padding-inline: var(--space-1);
-  }
+  /* As the job screen: sections share the change groups' inset. */
+  .skills,
   .changes {
     display: grid;
     margin-inline: calc(var(--space-2) * -1);
+  }
+  .fold {
+    display: grid;
+  }
+  .chips {
+    padding: var(--space-2) var(--space-3) 0;
+  }
+  .fold-all {
+    display: flex;
+    justify-content: flex-end;
+    margin-block: calc(var(--space-3) * -1) calc(var(--space-4) * -1);
   }
   .note {
     display: flex;
@@ -1323,6 +1399,10 @@
   .rows {
     display: grid;
     padding: 0 var(--space-2) var(--space-2);
+  }
+  .demo-body {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
   }
   .part-progress {
     padding: 0 var(--space-3) var(--space-3);

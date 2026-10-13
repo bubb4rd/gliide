@@ -1,13 +1,17 @@
 <!--
   One job: its requirements (Extract), then the review (Suggest, then the fit check on every edit). The column holds
-  the job header, the score, the skill chips and the change groups; the desk shows the tailored pages live.
+  the job header, the score, the skill chips and the change groups; the desk shows the tailored pages live. Every
+  section folds from its head (remembered across jobs, `$lib/stores/folds`); Collapse all / Expand all (C) folds or
+  opens them together. ↑↓ skips what's folded.
 -->
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, type Snippet } from "svelte";
   import { goto } from "$app/navigation";
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
   import BookmarkPlus from "@lucide/svelte/icons/bookmark-plus";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import ChevronsDownUp from "@lucide/svelte/icons/chevrons-down-up";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import Download from "@lucide/svelte/icons/download";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -28,6 +32,7 @@
   import { bindKeys } from "$lib/keys";
   import { logo } from "$lib/logo.svelte";
   import { app } from "$lib/stores/app.svelte";
+  import { folds } from "$lib/stores/folds.svelte";
   import { shell } from "$lib/stores/shell.svelte";
   import {
     Badge,
@@ -119,6 +124,9 @@
     })),
   );
   const skills = $derived(review?.skills ?? s.view?.skills ?? []);
+  const skillsMeta = $derived(
+    `${skills.filter((c) => c.state === "have" || c.state === "add").length} of ${skills.length} on the page`,
+  );
   const rows = $derived(review?.groups.flatMap((g) => g.changes) ?? []);
   /** Lines no change touches ("Other lines"): edited or rewritten, each becomes your edit. */
   const others = $derived(review?.lines ?? []);
@@ -136,12 +144,32 @@
     return `${review.pageCount} pages: over by ${review.pageCount - limit}`;
   });
 
+  // ── Folding ──
+  /** Every section the review shows, by its `folds` id, top to bottom. */
+  const sections = $derived([
+    ...(skills.length ? ["skills"] : []),
+    ...(review?.groups.map((g) => `group:${g.id}`) ?? []),
+    ...(others.length ? ["lines"] : []),
+    ...(review?.gaps.length ? ["gaps"] : []),
+    ...(review?.knockouts.length ? ["knockouts"] : []),
+  ]);
+  const allFolded = $derived(sections.length > 0 && sections.every((id) => folds.has(id)));
+  /** Collapses every section, or opens them all once every one is folded. */
+  const foldAll = () => folds.set(sections, !allFolded);
+  /** Opens the group a change landed in, so you see it. */
+  function reveal(key: string) {
+    const group = review?.groups.find((g) => g.changes.some((c) => c.key === key));
+    if (group) folds.set([`group:${group.id}`], false);
+  }
+
   // ── Selection and editing ──
-  /** What ↑↓ moves through: every change, then every other line. */
+  /** What ↑↓ moves through: every change in an open group, then every other line while they're open. */
   type Item = { key: string; change: ChangeView; line?: never } | { key: string; line: LineView; change?: never };
   const items = $derived<Item[]>([
-    ...rows.map((change) => ({ key: change.key, change })),
-    ...others.map((line) => ({ key: lineKey(line), line })),
+    ...(review?.groups ?? [])
+      .filter((g) => !folds.has(`group:${g.id}`))
+      .flatMap((g) => g.changes.map((change) => ({ key: change.key, change }))),
+    ...(folds.has("lines") ? [] : others.map((line) => ({ key: lineKey(line), line }))),
   ]);
   let selectedKey = $state<string | null>(null);
   const selectedIndex = $derived(Math.max(0, items.findIndex((i) => i.key === selectedKey)));
@@ -281,12 +309,15 @@
     if (done) rewrote(done.flags);
   }
 
-  /** Runs `call`, then selects the change it added: the line's new row, in its section. */
+  /** Runs `call`, then selects the change it added: the line's new row, in its section (opened if folded). */
   async function landing<T>(call: () => Promise<T>): Promise<T> {
     const before = new Set(rows.map((c) => c.key));
     const done = await call();
     const fresh = rows.find((c) => !before.has(c.key));
-    if (fresh) selectedKey = fresh.key;
+    if (fresh) {
+      selectedKey = fresh.key;
+      reveal(fresh.key);
+    }
     return done;
   }
 
@@ -346,8 +377,11 @@
   }
 
   async function addOwn(edit: CustomEdit) {
+    const before = new Set(rows.map((c) => c.key));
     const ok = await s.add(edit);
     if (ok) pickerOpen = false;
+    // Your edit lands in its section's group: open it if it's folded.
+    for (const c of rows) if (!before.has(c.key)) reveal(c.key);
     return ok;
   }
 
@@ -391,6 +425,7 @@
       disabled: !ready || !selected?.savable,
     },
     { keys: ["A"], label: "Add your own", run: () => void openPicker(), disabled: !ready },
+    { keys: ["C"], label: allFolded ? "Expand all" : "Collapse all", run: foldAll, disabled: !review },
     { keys: ["E"], label: "Export", run: () => void exportNow(), disabled: !ready },
     { keys: ["R"], label: "Re-run", run: rerun, disabled: !ready },
     { keys: ["⌘Z"], label: "Undo", run: () => void s.undo(), disabled: !review?.canUndo },
@@ -438,6 +473,7 @@
         switchTab();
       },
       a: () => (onCover ? false : void openPicker()),
+      c: () => (onCover || !review ? false : foldAll()),
       n: () => (onCover || !ready || s.rewriting !== null ? false : noteSelected()),
       e: () => void (onCover ? exportLetter() : exportNow()),
       r: () => (onCover ? false : rerun()),
@@ -467,6 +503,12 @@
     app.deleteJob(current);
   }
 </script>
+
+<!-- A section's head folds it; its body stays, empty, as the target of the head's aria-controls. -->
+{#snippet foldable(id: string, label: string, meta: string, body: Snippet)}
+  <GroupHead {label} {meta} collapsed={folds.has(id)} controls="fold-{id}" ontoggle={(c) => folds.set([id], c)} />
+  <div class="fold" id="fold-{id}">{#if !folds.has(id)}{@render body()}{/if}</div>
+{/snippet}
 
 <Toolbar>
   {#snippet crumbs()}
@@ -645,20 +687,32 @@
             </ScoreHeader>
           </div>
 
+          <div class="fold-all enter" style:--i="1">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={allFolded ? ChevronsUpDown : ChevronsDownUp}
+              kbd="C"
+              onclick={foldAll}>{allFolded ? "Expand all" : "Collapse all"}</Button
+            >
+          </div>
+
           {#if skills.length}
             <div class="skills enter" style:--i="1">
-              <p class="label">Skills and Keywords</p>
-              <div class="row">
-                {#each skills as chip (chip.term)}
-                  <Chip
-                    state={chip.state}
-                    p1={chip.priority === 1}
-                    title={chip.locked ?? undefined}
-                    onclick={() => (chip.locked ? toast(chip.locked, { tone: "neutral" }) : s.skill(chip.term))}
-                    >{chip.term}</Chip
-                  >
-                {/each}
-              </div>
+              {#snippet chips()}
+                <div class="row chips">
+                  {#each skills as chip (chip.term)}
+                    <Chip
+                      state={chip.state}
+                      p1={chip.priority === 1}
+                      title={chip.locked ?? undefined}
+                      onclick={() => (chip.locked ? toast(chip.locked, { tone: "neutral" }) : s.skill(chip.term))}
+                      >{chip.term}</Chip
+                    >
+                  {/each}
+                </div>
+              {/snippet}
+              {@render foldable("skills", "Skills and keywords", skillsMeta, chips)}
             </div>
           {/if}
 
@@ -712,73 +766,77 @@
             {/snippet}
             {#each review.groups as group (group.id)}
               {@const noun = group.id === "bank" ? "suggestion" : "change"}
-              <GroupHead
-                label={group.label}
-                meta="{group.changes.length} {noun}{group.changes.length === 1 ? '' : 's'} · {signed(Math.round(group.points))}"
-              />
-              {#each group.changes as change (change.key)}
-                {#snippet editor()}{@render wording(() => saveEdit(change))}{/snippet}
-                <ChangeRow
-                  state={change.state}
-                  checked={counted(change)}
-                  selected={change.key === selected?.key}
-                  points={change.points}
-                  label={checkboxLabel(change)}
-                  ontoggle={() => s.toggle(change.key)}
-                  onselect={() => (selectedKey = change.key)}
-                  was={change.was}
-                  reason={change.reason}
-                  warning={change.warning}
-                  yours={change.yours}
-                  meta={change.meta || undefined}
-                  editor={editing === change.key ? editor : undefined}
-                >
-                  {#snippet text()}<span title={change.why || undefined}
-                      ><Marked text={change.text} marks={change.marks} /></span
-                    >{/snippet}
-                  {#snippet actions()}
-                    {#if change.editable}
-                      <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(change)}
-                        >Edit</Button
-                      >
-                    {/if}
-                    {#if change.rewritable}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Sparkles}
-                        kbd="N"
-                        disabled={s.rewriting !== null}
-                        onclick={() => startNote(change)}>Rewrite with a note</Button
-                      >
-                    {/if}
-                    {#if change.savable}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={BookmarkPlus}
-                        kbd="S"
-                        title="Keep this wording in your bank, as a variant of the bullet"
-                        onclick={() => keepWording(change)}>Save as variant</Button
-                      >
-                    {/if}
-                    {#if change.yours}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        square
-                        icon={change.custom ? X : RotateCcw}
-                        aria-label={change.custom ? "Remove your edit" : "Back to the suggested wording"}
-                        title={change.custom ? "Remove your edit" : "Back to the suggested wording"}
-                        onclick={() => s.remove(change)}
-                      />
-                    {/if}
-                  {/snippet}
-                </ChangeRow>
-                {@render noteFor(change.key, () => void sendNote(change))}
-              {:else}
-                <p class="meta quiet-row">No changes in this group.</p>
-              {/each}
+              {#snippet groupRows()}
+                {#each group.changes as change (change.key)}
+                  {#snippet editor()}{@render wording(() => saveEdit(change))}{/snippet}
+                  <ChangeRow
+                    state={change.state}
+                    checked={counted(change)}
+                    selected={change.key === selected?.key}
+                    points={change.points}
+                    label={checkboxLabel(change)}
+                    ontoggle={() => s.toggle(change.key)}
+                    onselect={() => (selectedKey = change.key)}
+                    was={change.was}
+                    reason={change.reason}
+                    warning={change.warning}
+                    yours={change.yours}
+                    meta={change.meta || undefined}
+                    editor={editing === change.key ? editor : undefined}
+                  >
+                    {#snippet text()}<span title={change.why || undefined}
+                        ><Marked text={change.text} marks={change.marks} /></span
+                      >{/snippet}
+                    {#snippet actions()}
+                      {#if change.editable}
+                        <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(change)}
+                          >Edit</Button
+                        >
+                      {/if}
+                      {#if change.rewritable}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={Sparkles}
+                          kbd="N"
+                          disabled={s.rewriting !== null}
+                          onclick={() => startNote(change)}>Rewrite with a note</Button
+                        >
+                      {/if}
+                      {#if change.savable}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={BookmarkPlus}
+                          kbd="S"
+                          title="Keep this wording in your bank, as a variant of the bullet"
+                          onclick={() => keepWording(change)}>Save as variant</Button
+                        >
+                      {/if}
+                      {#if change.yours}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          square
+                          icon={change.custom ? X : RotateCcw}
+                          aria-label={change.custom ? "Remove your edit" : "Back to the suggested wording"}
+                          title={change.custom ? "Remove your edit" : "Back to the suggested wording"}
+                          onclick={() => s.remove(change)}
+                        />
+                      {/if}
+                    {/snippet}
+                  </ChangeRow>
+                  {@render noteFor(change.key, () => void sendNote(change))}
+                {:else}
+                  <p class="meta quiet-row">No changes in this group.</p>
+                {/each}
+              {/snippet}
+              {@render foldable(
+                `group:${group.id}`,
+                group.label,
+                `${group.changes.length} ${noun}${group.changes.length === 1 ? "" : "s"} · ${signed(Math.round(group.points))}`,
+                groupRows,
+              )}
             {:else}
               <p class="meta quiet-row">
                 No suggested edits for this master. {others.length
@@ -788,58 +846,70 @@
             {/each}
 
             {#if others.length}
-              <GroupHead label="Other lines" meta="{others.length} line{others.length === 1 ? '' : 's'} as on the master" />
-              {#each others as line (lineKey(line))}
-                {@const key = lineKey(line)}
-                {#snippet lineEditor()}{@render wording(() => saveLineEdit(line))}{/snippet}
-                <PartRow
-                  label={line.place}
-                  selected={key === selectedItem?.key}
-                  busy={s.rewriting === key}
-                  onselect={() => (selectedKey = key)}
-                  editor={editing === key ? lineEditor : undefined}
-                >
-                  {#snippet text()}{line.text}{/snippet}
-                  {#snippet actions()}
-                    <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startLineEdit(line)}
-                      >Edit</Button
-                    >
-                    {#if line.rewritable}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Sparkles}
-                        kbd="N"
-                        disabled={s.rewriting !== null}
-                        onclick={() => startLineNote(line)}>Rewrite with a note</Button
+              {#snippet otherLines()}
+                {#each others as line (lineKey(line))}
+                  {@const key = lineKey(line)}
+                  {#snippet lineEditor()}{@render wording(() => saveLineEdit(line))}{/snippet}
+                  <PartRow
+                    label={line.place}
+                    selected={key === selectedItem?.key}
+                    busy={s.rewriting === key}
+                    onselect={() => (selectedKey = key)}
+                    editor={editing === key ? lineEditor : undefined}
+                  >
+                    {#snippet text()}{line.text}{/snippet}
+                    {#snippet actions()}
+                      <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startLineEdit(line)}
+                        >Edit</Button
                       >
-                    {/if}
-                  {/snippet}
-                </PartRow>
-                {@render noteFor(key, () => void sendLineNote(line))}
-              {/each}
+                      {#if line.rewritable}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={Sparkles}
+                          kbd="N"
+                          disabled={s.rewriting !== null}
+                          onclick={() => startLineNote(line)}>Rewrite with a note</Button
+                        >
+                      {/if}
+                    {/snippet}
+                  </PartRow>
+                  {@render noteFor(key, () => void sendLineNote(line))}
+                {/each}
+              {/snippet}
+              {@render foldable(
+                "lines",
+                "Other lines",
+                `${others.length} line${others.length === 1 ? "" : "s"} as on the master`,
+                otherLines,
+              )}
             {/if}
           </div>
 
           {#if review.gaps.length || review.knockouts.length}
             <div class="quiet enter" style:--i="3">
               {#if review.gaps.length}
-                <section>
-                  <p class="label">Gaps your resume can't back</p>
+                {#snippet gaps()}
                   <ul>
                     {#each review.gaps as gap (gap.skill)}
                       <li><span class="term">{gap.skill}</span> <span class="meta">{gap.fix}</span></li>
                     {/each}
                   </ul>
-                </section>
+                {/snippet}
+                {@render foldable(
+                  "gaps",
+                  "Gaps",
+                  `${review.gaps.length} skill${review.gaps.length === 1 ? "" : "s"}`,
+                  gaps,
+                )}
               {/if}
               {#if review.knockouts.length}
-                <section>
-                  <p class="label">Knockouts</p>
+                {#snippet knockouts()}
                   <ul>
                     {#each review.knockouts as knockout, i (i)}<li class="meta">{knockout}</li>{/each}
                   </ul>
-                </section>
+                {/snippet}
+                {@render foldable("knockouts", "Knockouts", `${review.knockouts.length}`, knockouts)}
               {/if}
             </div>
           {/if}
@@ -865,12 +935,14 @@
     {:else if s.phase === "opening" || s.phase === "suggesting" || s.phase === "stopped"}
       {#if skills.length}
         <div class="skills">
-          <p class="label">Skills and Keywords</p>
-          <div class="row">
-            {#each skills as chip (chip.term)}
-              <Chip state={chip.state} p1={chip.priority === 1} disabled>{chip.term}</Chip>
-            {/each}
-          </div>
+          {#snippet chips()}
+            <div class="row chips">
+              {#each skills as chip (chip.term)}
+                <Chip state={chip.state} p1={chip.priority === 1} disabled>{chip.term}</Chip>
+              {/each}
+            </div>
+          {/snippet}
+          {@render foldable("skills", "Skills and keywords", skillsMeta, chips)}
         </div>
       {/if}
       {#if s.view?.masters.length}
@@ -1041,14 +1113,23 @@
     color: var(--ink-2);
     text-wrap: pretty;
   }
-  .skills {
-    display: grid;
-    gap: var(--space-3);
-    padding-inline: var(--space-1);
-  }
-  .changes {
+  /* Sections share the change groups' inset: heads and rows 4px inside the column's text edge. */
+  .skills,
+  .changes,
+  .quiet {
     display: grid;
     margin-inline: calc(var(--space-2) * -1);
+  }
+  .fold {
+    display: grid;
+  }
+  .chips {
+    padding: var(--space-2) var(--space-3) 0;
+  }
+  .fold-all {
+    display: flex;
+    justify-content: flex-end;
+    margin-block: calc(var(--space-3) * -1) calc(var(--space-4) * -1);
   }
   .note {
     display: flex;
@@ -1092,20 +1173,14 @@
     color: var(--ink-2);
   }
   .quiet {
-    display: grid;
-    gap: var(--space-4);
-    padding: 0 var(--space-1) var(--space-2);
+    padding-bottom: var(--space-2);
     color: var(--ink-2);
-  }
-  .quiet section {
-    display: grid;
-    gap: var(--space-2);
   }
   .quiet ul {
     display: grid;
     gap: var(--space-1-5);
     margin: 0;
-    padding: 0;
+    padding: var(--space-1) var(--space-3) 0;
     list-style: none;
   }
   .quiet .term {
