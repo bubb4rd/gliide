@@ -1,12 +1,12 @@
 //! The review as the UI draws it: changes grouped by section, each with the line it makes or one sentence, skill
 //! chips, and scores with their components.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use resume_core::change::{Change, Decision as CoreDecision, Draft, Op, Origin, State};
 use resume_core::matcher::{Page, SkillMatch, find_literal};
 use resume_core::requirements::SkillKind;
-use resume_core::resume::Resume;
+use resume_core::resume::{Entry, Resume, SectionKind};
 use resume_core::score::Score;
 use resume_core::suggestions::Verdict as CoreVerdict;
 use resume_core::validate::same_text;
@@ -14,7 +14,7 @@ use resume_render::LineCount;
 use resume_tailor::Tailored;
 
 use crate::dto::{
-    AppStatus, ChangeGroup, ChangeState, ChangeView, ChipState, ComponentView, GapView,
+    AppStatus, ChangeGroup, ChangeState, ChangeView, ChipState, ComponentView, GapView, LineView,
     MasterChoice, ReviewView, ScoreView, SkillChip, Verdict,
 };
 use crate::jobs;
@@ -70,6 +70,7 @@ pub fn review(
         ceiling: score_view(&t.ceiling),
         skills,
         groups: groups(r, changes, draft, t),
+        lines: lines(r, changes, t),
         gaps: r
             .suggestions
             .gaps
@@ -327,6 +328,80 @@ fn section_label(r: &Review, t: &Tailored, id: &str) -> String {
         .find(|s| s.id == id)
         .map_or(id, |s| s.title.as_str());
     sentence_case(title)
+}
+
+/// An entry as the picker and "Other lines" name it: `Name · subtitle`.
+pub fn entry_label(e: &Entry) -> String {
+    [e.name.as_str(), e.subtitle.as_str()]
+        .into_iter()
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// The master's lines no change touches, in page order: the summary, then each entry's note lines and bullets, for
+/// the entries on the page. A line a change targets (suggested or yours, in or off) is edited through its row.
+fn lines(r: &Review, changes: &[Change], t: &Tailored) -> Vec<LineView> {
+    let touched: HashSet<&str> = changes.iter().filter_map(|c| target_line(&c.op)).collect();
+    let summary_touched = changes.iter().any(|c| matches!(c.op, Op::Summary { .. }));
+    let shown: HashSet<&str> = t
+        .resume
+        .sections
+        .iter()
+        .flat_map(|s| &s.entries)
+        .map(|e| e.id.as_str())
+        .collect();
+    let mut out = Vec::new();
+    for s in &r.base.sections {
+        // The summary is one line (`Op::Summary`), whatever entry holds it.
+        if s.kind == Some(SectionKind::Summary) {
+            let text = s.entries.first().and_then(|e| {
+                e.notes
+                    .first()
+                    .map(|n| n.text.clone())
+                    .or_else(|| e.bullets.first().map(|b| b.text.clone()))
+            });
+            if let Some(text) = text.filter(|t| !t.trim().is_empty())
+                && !summary_touched
+            {
+                out.push(LineView {
+                    line: None,
+                    place: "Summary".to_owned(),
+                    text,
+                    rewritable: true,
+                });
+            }
+            continue;
+        }
+        for e in s.entries.iter().filter(|e| shown.contains(e.id.as_str())) {
+            let place = entry_label(e);
+            for (i, n) in e.notes.iter().enumerate() {
+                let id = format!("{}#{}", e.id, i + 1);
+                if touched.contains(id.as_str()) || n.text.trim().is_empty() {
+                    continue;
+                }
+                out.push(LineView {
+                    line: Some(id),
+                    place: if n.label.is_empty() {
+                        place.clone()
+                    } else {
+                        format!("{place} · {}", n.label)
+                    },
+                    text: n.text.clone(),
+                    rewritable: false,
+                });
+            }
+            for b in e.bullets.iter().filter(|b| !touched.contains(b.id.as_str())) {
+                out.push(LineView {
+                    line: Some(b.id.clone()),
+                    place: place.clone(),
+                    text: b.text.clone(),
+                    rewritable: true,
+                });
+            }
+        }
+    }
+    out
 }
 
 fn change_view(r: &Review, c: &Change, draft: &Draft, t: &Tailored) -> ChangeView {

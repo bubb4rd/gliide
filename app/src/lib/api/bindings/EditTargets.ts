@@ -2,6 +2,7 @@
 import type { Target } from "./Target";
 
 /**
- * Where your own edits can go: the open review's entries, skills lines and lines, for the `a` picker.
+ * Where your own new edits can go: the open review's entries and skills lines, for the `a` picker. Existing lines
+ * are edited in place (`ReviewView::lines`).
  */
-export type EditTargets = { entries: Array<Target>, groups: Array<Target>, lines: Array<Target>, };
+export type EditTargets = { entries: Array<Target>, groups: Array<Target>, };

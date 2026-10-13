@@ -375,7 +375,7 @@ pub enum EntryEdit {
 
 // ── Jobs ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// A posting in the Jobs list and the sidebar's Recent.
+/// A posting in Applications (as "Not sent" until it has an application) and the sidebar's Recent.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -385,6 +385,8 @@ pub struct JobRow {
     /// From Extract once it ran; else the posting's own metadata; else `"Untitled posting"`.
     pub role: String,
     pub company: String,
+    /// The company's logo key (`LogoRow.key`); empty without a company name.
+    pub company_key: String,
     pub location: String,
     pub url: Option<String>,
     /// The latest review's projected score, else the best master's score now; `None` before Extract.
@@ -414,6 +416,8 @@ pub struct JobView {
 pub struct JobHead {
     pub role: String,
     pub company: String,
+    /// The company's logo key (`LogoRow.key`); empty without a company name.
+    pub company_key: String,
     pub location: String,
     pub seniority: String,
     pub url: Option<String>,
@@ -454,6 +458,9 @@ pub struct ReviewView {
     pub skills: Vec<SkillChip>,
     /// In the resume's section order, then `bank` ("From your bank") last; empty groups omitted.
     pub groups: Vec<ChangeGroup>,
+    /// The master's lines no change touches, in page order ("Other lines"): Edit and Rewrite with a note make one
+    /// your edit (`add_edit` with `CustomEdit::Line`/`Summary`, `rewrite_line`).
+    pub lines: Vec<LineView>,
     /// Requirements the resume can't back, each with one honest fix.
     pub gaps: Vec<GapView>,
     pub knockouts: Vec<String>,
@@ -627,14 +634,14 @@ pub enum CustomEdit {
     Summary { text: String },
 }
 
-/// Where your own edits can go: the open review's entries, skills lines and lines, for the `a` picker.
+/// Where your own new edits can go: the open review's entries and skills lines, for the `a` picker. Existing lines
+/// are edited in place (`ReviewView::lines`).
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct EditTargets {
     pub entries: Vec<Target>,
     pub groups: Vec<Target>,
-    pub lines: Vec<Target>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -642,8 +649,23 @@ pub struct EditTargets {
 #[ts(export)]
 pub struct Target {
     pub id: String,
-    /// What the picker shows: an entry's `Name · subtitle`, a skills line's label, a line's text.
+    /// What the picker shows: an entry's `Name · subtitle`, a skills line's label.
     pub label: String,
+}
+
+/// A line on the master that no change touches, as "Other lines" shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LineView {
+    /// The bullet or note line (`entry#n`) it is, for `CustomEdit::Line`; `None` for the summary
+    /// (`CustomEdit::Summary`).
+    pub line: Option<String>,
+    /// Where it sits: its entry's `Name · subtitle` (and a note line's label), or `Summary`.
+    pub place: String,
+    pub text: String,
+    /// Rewrite with a note applies: bullets and the summary, not note lines.
+    pub rewritable: bool,
 }
 
 /// What `rewrite` did: the review with the new wording in, and the grounding validator's findings on it.
@@ -691,6 +713,8 @@ pub struct ApplicationRow {
     /// `YYYY-MM-DD`.
     pub date: String,
     pub company: String,
+    /// The company's logo key (`LogoRow.key`); empty without a company name.
+    pub company_key: String,
     pub role: String,
     pub now: Option<f64>,
     pub projected: Option<f64>,
@@ -699,6 +723,31 @@ pub struct ApplicationRow {
     pub cover_letter: Option<String>,
     pub url: Option<String>,
     pub status: AppStatus,
+}
+
+// ── Company logos ───────────────────────────────────────────────────────────────────────────────────────────────
+
+/// A company with a logo you set: the UI shows it from `logo://localhost/<key>?v=<version>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LogoRow {
+    /// The company's name lowercased, each run of anything but letters and digits as one `_`: postings and
+    /// applications with the same name share the logo.
+    pub key: String,
+    /// When the logo was set: a new logo gets a new URL, so no stale image shows.
+    pub version: String,
+}
+
+/// Where a logo you set comes from.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+#[ts(export)]
+pub enum LogoSource {
+    /// An image file: chosen, or dropped on the mark.
+    File { path: String },
+    /// The clipboard: a copied image file, else the copied picture.
+    Clipboard,
 }
 
 // ── Cover letter ────────────────────────────────────────────────────────────────────────────────────────────────

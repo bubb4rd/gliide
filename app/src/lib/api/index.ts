@@ -2,7 +2,7 @@
 // Types come from `bindings/` (generated from app/src-tauri/src/dto.rs by `cargo test -p gliide`).
 // A failed command rejects with an `AppError` ({ kind, message }); show `message` as is.
 
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type { AgentStatus } from "./bindings/AgentStatus";
@@ -22,6 +22,8 @@ import type { ImportView } from "./bindings/ImportView";
 import type { JobRow } from "./bindings/JobRow";
 import type { JobView } from "./bindings/JobView";
 import type { Library } from "./bindings/Library";
+import type { LogoRow } from "./bindings/LogoRow";
+import type { LogoSource } from "./bindings/LogoSource";
 import type { Mode } from "./bindings/Mode";
 import type { Progress } from "./bindings/Progress";
 import type { ReviewView } from "./bindings/ReviewView";
@@ -61,6 +63,9 @@ export type * from "./bindings/JobRow";
 export type * from "./bindings/JobView";
 export type * from "./bindings/Letter";
 export type * from "./bindings/Library";
+export type * from "./bindings/LineView";
+export type * from "./bindings/LogoRow";
+export type * from "./bindings/LogoSource";
 export type * from "./bindings/MasterChoice";
 export type * from "./bindings/MasterRef";
 export type * from "./bindings/MasterRow";
@@ -148,6 +153,12 @@ export const editTargets = (review: string) => invoke<EditTargets>("edit_targets
 /** One model call: the line rewritten per your note, set as your wording. Emits `progress`. */
 export const rewrite = (review: string, key: string, note: string) =>
   invoke<Rewritten>("rewrite", { review, key, note });
+/**
+ * One model call: a line no change touches (`LineView.line`; null for the summary) rewritten per your note, added as
+ * your edit. Emits `progress`.
+ */
+export const rewriteLine = (review: string, line: string | null, note: string) =>
+  invoke<Rewritten>("rewrite_line", { review, line, note });
 /** Saves the change's line to the bank as a variant of its bullet (`ChangeView.savable`); the review goes on as it is. */
 export const saveVariant = (review: string, key: string) => invoke<ReviewView>("save_variant", { review, key });
 /** The PDF (no highlights) into the export folder, its application row, and the score read back from it. */
@@ -171,6 +182,15 @@ export const exportCover = (review: string) => invoke<Exported>("export_cover", 
 export const applications = () => invoke<ApplicationRow[]>("applications");
 export const setStatus = (application: string, status: AppStatus) =>
   invoke<ApplicationRow>("set_status", { application, status });
+
+// ── Company logos ──
+export const logos = () => invoke<LogoRow[]>("logos");
+/** Sets the company's logo from an image file or the clipboard (a copied image file, else the copied picture), replacing
+ * any. Rejects with a sentence to show when it isn't an image. */
+export const setLogo = (company: string, source: LogoSource) => invoke<LogoRow>("set_logo", { company, source });
+export const removeLogo = (company: string) => invoke<void>("remove_logo", { company });
+/** The URL a logo shows from; a new logo gets a new one. */
+export const logoUrl = (logo: LogoRow) => `${convertFileSrc(logo.key, "logo")}?v=${encodeURIComponent(logo.version)}`;
 
 // ── Events ──
 export const onProgress = (handler: (p: Progress) => void): Promise<UnlistenFn> =>

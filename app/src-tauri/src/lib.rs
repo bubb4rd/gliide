@@ -12,6 +12,7 @@ pub mod export;
 pub mod import;
 pub mod jobs;
 pub mod library;
+pub mod logo;
 pub mod review;
 pub mod settings;
 pub mod state;
@@ -30,6 +31,19 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol(logo::SCHEME, |ctx, request, responder| {
+            let Some(state) = ctx.app_handle().try_state::<Arc<App>>() else {
+                return responder.respond(
+                    tauri::http::Response::builder()
+                        .status(tauri::http::StatusCode::SERVICE_UNAVAILABLE)
+                        .body(Vec::new())
+                        .unwrap_or_default(),
+                );
+            };
+            let app = Arc::clone(&state);
+            let path = request.uri().path().to_owned();
+            tauri::async_runtime::spawn_blocking(move || responder.respond(logo::respond(&app, &path)));
+        })
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             let handle = app.handle().clone();
@@ -70,10 +84,14 @@ pub fn run() {
             commands::redo,
             commands::edit_targets,
             commands::rewrite,
+            commands::rewrite_line,
             commands::save_variant,
             commands::export_pdf,
             commands::applications,
             commands::set_status,
+            commands::logos,
+            commands::set_logo,
+            commands::remove_logo,
             commands::cover,
             commands::write_cover,
             commands::set_cover_part,

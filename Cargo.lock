@@ -2172,10 +2172,13 @@ dependencies = [
 name = "gliide"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "chrono",
+ "image",
  "objc2",
  "objc2-foundation",
  "objc2-pdf-kit",
+ "percent-encoding",
  "resume-core",
  "resume-ingest",
  "resume-llm",

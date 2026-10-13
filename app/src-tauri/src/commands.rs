@@ -8,10 +8,10 @@ use tauri::State;
 use crate::dto::{
     AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit, Decision,
     EditTargets, EntryEdit, EntryView, Exported, ImportChoices, ImportView, JobRow, JobView,
-    Library, Mode, ReviewView, Rewritten, Settings,
+    Library, LogoRow, LogoSource, Mode, ReviewView, Rewritten, Settings,
 };
 use crate::state::{App, blocking};
-use crate::{cover, entry, export, import, jobs, library as lib, review, settings};
+use crate::{cover, entry, export, import, jobs, library as lib, logo, review, settings};
 
 type Res<T> = Result<T, AppError>;
 type St<'a> = State<'a, Arc<App>>;
@@ -192,6 +192,16 @@ pub async fn rewrite(app: St<'_>, review: String, key: String, note: String) -> 
 }
 
 #[tauri::command]
+pub async fn rewrite_line(
+    app: St<'_>,
+    review: String,
+    line: Option<String>,
+    note: String,
+) -> Res<Rewritten> {
+    review::rewrite_line(&app, &review, line, note).await
+}
+
+#[tauri::command]
 pub async fn save_variant(app: St<'_>, review: String, key: String) -> Res<ReviewView> {
     review::save_variant(&app, &review, key).await
 }
@@ -218,6 +228,23 @@ pub async fn set_status(
         export::set_status(app, &application, status)
     })
     .await
+}
+
+// ── Company logos ──
+
+#[tauri::command]
+pub async fn logos(app: St<'_>) -> Res<Vec<LogoRow>> {
+    blocking(&app, logo::logos).await
+}
+
+#[tauri::command]
+pub async fn set_logo(app: St<'_>, company: String, source: LogoSource) -> Res<LogoRow> {
+    blocking(&app, move |app| logo::set_logo(app, &company, source)).await
+}
+
+#[tauri::command]
+pub async fn remove_logo(app: St<'_>, company: String) -> Res<()> {
+    blocking(&app, move |app| logo::remove_logo(app, &company)).await
 }
 
 // ── Cover letter ──

@@ -2,6 +2,6 @@
 
 export type Target = { id: string, 
 /**
- * What the picker shows: an entry's `Name · subtitle`, a skills line's label, a line's text.
+ * What the picker shows: an entry's `Name · subtitle`, a skills line's label.
  */
 label: string, };

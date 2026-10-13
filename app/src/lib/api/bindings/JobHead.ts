@@ -3,7 +3,11 @@
 /**
  * The job header (DESIGN.md Review): badge, meta line, serif headline.
  */
-export type JobHead = { role: string, company: string, location: string, seniority: string, url: string | null, 
+export type JobHead = { role: string, company: string, 
+/**
+ * The company's logo key (`LogoRow.key`); empty without a company name.
+ */
+companyKey: string, location: string, seniority: string, url: string | null, 
 /**
  * `"read from globex.com"`, `"from Greenhouse"`, `"pasted"`.
  */

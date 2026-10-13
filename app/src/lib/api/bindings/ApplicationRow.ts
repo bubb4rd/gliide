@@ -9,4 +9,8 @@ job: string | null,
 /**
  * `YYYY-MM-DD`.
  */
-date: string, company: string, role: string, now: number | null, projected: number | null, onFile: number | null, resume: string | null, coverLetter: string | null, url: string | null, status: AppStatus, };
+date: string, company: string, 
+/**
+ * The company's logo key (`LogoRow.key`); empty without a company name.
+ */
+companyKey: string, role: string, now: number | null, projected: number | null, onFile: number | null, resume: string | null, coverLetter: string | null, url: string | null, status: AppStatus, };

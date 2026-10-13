@@ -148,8 +148,8 @@ pub fn ranked(now: Option<&Library>, req: &Requirements) -> Vec<MasterChoice> {
         .collect()
 }
 
-/// The posting as the Jobs list shows it: the requirements' names once extracted, its latest review's projected
-/// score (else the best master's score now), and its application's status.
+/// The posting as Applications and the sidebar show it: the requirements' names once extracted, its latest review's
+/// projected score (else the best master's score now), and its application's status.
 pub fn job_row(app: &App, row: &PostingRow, now: Option<&Library>) -> Result<JobRow> {
     let (req, projected, status) = {
         let store = lock(&app.store);
@@ -178,6 +178,7 @@ pub fn row_of(
         id: row.id.clone(),
         role: h.role,
         company: h.company,
+        company_key: h.company_key,
         location: h.location,
         url: h.url,
         score,
@@ -212,9 +213,11 @@ pub fn head(p: &Posting, req: Option<&Requirements>) -> JobHead {
     if role.is_empty() {
         role = "Untitled posting".to_owned();
     }
+    let company = pick(req.map(|r| r.company.as_str()), &p.company);
     JobHead {
         role,
-        company: pick(req.map(|r| r.company.as_str()), &p.company),
+        company_key: crate::logo::key(&company),
+        company,
         location: pick(req.map(|r| r.location.as_str()), &p.location),
         seniority: req.map_or("", |r| seniority(r.seniority)).to_owned(),
         url: p.url.clone().or_else(|| p.source.clone()),

@@ -271,6 +271,7 @@ pub fn row(a: &Application) -> ApplicationRow {
         job: a.posting_id.clone(),
         date: a.date.clone(),
         company: a.company.clone(),
+        company_key: crate::logo::key(&a.company),
         role: a.role.clone(),
         now: a.now,
         projected: a.projected,

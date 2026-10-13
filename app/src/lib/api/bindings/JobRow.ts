@@ -2,7 +2,7 @@
 import type { AppStatus } from "./AppStatus";
 
 /**
- * A posting in the Jobs list and the sidebar's Recent.
+ * A posting in Applications (as "Not sent" until it has an application) and the sidebar's Recent.
  */
 export type JobRow = { 
 /**
@@ -12,7 +12,11 @@ id: string,
 /**
  * From Extract once it ran; else the posting's own metadata; else `"Untitled posting"`.
  */
-role: string, company: string, location: string, url: string | null, 
+role: string, company: string, 
+/**
+ * The company's logo key (`LogoRow.key`); empty without a company name.
+ */
+companyKey: string, location: string, url: string | null, 
 /**
  * The latest review's projected score, else the best master's score now; `None` before Extract.
  */

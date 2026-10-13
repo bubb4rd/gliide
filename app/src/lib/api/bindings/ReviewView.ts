@@ -3,6 +3,7 @@ import type { ChangeGroup } from "./ChangeGroup";
 import type { GapView } from "./GapView";
 import type { JobHead } from "./JobHead";
 import type { JobRow } from "./JobRow";
+import type { LineView } from "./LineView";
 import type { MasterChoice } from "./MasterChoice";
 import type { Mode } from "./Mode";
 import type { ScoreView } from "./ScoreView";
@@ -25,6 +26,11 @@ headline: string, master: MasterChoice, masters: Array<MasterChoice>, mode: Mode
  * In the resume's section order, then `bank` ("From your bank") last; empty groups omitted.
  */
 groups: Array<ChangeGroup>, 
+/**
+ * The master's lines no change touches, in page order ("Other lines"): Edit and Rewrite with a note make one
+ * your edit (`add_edit` with `CustomEdit::Line`/`Summary`, `rewrite_line`).
+ */
+lines: Array<LineView>, 
 /**
  * Requirements the resume can't back, each with one honest fix.
  */

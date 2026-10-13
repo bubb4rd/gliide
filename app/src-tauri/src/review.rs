@@ -202,7 +202,7 @@ pub async fn start_review(
 }
 
 /// The fit check over the draft as it stands: the tailored resume, its scores, every change's state, and the
-/// highlighted pages. Saves the projected score for the Jobs list.
+/// highlighted pages. Saves the projected score for the posting's fit score.
 pub fn rebuild(app: &App, r: &mut Review) -> Result<ReviewView> {
     let start = Instant::now();
     let draft = r.log.draft();
@@ -456,42 +456,20 @@ pub async fn toggle_skill(app: &Arc<App>, review: &str, term: String) -> Result<
     .await
 }
 
-/// Where your own edits can go: the master's entries, skills lines and lines.
+/// Where your own new edits can go: the master's entries and skills lines.
 pub fn edit_targets(app: &App, review: &str) -> Result<EditTargets> {
     let mut slot = lock(&app.review);
     let r = open(&mut slot, review)?;
     let mut t = EditTargets {
         entries: vec![],
         groups: vec![],
-        lines: vec![],
     };
     for s in &r.base.sections {
         for e in &s.entries {
-            let label = [e.name.as_str(), e.subtitle.as_str()]
-                .into_iter()
-                .filter(|p| !p.is_empty())
-                .collect::<Vec<_>>()
-                .join(" · ");
             t.entries.push(Target {
                 id: e.id.clone(),
-                label,
+                label: view::entry_label(e),
             });
-            for (i, n) in e.notes.iter().enumerate() {
-                t.lines.push(Target {
-                    id: format!("{}#{}", e.id, i + 1),
-                    label: if n.label.is_empty() {
-                        n.text.clone()
-                    } else {
-                        format!("{}: {}", n.label, n.text)
-                    },
-                });
-            }
-            for b in &e.bullets {
-                t.lines.push(Target {
-                    id: b.id.clone(),
-                    label: b.text.clone(),
-                });
-            }
         }
         for g in &s.groups {
             t.groups.push(Target {
@@ -523,22 +501,7 @@ pub async fn rewrite(app: &Arc<App>, review: &str, key: String, note: String) ->
         rewrite_job(r, &k)
     })
     .await?;
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
-    let (line, facts, terms, budget) = (job.line, job.facts, job.terms, job.budget);
-    let text = model_call(app, &job.posting_id, Stage::Rewriting, async move {
-        let input = RewriteInput {
-            line: &line,
-            facts: &facts,
-            terms: &terms,
-            note: &note,
-            budget,
-        };
-        rewrite::rewrite(&llm, &rewrite::schema(), &input, &model)
-            .await
-            .map(|(text, _)| text)
-    })
-    .await?;
+    let text = rewritten(app, job, note).await?;
     let id = review.to_owned();
     blocking(app, move |app| {
         let mut slot = lock(&app.review);
@@ -562,6 +525,62 @@ pub async fn rewrite(app: &Arc<App>, review: &str, key: String, note: String) ->
             review: rebuild(app, r)?,
             flags,
         })
+    })
+    .await
+}
+
+/// One model call: a line no change touches (`line`, or the summary when `None`) rewritten per `note`, checked by
+/// the grounding validator, and added as your edit.
+pub async fn rewrite_line(
+    app: &Arc<App>,
+    review: &str,
+    line: Option<String>,
+    note: String,
+) -> Result<Rewritten> {
+    let id = review.to_owned();
+    let l = line.clone();
+    let job = blocking(app, move |app| {
+        let mut slot = lock(&app.review);
+        let r = open(&mut slot, &id)?;
+        line_job(r, l.as_deref())
+    })
+    .await?;
+    let text = rewritten(app, job, note).await?;
+    let id = review.to_owned();
+    blocking(app, move |app| {
+        let mut slot = lock(&app.review);
+        let r = open(&mut slot, &id)?;
+        let edit = match line {
+            Some(line) => CustomEdit::Line { line, text },
+            None => CustomEdit::Summary { text },
+        };
+        let change = custom(r, edit)?;
+        let flags = change.flags.clone();
+        push(app, r, DraftEvent::AddCustom { change })?;
+        Ok(Rewritten {
+            review: rebuild(app, r)?,
+            flags,
+        })
+    })
+    .await
+}
+
+/// The Rewrite model call for `job`: the new line, per `note`.
+async fn rewritten(app: &Arc<App>, job: RewriteJob, note: String) -> Result<String> {
+    let llm = app.claude().await?;
+    let model = app.settings().suggest_model;
+    let (line, facts, terms, budget) = (job.line, job.facts, job.terms, job.budget);
+    model_call(app, &job.posting_id, Stage::Rewriting, async move {
+        let input = RewriteInput {
+            line: &line,
+            facts: &facts,
+            terms: &terms,
+            note: &note,
+            budget,
+        };
+        rewrite::rewrite(&llm, &rewrite::schema(), &input, &model)
+            .await
+            .map(|(text, _)| text)
     })
     .await
 }
@@ -599,6 +618,41 @@ fn rewrite_job(r: &Review, key: &str) -> Result<RewriteJob> {
         line,
         facts,
         terms,
+        budget,
+    })
+}
+
+/// What a rewrite of a line no change touches needs: the master's line (the summary when `line` is `None`) and the
+/// facts it may draw on.
+fn line_job(r: &Review, line: Option<&str>) -> Result<RewriteJob> {
+    let (text, facts, budget) = match line {
+        None => {
+            let (text, _) = summary_of(&r.base);
+            if text.trim().is_empty() {
+                return Err(AppError::missing("This master has no summary to rewrite"));
+            }
+            (text, suggest::tagged_text(&r.base), rewrite::SUMMARY_CHARS)
+        }
+        Some(line) => {
+            if line.contains('#') {
+                return Err(AppError::other(
+                    "Only bullets and the summary can be rewritten",
+                ));
+            }
+            let (text, _) = line_of(&r.base, line)
+                .ok_or_else(|| AppError::missing("This line isn't on the master"))?;
+            let facts = entry_holding(&r.bank, line)
+                .map(rewrite::entry_facts)
+                .unwrap_or_default();
+            let budget = rewrite::budget(&text);
+            (text, facts, budget)
+        }
+    };
+    Ok(RewriteJob {
+        posting_id: r.posting_id.clone(),
+        line: text,
+        facts,
+        terms: r.req.skills.iter().map(|s| s.term.clone()).collect(),
         budget,
     })
 }
