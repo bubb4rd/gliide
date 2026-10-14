@@ -11,8 +11,10 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsDownUp from "@lucide/svelte/icons/chevrons-down-up";
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
+  import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import FileUp from "@lucide/svelte/icons/file-up";
   import FileText from "@lucide/svelte/icons/file-text";
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
@@ -28,6 +30,7 @@
   import { app } from "$lib/stores/app.svelte";
   import { theme } from "$lib/stores/theme.svelte";
   import {
+    Backdrop,
     Badge,
     Button,
     Card,
@@ -88,6 +91,8 @@
     if (asked === "light" || asked === "dark" || asked === "system") untrack(() => theme.preview(asked));
   });
   let replay = $state(0);
+  /** The backdrop sample has scrolled under its toolbar. */
+  let backdropScrolled = $state(false);
 
   // ── The composed Review screen: toggles update the score instantly ──
   type State = "in" | "off" | "left-out" | "forced";
@@ -1196,6 +1201,35 @@
       </div>
     </section>
 
+    <!-- ═══════════ Backdrop ═══════════ -->
+    <section class="section">
+      <h2 class="title">Backdrop</h2>
+      <p class="meta lede">
+        Settings → Appearance: a picture behind the top of the Overview, veiled and screened in paper so ink reads on
+        it, fading out to paper (white in light, near black in dark). Switch the theme above to see both. The toolbar
+        lies over it unpainted and without its crumb; scroll the sample and it takes its paper and hairline back.
+      </p>
+      <div class="backdrop-frame">
+        <Toolbar over clear={!backdropScrolled}>
+          {#snippet crumbs()}{/snippet}
+          <Button icon={FileUp} kbd="I">Import resume</Button>
+          <Button variant="primary" icon={ClipboardPaste} kbd="V">Paste from clipboard</Button>
+        </Toolbar>
+        <div class="backdrop-scroll" onscroll={(e) => (backdropScrolled = e.currentTarget.scrollTop > 0)}>
+          <Backdrop name="meadow" />
+          <div class="backdrop-content">
+            <h3 class="headline">What’s up next, Jane?</h3>
+            <Card pad>
+              <div class="tile">
+                <p class="label">Cards sit on it unchanged</p>
+                <p class="meta">Paste a job link or a posting’s text and it lands here.</p>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ═══════════ Tooltips ═══════════ -->
     <section class="section">
       <h2 class="title">Tooltips</h2>
@@ -1595,6 +1629,32 @@
     border-radius: var(--radius-lg);
     border: 1px solid transparent;
     box-shadow: var(--shadow-border);
+  }
+  .backdrop-frame {
+    position: relative;
+    height: 640px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    border: 1px solid transparent;
+    background: var(--paper);
+    box-shadow: var(--shadow-border);
+  }
+  .backdrop-scroll {
+    position: relative;
+    height: 100%;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .backdrop-content {
+    position: relative;
+    display: grid;
+    gap: var(--space-6);
+    max-width: 560px;
+    margin-inline: auto;
+    padding: calc(var(--toolbar-height) + var(--space-10)) var(--space-6) 640px;
+  }
+  .backdrop-content .headline {
+    margin: 0;
   }
   .chrome {
     display: grid;

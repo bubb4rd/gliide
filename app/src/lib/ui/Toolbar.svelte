@@ -2,7 +2,8 @@
   The screen's toolbar (52px): crumbs at the leading edge, the screen's controls trailing with the primary action
   last (only a delete follows it). Drags the window from any empty part. An `<hr>` among the controls draws a short
   divider. When the window is compact the sidebar becomes a sheet, and the toolbar makes room for the traffic lights
-  and its toggle.
+  and its toggle. `over` lays it over the top of the screen's scroll area (which starts under it) in paper with its
+  hairline; `clear` drops both, so a `Backdrop` shows through it until the content scrolls under it.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -13,12 +14,17 @@
   interface Props {
     crumbs: Snippet;
     children?: Snippet;
+    over?: boolean;
+    clear?: boolean;
   }
 
-  let { crumbs, children }: Props = $props();
+  let { crumbs, children, over = false, clear = false }: Props = $props();
 </script>
 
-<header class={["toolbar", shell.compact && "toolbar--compact"]} data-tauri-drag-region="deep">
+<header
+  class={["toolbar", shell.compact && "toolbar--compact", over && "toolbar--over", clear && "toolbar--clear"]}
+  data-tauri-drag-region="deep"
+>
   {#if shell.compact}
     <Button
       variant="ghost"
@@ -47,6 +53,17 @@
   /* Traffic lights: 20px inset + three 12px lights 8px apart, then the column padding. */
   .toolbar--compact {
     padding-inline-start: calc(var(--space-5) + 3 * 12px + 2 * var(--space-2) + var(--space-4));
+  }
+  .toolbar--over {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    z-index: 1;
+    background: var(--paper);
+  }
+  .toolbar--clear {
+    background: none;
+    box-shadow: none;
   }
   .crumbs {
     display: flex;

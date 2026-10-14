@@ -2,7 +2,9 @@
   `/` is the Overview: a greeting, your activity (postings added and applications sent: counts over a range, and the
   last 26 weeks by day), what's up next (applications in interviews, then postings not sent yet, best fit first) and
   what's new for you (the feed's fits, best first; hidden while the feed is off).
-  V (or ⌘V) pastes a posting, I imports a resume.
+  V (or ⌘V) pastes a posting, I imports a resume. The backdrop chosen in Settings → Appearance, if any, sits behind
+  the top of the screen, toolbar included: the toolbar lies over it unpainted and without its crumb, and takes its
+  paper back once the content scrolls under it.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -19,6 +21,7 @@
   import { feed } from "$lib/stores/feed.svelte";
   import { STATUS } from "$lib/status";
   import {
+    Backdrop,
     Badge,
     Button,
     Card,
@@ -61,6 +64,10 @@
     return nick || full.trim().split(/\s+/)[0] || "";
   }
   const name = $derived(app.library?.bank ? firstName(app.library.bank.name) : "");
+  /** Settings → Appearance: the picture behind the top of the screen. */
+  const backdrop = $derived(app.settings && app.settings.backdrop !== "none" ? app.settings.backdrop : null);
+  /** The content has scrolled under the toolbar, which then needs its paper over the backdrop. */
+  let scrolled = $state(false);
 
   // ── Activity: postings by the day they were added, applications by the day they were sent ──
   const today = new Date();
@@ -218,15 +225,19 @@
   {/if}
 {/snippet}
 
-<Toolbar>
-  {#snippet crumbs()}<b>Overview</b>{/snippet}
+<Toolbar over={!!backdrop} clear={!!backdrop && !scrolled}>
+  {#snippet crumbs()}{#if !backdrop}<b>Overview</b>{/if}{/snippet}
   <Button icon={FileUp} kbd="I" onclick={importResume}>Import resume</Button>
   <Button variant="primary" icon={ClipboardPaste} kbd="V" disabled={paste.reading} onclick={paste.run}>
     {paste.reading ? "Reading…" : "Paste from clipboard"}
   </Button>
 </Toolbar>
 
-<div class="scroll">
+<div
+  class={["scroll", backdrop && "scroll--under"]}
+  onscroll={(e) => (scrolled = e.currentTarget.scrollTop > 0)}
+>
+  {#if backdrop}<Backdrop name={backdrop} />{/if}
   <div class="column">
     <h1 class="headline">What’s up next{name ? `, ${name}` : ""}?</h1>
 
@@ -342,18 +353,25 @@
 
 <style>
   .scroll {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
   }
+  /* Above the backdrop, when there is one. */
   .column {
+    position: relative;
     display: grid;
     gap: var(--space-6);
     max-width: 880px;
     margin-inline: auto;
     padding: var(--space-10) var(--space-6) var(--space-12);
     container-type: inline-size;
+  }
+  /* Starts under the toolbar, so the backdrop runs behind it. */
+  .scroll--under .column {
+    padding-block-start: calc(var(--toolbar-height) + var(--space-10));
   }
   /* Activity and Up next side by side; stacked once Activity's three stats would truncate their labels. */
   .split {

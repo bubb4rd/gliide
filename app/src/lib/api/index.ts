@@ -43,6 +43,7 @@ export type * from "./bindings/AgentStatus";
 export type * from "./bindings/AppError";
 export type * from "./bindings/ApplicationRow";
 export type * from "./bindings/AppStatus";
+export type * from "./bindings/Backdrop";
 export type * from "./bindings/BankSummary";
 export type * from "./bindings/BulletView";
 export type * from "./bindings/ChangeGroup";

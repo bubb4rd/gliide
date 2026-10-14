@@ -1,6 +1,7 @@
 // The UI kit (DESIGN.md Components). Screens compose only these; a new primitive goes here and into the /specimen
 // route, in every state, before a screen uses it.
 
+export { default as Backdrop, BACKDROPS, type BackdropName } from "./Backdrop.svelte";
 export { default as Badge } from "./Badge.svelte";
 export { default as Button } from "./Button.svelte";
 export { default as Card } from "./Card.svelte";

@@ -47,6 +47,8 @@
   --page: oklch(1 0 0);                    /* the resume sheet: always white, in both themes */
   --page-ink: oklch(0.15 0 0);
   --page-mark: oklch(0.93 0.09 95);        /* inserted keywords on the sheet, both themes */
+  --backdrop-veil: 0.4;                    /* paper over a backdrop picture, so ink reads on it */
+  --backdrop-screen: 0.55;                 /* the backdrop's dot screen, in paper */
 
   /* ── Ink: one warm graphite family ── */
   --ink: oklch(0.22 0.008 85);             /* primary text  16.6:1 on paper */
@@ -174,6 +176,8 @@
   --surface: oklch(0.2 0.003 85);
   --sunken: oklch(0.185 0.003 85);
   --desk: oklch(0.135 0.003 85);
+  --backdrop-veil: 0.62;
+  --backdrop-screen: 0.7;
   --sidebar: oklch(0.18 0.003 85 / 0.82);
   --hover: oklch(1 0 0 / 0.05);
   --pressed: oklch(1 0 0 / 0.09);

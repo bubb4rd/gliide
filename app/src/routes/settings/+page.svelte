@@ -15,6 +15,7 @@
   import X from "@lucide/svelte/icons/x";
   import {
     appError,
+    type Backdrop,
     feedSettings,
     setFeedSettings,
     type FeedSettingsDto,
@@ -49,6 +50,10 @@
     { value: "light", label: "Light" },
     { value: "dark", label: "Dark" },
     { value: "system", label: "System" },
+  ];
+  const BACKDROPS: { value: Backdrop; label: string }[] = [
+    { value: "none", label: "None" },
+    { value: "meadow", label: "Meadow" },
   ];
 
   type ModelKey = "extractModel" | "suggestModel";
@@ -681,11 +686,22 @@
         <Card pad as="section" aria-labelledby="appearance-title">
           <div class="card">
             <h2 class="name" id="appearance-title">Appearance</h2>
-            <p class="lede">Light is the default; System follows macOS.</p>
+            <p class="lede">Light is the default; System follows macOS. A backdrop paints the top of the Overview.</p>
             <dl class="fields">
               <div class="field">
                 <dt>Theme</dt>
                 <dd><Segmented options={THEMES} value={s.theme} label="Theme" onchange={setTheme} /></dd>
+              </div>
+              <div class="field">
+                <dt>Overview backdrop</dt>
+                <dd>
+                  <Segmented
+                    options={BACKDROPS}
+                    value={s.backdrop}
+                    label="Overview backdrop"
+                    onchange={(b) => save({ backdrop: b })}
+                  />
+                </dd>
               </div>
             </dl>
           </div>
