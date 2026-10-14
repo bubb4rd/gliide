@@ -56,11 +56,24 @@ pub enum Mode {
     BankAware,
 }
 
+/// The picture behind the top of the Overview (Settings → Appearance); `none` by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Backdrop {
+    #[default]
+    None,
+    Meadow,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Settings {
     pub theme: Theme,
+    /// Settings saved before backdrops existed have none.
+    #[serde(default)]
+    pub backdrop: Backdrop,
     pub default_mode: Mode,
     /// A `claude --model` alias or name; `sonnet` by default.
     pub extract_model: String,
@@ -1084,4 +1097,17 @@ pub enum Stage {
     Revising,
     /// A resume file copied for import.
     Importing,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Backdrop, Settings};
+
+    #[test]
+    fn settings_saved_before_backdrops_load_with_none() {
+        let saved = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"sonnet","suggestModel":"sonnet",
+            "exportDir":"/tmp","claudePath":null}"#;
+        let settings: Settings = serde_json::from_str(saved).unwrap();
+        assert_eq!(settings.backdrop, Backdrop::None);
+    }
 }

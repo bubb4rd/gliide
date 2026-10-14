@@ -18,7 +18,7 @@ use resume_render::{FontOptions, Renderer};
 use resume_store::{Rev, Store};
 use tokio::task::AbortHandle;
 
-use crate::dto::{FeedStatus, Mode, Progress, Settings, Stage, Theme};
+use crate::dto::{Backdrop, FeedStatus, Mode, Progress, Settings, Stage, Theme};
 use crate::error::Result;
 use crate::export;
 use crate::feed::FeedRun;
@@ -271,6 +271,7 @@ fn default_settings() -> Settings {
     let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
     Settings {
         theme: Theme::Light,
+        backdrop: Backdrop::None,
         default_mode: Mode::MasterOnly,
         extract_model: DEFAULT_EXTRACT_MODEL.to_owned(),
         suggest_model: DEFAULT_SUGGEST_MODEL.to_owned(),
