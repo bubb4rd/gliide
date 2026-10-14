@@ -304,7 +304,7 @@ are never knockouts, title/company/location passed in from ingest, `degree.equiv
 | `skills[]` | `term` (posting's exact words), `aliases[]`, `kind` (hard, tool, domain, soft), `priority` 1–3, `required`, `group` (one-of alternatives share a group id, `priority` and `required`) |
 | `title_terms[]` | Words of the job title an ATS matches on |
 | `years_min`, `degree` (level, fields, `equivalent`), `certifications[]` | Hard requirements; null when absent |
-| `knockouts[]` | Clearance, work authorization, on-site location |
+| `knockouts[]` | Clearance, work authorization, on-site location, enrollment (students only, returning to school, a graduation window) |
 
 ### Suggest: what to change (master-dependent)
 
@@ -481,38 +481,124 @@ only the page count needs the loop.
 | SVG per page (`typst-svg`) | Live preview: crisp at any zoom, text selectable |
 | PNG (`typst-render`) | Thumbnails, sharing |
 | PDF (`typst-pdf`) | Export, compiled without highlights; then its text is extracted and re-scored ("score on file") |
+| SVG per page of a PDF on disk (`resume_render::pdf_svgs`, over `hayro-svg`) | Resumes: the export folder's PDFs on the desk. Glyph outlines are shared per page (hayro bakes each glyph's position into its outline: 4 MB a resume page, 0.6 MB shared) and each page's ids prefixed, so pages never draw from each other's definitions; text is outlines, not selectable |
 
 ## 7. Postings in
 
 | Source | How |
 |---|---|
-| Pasted link | Board APIs where public (Greenhouse, Lever), Ashby's job page data (its board API has no company name), else schema.org `JobPosting` JSON-LD, else `<main>` text; LinkedIn search links rewritten to the job page, as in ATS Fit |
+| Pasted link | Board APIs where public (Greenhouse, Lever; Workday's career-site data `/wday/cxs/{tenant}/{site}/job/…`, SmartRecruiters' Posting API, Workable's `api/v2/accounts/{account}/jobs/{shortcode}`, Recruitee's `api/offers/{slug}`), Ashby's job page data (its board API has no company name), else schema.org `JobPosting` JSON-LD, else `<main>` text; LinkedIn search links rewritten to the job page, as in ATS Fit |
 | Pasted text | Used as is |
 | macOS | Global hotkey "evaluate clipboard"; share extension from Safari |
 | iOS | Share extension from Safari and the LinkedIn app (a native Swift target beside the Tauri app) |
 | Blocked sites (Indeed: HTTP 401) | The app says to paste the text |
 
+### Job feed
+
+New postings that fit, pulled several times a day so you apply early, plus search for more. Nothing goes back to any
+source: you apply on the employer's link (LinkedIn's job page for a LinkedIn job).
+
+| Source | What | How |
+|---|---|---|
+| freehire | Every board it collects (about 270 sources) | Public API (`https://freehire.me/api/v1`; no account or key; documented API use is within its terms). Always on |
+| LinkedIn | Postings only LinkedIn has (agencies, Easy Apply) | The guest search (`jobs-guest/jobs/api/seeMoreJobPostings/search`, no login; `resume_ingest::linkedin`): one search per master title and country (at most 6), 10 jobs a page, at most 5 pages, 0.7 s between requests, `f_TPR` since its last answer plus an hour (the first: 3 days), seniority → `f_E`, employment → `f_JT`; at most hourly (a launch soon after a pull skips it). A 429 (or 999) backs LinkedIn off — pulls and searches leave it alone for its `Retry-After` and at least an hour (6 h after a refusal) — and the feed's status says until when in muted text instead of an error; the jobs found before it are kept. The guest job page hides the employer's link, so a LinkedIn job's link is LinkedIn's. On by default (setting) |
+| Watchlist | Your target companies, minutes after they post | Their boards polled directly (`resume_ingest::watch`): Greenhouse, Lever and Ashby board APIs, Workday's `/wday/cxs/…/jobs` (POST, 20 a page), SmartRecruiters' postings, Workable's widget API, Recruitee's offers; every open job, at most 500 a board, newest first. Added in Settings by any careers link of the board |
+| Fantastic.jobs | 58 ATS and 200k+ career sites, indexed hourly | Its `career-site-job-listing-api` actor through Apify (`resume_ingest::fantastic`; your Apify token in Settings; run-sync, 300 s): once a day, the day's new jobs (a week's after a missed day), the masters' titles, the countries, years and employment from the query, at most 300 jobs. Apify bills per job (from about $4 per 1,000 on its Free plan, which includes $5 a month). Off without a token |
+
+| Step | How |
+|---|---|
+| Pull | Every source that's on, one after another; a source that fails is named in the status's error (`LinkedIn: …`) and the others still count. freehire: `GET /jobs/search` with the feed filters, `sort=created_at&order=desc`, 100 a page (at most 10), stopping at the first job freehire recorded before the last pull (`feed_state` setting); the first pull takes the last 3 days. Jobs the feed has (by slug) are left alone. In the app (`app/src-tauri/src/feed.rs`) at launch and every 3 h while the feed is on; a pull already running isn't joined. `ez feed pull` from launchd is later (SQLite is WAL with a busy timeout, so both could write) |
+| Local check | No model (`resume_pipeline::feed::local_check`). Drops a job that asks for more than your years + 1, one whose employer link a posting you have already has, a watchlist or LinkedIn job whose title names a level outside the query's seniority (`title_level`: boards don't filter by level, and LinkedIn's mid-senior level takes in staff and principal roles), a watchlist job whose place names only countries outside the query's, one sharing no skill (the masters' skills mapped to freehire's vocabulary through `data/aliases.json`; Fantastic.jobs' `ai_key_skills` the same way; LinkedIn and boards list none) and no title word with the masters (level words like `intern` or `senior` don't count), one whose employer link another source found already, and the same role (company and title) at another place when the feed has it. Orders the rest by that overlap, then the employer's `posted_at` |
+| Check | Up to 20 a day (setting), one at a time (`App.feed_lane`), shared between sources: the next check goes to the source with the fewest checks today among those with jobs waiting, its best overlap first. The job's text, Extract, every master ranked. A **fit** when the best master's score now is at least the threshold (40%, setting). Jobs over the cap wait for the next pull; a network or `claude` failure stops the queue and the job waits; a posting that can't be read is skipped with why. A job whose text another feed row's posting has already (one posting per place) is skipped. Opening a feed job counts as its check. Suggest is not run ahead (a later setting) |
+| Act | Overview's **New for you** (up to 8 fits) and `/feed` (Fits, Checked, Waiting, Search): best score first, the employer's posting age and the source on each row, knockouts under it; `⏎` opens the job (job and review as today), `O` the employer's link (LinkedIn's page for a LinkedIn job), `C` check now, `D` dismiss, `P` pull now. Export records the application as today |
+| Search | **Search jobs**: freehire with the same filters plus `q` (its order, 25 a page), then LinkedIn's guest search for your words under the same filters when LinkedIn is on (10 a page, any posting date); "Show more" passes each source's next start back (`SearchCursor`). The count is freehire's matches plus LinkedIn's found so far (LinkedIn states no total). LinkedIn failing (a 429) says so beside the count and freehire's results stay. The search screen shows the sources' icons (bundled, no third-party request). Nothing is checked until you ask (**Check** on a row, past the daily cap); results join the feed when you check, open or dismiss them |
+
+**Filters** live in Settings → Feed. Each is **Auto** (worked out from the chosen master and the bank, and recomputed
+when either changes) or **Custom** (your values, kept until you switch back to Auto).
+
+| Filter | Auto |
+|---|---|
+| Master | The one you choose, or **All masters** (categories joined, each job ordered by its best master) |
+| Seniority | Years from experience entries' `start`/`end`; `intern` added while a student or within 12 months of the degree's end |
+| Employment | `full_time`; `internship` added on the same rule |
+| Category | The master's track (software → `software_engineering,backend,frontend,fullstack`; design → `design,creative`) |
+| Country | The places in the bank; no city and no `work_mode` filter (60% of jobs state no work mode) |
+| Needs visa sponsorship | Off (setting); on sends `visa_sponsorship=true` |
+| Clearance jobs | Included (setting); most ask for eligibility rather than an active clearance, and Extract's knockouts say which |
+| Fixed | `reality=fresh`; `source_exclude=adzuna,whatjobs,himalayas` (their links are another board's redirect, not the employer's); jobs freehire couldn't place are left out unless you include them |
+
+**Reading a feed job** (`resume_ingest::feed::read_job`): freehire's Greenhouse, Lever, Ashby, Workday,
+SmartRecruiters, Workable and Recruitee jobs are read from the board's API through `external_id` (`wing:8872476002`,
+Workday's `{host}/{site}:/job/{path}`), which confirms the job is open and gives the same text, so the same hash, as
+pasting its link. Every other freehire source uses freehire's text (`/jobs/{slug}`, HTML through the page reader;
+`Method::Freehire`). LinkedIn and watchlist jobs are read from their link as pasting it would. Fantastic.jobs' jobs are
+read from the employer's link, else (a page that only shows the posting in a browser) the text the index lists
+(`Method::Fantastic`). `url` is the employer's link without `utm_*`. A 404 from the employer's page is not a closed job:
+Wing's careers pages answer 404 and show the posting in a browser. freehire names some Oracle, Taleo and Paycor jobs'
+company by the hosting site or an id (`egug.fa.us2.oraclecloud.com/CX`); that isn't passed to Extract as the company,
+rows show Extract's name once checked and "Unnamed company" before.
+
+**Storage:** a `feed` table (store schema 5: slug, the listing's JSON, found by its source, employer's posting date,
+state: new, skipped, waiting, checked, dismissed; overlap, posting, score, master, checked at, opened at, reason). The
+listing's `origin` (freehire, linkedin, watchlist, fantastic; rows from before are freehire's) and slug forms
+(freehire's slug, `linkedin:{id}`, `{ats}:{board}:{id}`, `fantastic:{id}`) live in the JSON, so no migration.
+Postings the feed made stay out of Recent jobs and Applications until you open one; dismissing deletes its posting
+and requirements when you never opened it. Settings `feed` (master, filters auto or pinned, visa, clearance, unknown
+places, daily cap, threshold, hours between pulls, LinkedIn on, watchlist links, Apify token) and `feed_state`
+(freehire's cursor, LinkedIn's and Fantastic.jobs' last answers, last pull, last errors). The hours between pulls has
+no control in Settings yet (3 by default). The Apify token is stored in the local store as written.
+
+Measured 2026-10-13 under the default filters: about 40 new jobs a day from freehire (42 in one day, 276 in seven).
+Freehire records a job a median 40 h after the employer's date (p25 13.6 h); LinkedIn's guest search and the
+watchlist find jobs within the hour, Fantastic.jobs within a day. On 2026-10-14 five boards (Wing, NVIDIA, Canva,
+Hugging Face, bunq) listed 693 open jobs; the local check kept 84.
+
 ### Company logos
 
-Shown in the sidebar's Recent jobs and the Applications table (28px, beside the company over the role) and in the job
-header (48px, across the company and the title), through `CompanyMark`. A logo is the company's brand and is shown as
-published: never recolored, filtered or outlined, only scaled to fit the square and rounded like the blank tile
-(`design/DESIGN.md`).
+Shown in the sidebar's Recent jobs, the Applications table, Overview's lists and the feed (28px, beside the company
+over the role) and in the job header (48px, across the company and the title), through `CompanyMark`. A logo is the
+company's brand and is shown as published: never recolored, filtered or outlined, only scaled to fit the square and
+rounded like the blank tile (`design/DESIGN.md`).
 
-**Logos you set (built).** Nothing is fetched yet, so the slot is a blank tile until you set one: in the job header,
-click the mark or **Upload company photo**, then drop an image file on the mark or its panel, paste (`⌘V`: a copied
-image file, else the copied picture) or choose a file. `app/src-tauri/src/logo.rs` keeps SVG as is (≤ 512 KB) and
-scales anything else (PNG, JPEG, GIF, WebP, TIFF, BMP, ICO; files ≤ 20 MB) to fit 128px with premultiplied alpha,
-stored as PNG in `companies` under the company key (the name lowercased, each run of anything but letters and digits
-as one `_`), so every posting and application with that name shows it. The UI loads it from
-`logo://localhost/<key>?v=<set at>` (cached for good: a new logo gets a new URL); rows carry `companyKey`, and
-`logos()` lists the keys with a logo. Tauri takes files dropped on the window, so the page hit-tests
+**Logos you set (built).** A company with no logo set or fetched shows a blank tile: in the job header, click the
+mark or **Upload company photo**, then drop an image file on the mark or its panel, paste (`⌘V`: a copied image file,
+else the copied picture) or choose a file. `app/src-tauri/src/logo.rs` keeps SVG as is (≤ 512 KB) and scales
+anything else (PNG, JPEG, GIF, WebP, TIFF, BMP, ICO; files ≤ 20 MB) to fit 128px with premultiplied alpha, stored as
+PNG in `companies` under the company key (the name lowercased, each run of anything but letters and digits as one
+`_`), so every posting and application with that name shows it. A logo you set always wins: nothing fetched replaces
+it. The UI loads it from `logo://localhost/<key>?v=<set at>` (cached for good: a new logo gets a new URL); rows carry
+`companyKey`, and `logos()` lists the keys with a logo. Tauri takes files dropped on the window, so the page hit-tests
 `onDragDropEvent`'s position against `data-logo-drop` targets.
 
-**Sources: first party only for now.** The posting's own pages, then the company's own site; no third party learns
-which companies you look at. [logo.dev](https://www.logo.dev) is the third-party option if coverage needs it (free
-tier: attribution required; paid API: results may be cached and self-hosted). Brandfetch doesn't fit: its CDN may only
-be embedded and refuses programmatic fetching and caching. Clearbit's Logo API shut down on 2025-12-08.
+**Feed jobs' logos (built).** freehire's logo first, then the company's own site. `logo::fetch_logos` runs in the
+background after each pull and each check, one run at a time, over the companies the feed shows (skipped and
+dismissed rows left out; Extract's name once checked, else freehire's), one company at a time:
+
+1. `https://logo.freehire.me/{name}` (the name percent-encoded, as freehire's pages and job JSON-LD link it): 96px
+   WebP, 404 when freehire has none. It goes by name, so a same-named company can get the wrong logo; **Remove** in
+   the job header's logo panel fixes one.
+2. Else the company's website from `GET /companies/{company_slug}` (`data.company.company_info.website`; the slug is
+   on each search result, so rows pulled before it was kept have none), then its homepage's icons
+   (`resume_ingest::logos::icon_links`, below): the first that decodes at 32px or more on its longer side. The site
+   not answering is no icon found.
+
+Measured 2026-10-13 on the store in use: freehire had a logo for 42 of the feed's 52 companies, and the 7 of the other
+10 it lists have no website there either, so the site route is for companies freehire knows the site of but has no
+logo for (through it: Capital One, Databricks, Figma, KLA, Rhombus, TriNet and Wing all gave their mark, 2.5–7 s each).
+
+Images are read with `HttpFetcher::get_image` (`image/*` only, ≤ 512 KB) and stored like a logo you set, in
+`companies` with `source` `freehire` or `site` (yours is `yours`); a fetched logo never replaces yours. Each lookup is
+recorded in `logo_lookups` (found: `freehire`, `site`, `none`, or `removed`): a company is looked up again after 90
+days (14 when nothing was found), and never after you removed its fetched logo. Every logo stored sends the `feed`
+event, which reloads the feed and the logos. Failing to reach freehire ends the run quietly (the next one retries);
+it never shows as the feed's error.
+
+**Sources.** Feed jobs: freehire's logo, then the company's own site through freehire's company website, as above;
+freehire already knows its own feed jobs. Postings you paste and imported applications: by hand for now, then the
+first-party plan below (the posting's own pages, then the company's own site), so no third party learns which
+companies you look at. [logo.dev](https://www.logo.dev) is the third-party option if coverage needs it (free tier:
+attribution required; paid API: results may be cached and self-hosted). Brandfetch doesn't fit: its CDN may only be
+embedded and refuses programmatic fetching and caching. Clearbit's Logo API shut down on 2025-12-08.
 
 | Source | Logo | Company website | Cost |
 |---|---|---|---|
@@ -523,24 +609,43 @@ be embedded and refuses programmatic fetching and caching. Clearbit's Logo API s
 | Lever | API has none; the board page's header `<img alt="… logo">` (its `og:image` is a share card) | The header logo's href | One more request, off the critical path |
 | Pasted text, imported applications | None | A URL or email domain in the text (boards excluded); else **Set website…** | — |
 
-Given a website without a logo: its `apple-touch-icon`, then `icon`, then `/favicon.ico`. Never a favicon from a board
-host (Ashby, Greenhouse, Lever, Workday, iCIMS, ApplicantPro…): those are the board's. Plan, in order:
+Given a website without a logo: its `apple-touch-icon` (and `-precomposed`), then `icon` (and `shortcut icon`; SVG
+allowed), each largest `sizes` first, then `/favicon.ico`. Never an icon from a board host (Ashby, Greenhouse, Lever,
+Workday, iCIMS, ApplicantPro, Oracle Cloud, Taleo, SmartRecruiters…): those are the board's. Plan for pasted postings,
+in order:
 
 1. Ingest records `org { website, logo }` on `Found` and `company_site`, `logo_url` on `Posting` (optional fields;
    the hash covers the text only, so caches hold).
-2. After the posting is saved, a background fetch (the ingest `Fetcher`, `image/*` only, ≤ 512 KB, dimensions read)
+2. After the posting is saved, a background fetch (as for feed jobs: `image/*` only, ≤ 512 KB, dimensions read)
    stores the square mark and any wordmark in `companies` (above), so applications without a posting match too. A
-   logo or website you set is never overwritten; fetched logos refresh after 90 days.
+   logo or website you set is never overwritten; fetched logos refresh after 90 days, and one you removed isn't
+   fetched again.
 3. `CompanyMark` shows them through the `logo://` scheme as it shows the logos you set.
 4. Greenhouse and Lever's extra request; then **Set website…** and website-from-text for pasted postings and
    imported applications (4 of 5 postings and 5 of 7 applications in use on 2026-10-13 had no link to read).
+
+### Salary range
+
+A posting's pay, shown in the job header's meta line and as Applications' Salary column (sorted by the range's top a
+year; hourly counts 2,080 hours). `resume_core::salary::Salary`: either end open ("up to", "from"), in cents, an
+ISO 4217 currency, per year or per hour (monthly becomes yearly ×12; daily and weekly are left out). Where it comes
+from, first that has one:
+
+1. **Yours**: set, changed or removed in the job header (`$`); `postings.salary` (store schema 4), so a re-read of
+   the same text keeps it.
+2. **The source's own fields**: a JSON-LD `baseSalary` (also read from Ashby's page) or Lever's `salaryRange`, kept
+   on the posting (`Posting.salary`).
+3. **The text**: `resume_core::salary::find`, no model call. A money range (or one amount: "up to", "starting at")
+   on a line with a pay word (salary, pay, compensation, wage, hourly…) or under a short heading with one or
+   "range"; the first such. Amounts that can't be a salary for their period (under $10,000 or over $2M a year,
+   outside $7–$1,000 an hour, millions) are skipped, so a stipend or a funding round never reads as pay.
 
 ## 8. Storage
 
 | Where | What |
 |---|---|
-| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings`, `requirements`, `analyses`, `drafts`, `applications`, `covers`, `companies` (logos you set), `settings` |
-| User-chosen folder (default `~/Documents/Resumes`) | Exported PDFs `<company>_<short_role>_<surname>_resume.pdf` (`-2`… when taken), `applications.csv` |
+| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings` (with the salary range you set), `requirements`, `analyses`, `drafts`, `applications`, `covers`, `companies` (logos, yours or fetched, and where each came from; store schema 6), `logo_lookups` (each company's last logo fetch and what it found), `feed`, `settings` |
+| User-chosen folder (default `~/Documents/Resumes`) | Exported PDFs `<company>_<short_role>_<surname>_resume.pdf` (`-2`… when taken), `applications.csv`; Resumes lists and previews every PDF in it |
 | The agents' own config | Their sign-ins; the app stores none |
 
 Rows use UUIDs and `updated_at` so sync can be added later without a migration. No sync until decided.
@@ -580,7 +685,7 @@ gliide/
   Cargo.toml                 workspace
   crates/
     resume-core/             bank/master types (serde + JSON Schema), resolve, ids, change engine, apply, matcher, score, validator
-    resume-render/           Typst World, fonts, templates, measure, PDF/SVG/PNG, PDF text read-back
+    resume-render/           Typst World, fonts, templates, measure, PDF/SVG/PNG, PDF text read-back, PDF files as SVG
     resume-llm/              Llm trait, ACP client provider, claude CLI provider, agent discovery, JSON repair, prompts
     resume-ingest/           posting fetch/parse
     resume-store/            SQLite schema, migrations, queries; the draft event log; applications.csv
@@ -631,6 +736,7 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv` (ATS Fit's rows imported), agent settings; `resume-store` (SQLite), `resume-pipeline` | Done: in use instead of ATS Fit. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` give identical scores, states and points on the recorded fixtures |
 | M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); second template (design track), the mode experiment's report | Decision on the default mode |
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (ATS Fit's `cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Parity with ATS Fit, plus tracking |
+| M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search, the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: first live pull on 2026-10-13 checked 20 jobs within the cap, 12 fits after per-place copies were folded; sources: 2026-10-14 pull from five boards kept 84 of 693 jobs, every board's first job read from its API |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
 | M8 Distribution | Signing, notarization, auto-update; labs' written OK for subscription use | Installable by someone else |
 
@@ -643,6 +749,8 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | Bank-aware vs master-only suggestions | **Experiment** in M3–M5 on one data model; default chosen from the metrics |
 | Sync | **Not yet** |
 | Company logo source | **Decided:** first party (posting pages, the company's own site); logo.dev if coverage needs a third party |
+| Job feed source | **Decided:** freehire's public API (no account), LinkedIn's guest search, a watchlist of company boards polled directly, and Fantastic.jobs through your Apify token (paid per job, once a day); nothing written back. Who pays for paid sources if gliide is sold: decided then |
+| Feed schedule | **Decided:** in the app (launch, every 3 h); `ez feed pull` from launchd later |
 | Model access on iOS | Open until M7: Mac relay (needs pairing, close to sync) or your own API key |
 
 ## 15. Risks
@@ -658,5 +766,6 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | Model wording claims more than the bank | Validator, sources per rewrite, your variants preferred, everything reviewable before export |
 | Bank suggestions add noise or crowd the page | Off by default, own group, measured in the experiment |
 | Job boards block fetching or change markup | Board APIs and JSON-LD first; paste always works; parser fixtures per board |
+| A source changes, slows, rate-limits or blocks (LinkedIn's guest search answers 429 after heavy use) | Sources are independent: one failing is named in the status and the others still count; a pull is a few calls each; LinkedIn is asked at most hourly and backed off after a 429; pasting a link always works |
 | Font metrics differ across platforms | Bundled fonts only; no system font fallback in templates |
 | Design-track resumes want multi-column layouts that ATS parsers mangle | Template manifest `atsSafe`; Format component and a warning when it isn't |
