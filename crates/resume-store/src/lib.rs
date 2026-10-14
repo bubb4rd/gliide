@@ -1,5 +1,5 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
-//! cover letters, applications, company logos and settings (ARCHITECTURE.md §8).
+//! cover letters, applications, company logos, the job feed and settings (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -7,13 +7,16 @@
 
 mod csv;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use resume_core::change::{Draft, DraftEvent, Mode};
+use resume_core::feed::FeedJob;
 use resume_core::posting::text_hash;
+use resume_core::salary::{self, Salary};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -28,6 +31,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!("schema.sql"),
     include_str!("covers.sql"),
     include_str!("companies.sql"),
+    include_str!("salary.sql"),
+    include_str!("feed.sql"),
+    include_str!("logos.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -71,6 +77,23 @@ pub struct PostingRow {
     pub created_at: String,
     /// When it was last read; a re-read of the same text refreshes it.
     pub updated_at: String,
+    /// The salary range you set: `None` when you haven't, `Some(None)` when you removed it.
+    pub your_salary: Option<Option<Salary>>,
+}
+
+impl PostingRow {
+    /// The posting's salary range: yours once you've set or removed it, else the source's, else the one its text
+    /// states.
+    pub fn salary(&self) -> Option<Salary> {
+        match &self.your_salary {
+            Some(yours) => yours.clone(),
+            None => self
+                .posting
+                .salary
+                .clone()
+                .or_else(|| salary::find(&self.posting.text)),
+        }
+    }
 }
 
 /// A Suggest result to store as an analysis.
@@ -196,6 +219,111 @@ pub struct Logo {
     pub media_type: String,
     /// When it was set; every new image gets a new one.
     pub updated_at: String,
+    pub source: LogoSource,
+}
+
+/// Where a stored logo came from: you, or a fetch (freehire's logo for the name, or the company's own site).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogoSource {
+    Yours,
+    Freehire,
+    Site,
+}
+
+impl LogoSource {
+    /// The lowercase name, as stored.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Yours => "yours",
+            Self::Freehire => "freehire",
+            Self::Site => "site",
+        }
+    }
+}
+
+/// What a company's last logo fetch found; `Removed`: you removed the logo it fetched, so it isn't fetched again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogoFound {
+    Freehire,
+    Site,
+    #[serde(rename = "none")]
+    Nothing,
+    Removed,
+}
+
+impl LogoFound {
+    /// The lowercase name, as stored.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Freehire => "freehire",
+            Self::Site => "site",
+            Self::Nothing => "none",
+            Self::Removed => "removed",
+        }
+    }
+}
+
+/// A company's last logo fetch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogoLookup {
+    pub found: LogoFound,
+    /// RFC 3339.
+    pub tried_at: String,
+}
+
+/// Where a feed job is: found and waiting for its check, left out by the local check or a failed read, over the day's
+/// cap, checked, or dismissed by you.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FeedState {
+    New,
+    Skipped,
+    Waiting,
+    Checked,
+    Dismissed,
+}
+
+impl FeedState {
+    /// The lowercase name, as stored.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::New => "new",
+            Self::Skipped => "skipped",
+            Self::Waiting => "waiting",
+            Self::Checked => "checked",
+            Self::Dismissed => "dismissed",
+        }
+    }
+}
+
+/// A feed job as stored.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FeedRow {
+    pub job: FeedJob,
+    pub state: FeedState,
+    /// The local check's order (higher first).
+    pub overlap: f64,
+    pub posting_id: Option<String>,
+    /// Best master's score now, once checked.
+    pub score: Option<f64>,
+    pub master_id: Option<String>,
+    pub checked_at: Option<String>,
+    /// You opened its posting: from then on it's in Recent jobs and Applications.
+    pub opened_at: Option<String>,
+    /// Why it was skipped, or why its check failed.
+    pub reason: Option<String>,
+    pub created_at: String,
+}
+
+/// A job a pull or a search found, with the local check's verdict.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewFeedJob {
+    pub job: FeedJob,
+    pub state: FeedState,
+    pub overlap: f64,
+    pub reason: Option<String>,
 }
 
 /// The store: one SQLite connection. Not `Sync`; share it behind a mutex.
@@ -375,7 +503,7 @@ impl Store {
         let row = self
             .conn
             .query_row(
-                "SELECT id, json, created_at, updated_at FROM postings WHERE id = ?1",
+                "SELECT id, json, created_at, updated_at, salary FROM postings WHERE id = ?1",
                 [id],
                 RawPosting::from_row,
             )
@@ -386,12 +514,28 @@ impl Store {
     /// Every posting, most recently read first.
     pub fn postings(&self) -> Result<Vec<PostingRow>, StoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, json, created_at, updated_at FROM postings ORDER BY updated_at DESC, rowid DESC",
+            "SELECT id, json, created_at, updated_at, salary FROM postings ORDER BY updated_at DESC, rowid DESC",
         )?;
         let rows = stmt
             .query_map([], RawPosting::from_row)?
             .collect::<Result<Vec<_>, _>>()?;
         rows.into_iter().map(RawPosting::parse).collect()
+    }
+
+    /// Sets the posting's salary range as yours (`None`: removed). Its place in the lists stays: `updated_at` is
+    /// when it was read.
+    pub fn set_posting_salary(&self, id: &str, salary: Option<&Salary>) -> Result<(), StoreError> {
+        let changed = self.conn.execute(
+            "UPDATE postings SET salary = ?2 WHERE id = ?1",
+            params![id, serde_json::to_string(&salary)?],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound {
+                what: "posting",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
     }
 
     /// Deletes a posting with its requirements, analyses and drafts. Its application stays, without the links.
@@ -716,38 +860,98 @@ impl Store {
     }
 
     pub fn logo(&self, key: &str) -> Result<Option<Logo>, StoreError> {
-        Ok(self
+        let row = self
             .conn
             .query_row(
-                "SELECT logo, logo_type, updated_at FROM companies WHERE key = ?1",
+                "SELECT logo, logo_type, updated_at, source FROM companies WHERE key = ?1",
                 [key],
                 |r| {
-                    Ok(Logo {
-                        bytes: r.get(0)?,
-                        media_type: r.get(1)?,
-                        updated_at: r.get(2)?,
-                    })
+                    Ok((
+                        r.get::<_, Vec<u8>>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                    ))
                 },
             )
-            .optional()?)
+            .optional()?;
+        row.map(|(bytes, media_type, updated_at, source)| {
+            Ok(Logo {
+                bytes,
+                media_type,
+                updated_at,
+                source: serde_json::from_value(serde_json::Value::String(source))?,
+            })
+        })
+        .transpose()
     }
 
-    /// Sets the company's logo, replacing any; returns when it was set.
+    /// Sets the company's logo as yours, replacing any; returns when it was set.
     pub fn put_logo(&self, key: &str, bytes: &[u8], media_type: &str) -> Result<String, StoreError> {
         let now = now();
         self.conn.execute(
-            "INSERT INTO companies (id, key, logo, logo_type, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+            "INSERT INTO companies (id, key, logo, logo_type, source, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 'yours', ?5, ?5)
              ON CONFLICT (key) DO UPDATE SET logo = excluded.logo, logo_type = excluded.logo_type,
-                 updated_at = excluded.updated_at",
+                 source = 'yours', updated_at = excluded.updated_at",
             params![new_id(), key, bytes, media_type, now],
         )?;
         Ok(now)
+    }
+
+    /// Stores a fetched logo (`source` freehire or site), replacing a fetched one but never yours; whether it was
+    /// stored.
+    pub fn put_fetched_logo(
+        &self,
+        key: &str,
+        bytes: &[u8],
+        media_type: &str,
+        source: LogoSource,
+    ) -> Result<bool, StoreError> {
+        let changed = self.conn.execute(
+            "INSERT INTO companies (id, key, logo, logo_type, source, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+             ON CONFLICT (key) DO UPDATE SET logo = excluded.logo, logo_type = excluded.logo_type,
+                 source = excluded.source, updated_at = excluded.updated_at
+             WHERE companies.source <> 'yours'",
+            params![new_id(), key, bytes, media_type, source.as_str(), now()],
+        )?;
+        Ok(changed > 0)
     }
 
     /// Removes the company's logo; nothing when it has none.
     pub fn remove_logo(&self, key: &str) -> Result<(), StoreError> {
         self.conn
             .execute("DELETE FROM companies WHERE key = ?1", [key])?;
+        Ok(())
+    }
+
+    /// The company's last logo fetch, if any.
+    pub fn logo_lookup(&self, key: &str) -> Result<Option<LogoLookup>, StoreError> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT found, tried_at FROM logo_lookups WHERE key = ?1",
+                [key],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )
+            .optional()?;
+        row.map(|(found, tried_at)| {
+            Ok(LogoLookup {
+                found: serde_json::from_value(serde_json::Value::String(found))?,
+                tried_at,
+            })
+        })
+        .transpose()
+    }
+
+    /// Records a logo fetch for the company (now), replacing the last.
+    pub fn put_logo_lookup(&self, key: &str, found: LogoFound) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO logo_lookups (key, found, tried_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (key) DO UPDATE SET found = excluded.found, tried_at = excluded.tried_at",
+            params![key, found.as_str(), now()],
+        )?;
         Ok(())
     }
 
@@ -820,6 +1024,135 @@ impl Store {
         row.map(RawApplication::parse).transpose()
     }
 
+    // Feed.
+
+    /// Adds jobs whose slug the feed doesn't have; existing rows are left as they are. Returns how many were added.
+    pub fn add_feed_jobs(&self, jobs: &[NewFeedJob]) -> Result<usize, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let mut added = 0;
+        for j in jobs {
+            added += tx.execute(
+                "INSERT INTO feed (id, slug, json, found_at, posted_at, state, overlap, reason, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+                 ON CONFLICT (slug) DO NOTHING",
+                params![
+                    new_id(),
+                    j.job.slug,
+                    serde_json::to_string(&j.job)?,
+                    j.job.found_at,
+                    j.job.posted_at,
+                    j.state.as_str(),
+                    j.overlap,
+                    j.reason,
+                    now()
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(added)
+    }
+
+    /// Every row, most recently found first.
+    pub fn feed(&self) -> Result<Vec<FeedRow>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {FEED_COLUMNS} FROM feed ORDER BY found_at DESC, rowid DESC"
+        ))?;
+        let rows = stmt
+            .query_map([], RawFeed::from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter().map(RawFeed::parse).collect()
+    }
+
+    pub fn feed_row(&self, slug: &str) -> Result<Option<FeedRow>, StoreError> {
+        let row = self
+            .conn
+            .query_row(
+                &format!("SELECT {FEED_COLUMNS} FROM feed WHERE slug = ?1"),
+                [slug],
+                RawFeed::from_row,
+            )
+            .optional()?;
+        row.map(RawFeed::parse).transpose()
+    }
+
+    pub fn set_feed_state(
+        &self,
+        slug: &str,
+        state: FeedState,
+        reason: Option<&str>,
+    ) -> Result<(), StoreError> {
+        self.update_feed(
+            slug,
+            "state = ?2, reason = ?3",
+            params![slug, state.as_str(), reason, now()],
+        )
+    }
+
+    pub fn set_feed_posting(&self, slug: &str, posting_id: &str) -> Result<(), StoreError> {
+        self.update_feed(slug, "posting_id = ?2", params![slug, posting_id, now()])
+    }
+
+    /// State `checked`, `checked_at` now.
+    pub fn set_feed_checked(
+        &self,
+        slug: &str,
+        score: Option<f64>,
+        master_id: Option<&str>,
+    ) -> Result<(), StoreError> {
+        self.update_feed(
+            slug,
+            "state = 'checked', score = ?2, master_id = ?3, reason = NULL, checked_at = ?4",
+            params![slug, score, master_id, now()],
+        )
+    }
+
+    /// Marks the feed row holding this posting opened (nothing when none does).
+    pub fn set_feed_opened(&self, posting_id: &str) -> Result<(), StoreError> {
+        self.conn.execute(
+            "UPDATE feed SET opened_at = ?2, updated_at = ?2 WHERE posting_id = ?1 AND opened_at IS NULL",
+            params![posting_id, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Postings the feed read that you haven't opened: Recent jobs and Applications leave them out.
+    pub fn feed_unopened_postings(&self) -> Result<HashSet<String>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT posting_id FROM feed WHERE posting_id IS NOT NULL AND opened_at IS NULL",
+        )?;
+        let ids = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<Result<HashSet<String>, _>>()?;
+        Ok(ids)
+    }
+
+    /// Checks since `since` (RFC 3339, any offset), for the daily cap.
+    pub fn feed_checked_since(&self, since: &str) -> Result<u32, StoreError> {
+        let n: i64 = self.conn.query_row(
+            "SELECT count(*) FROM feed WHERE checked_at IS NOT NULL AND julianday(checked_at) >= julianday(?1)",
+            [since],
+            |r| r.get(0),
+        )?;
+        Ok(u32::try_from(n).unwrap_or(u32::MAX))
+    }
+
+    /// Sets `columns` (from `?2`; the last parameter is `updated_at`) on the row `slug` (`?1`).
+    fn update_feed(
+        &self,
+        slug: &str,
+        columns: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<(), StoreError> {
+        let sql = format!(
+            "UPDATE feed SET {columns}, updated_at = ?{} WHERE slug = ?1",
+            params.len()
+        );
+        if self.conn.execute(&sql, params)? == 0 {
+            return Err(not_found("feed job", slug));
+        }
+        Ok(())
+    }
+
     // Settings.
 
     /// The setting under `key`, `None` when unset.
@@ -843,6 +1176,9 @@ impl Store {
     }
 }
 
+const FEED_COLUMNS: &str = "json, state, overlap, posting_id, score, master_id, checked_at, opened_at, reason, \
+                            created_at";
+
 const ANALYSIS_COLUMNS: &str = "id, posting_id, bank_rev, master_id, master_rev, mode, model, suggestions, projected, \
                                 created_at, opened_at";
 
@@ -854,6 +1190,7 @@ struct RawPosting {
     json: String,
     created_at: String,
     updated_at: String,
+    salary: Option<String>,
 }
 
 impl RawPosting {
@@ -863,6 +1200,7 @@ impl RawPosting {
             json: r.get(1)?,
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
+            salary: r.get(4)?,
         })
     }
 
@@ -872,6 +1210,7 @@ impl RawPosting {
             posting: from_json(&self.json)?,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            your_salary: self.salary.as_deref().map(from_json).transpose()?,
         })
     }
 }
@@ -920,6 +1259,51 @@ impl RawAnalysis {
             projected: self.projected,
             created_at: self.created_at,
             opened_at: self.opened_at,
+        })
+    }
+}
+
+struct RawFeed {
+    json: String,
+    state: String,
+    overlap: f64,
+    posting_id: Option<String>,
+    score: Option<f64>,
+    master_id: Option<String>,
+    checked_at: Option<String>,
+    opened_at: Option<String>,
+    reason: Option<String>,
+    created_at: String,
+}
+
+impl RawFeed {
+    fn from_row(r: &Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            json: r.get(0)?,
+            state: r.get(1)?,
+            overlap: r.get(2)?,
+            posting_id: r.get(3)?,
+            score: r.get(4)?,
+            master_id: r.get(5)?,
+            checked_at: r.get(6)?,
+            opened_at: r.get(7)?,
+            reason: r.get(8)?,
+            created_at: r.get(9)?,
+        })
+    }
+
+    fn parse(self) -> Result<FeedRow, StoreError> {
+        Ok(FeedRow {
+            job: from_json(&self.json)?,
+            state: serde_json::from_value(serde_json::Value::String(self.state))?,
+            overlap: self.overlap,
+            posting_id: self.posting_id,
+            score: self.score,
+            master_id: self.master_id,
+            checked_at: self.checked_at,
+            opened_at: self.opened_at,
+            reason: self.reason,
+            created_at: self.created_at,
         })
     }
 }

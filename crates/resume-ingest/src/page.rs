@@ -1,5 +1,7 @@
 //! Any other page: its schema.org `JobPosting` JSON-LD (Workday, iCIMS, ApplicantPro…), else its main text.
 
+use std::sync::LazyLock;
+
 use scraper::{Html, Selector};
 use serde_json::Value;
 
@@ -7,6 +9,7 @@ use crate::Found;
 use crate::boards::{clean, place};
 use crate::text::{html_to_text, page_text, unescape};
 use resume_core::Method;
+use resume_core::salary::{self, Salary};
 
 /// The posting in a page: from JSON-LD when that has at least `min_chars` of description, else the page's main
 /// text. Either way `url` is the page's canonical link when it names one.
@@ -27,14 +30,28 @@ pub(crate) fn read(html: &str, min_chars: usize) -> Found {
         title: meta(&doc, "og:title").or_else(|| first_text(&doc, "title")),
         company: meta(&doc, "og:site_name"),
         location: None,
+        salary: None,
         text: main_text(&doc),
     }
 }
 
 /// The first JSON-LD `JobPosting` with a description: the node itself, an array item or an `@graph` member.
 fn json_ld(doc: &Html) -> Option<Found> {
-    let scripts = Selector::parse("script").expect("static selector");
-    doc.select(&scripts)
+    json_ld_values(doc).find_map(|v| find_job(&v, 0).and_then(job_posting))
+}
+
+/// The pay in a page's JSON-LD `JobPosting` (`baseSalary`): for boards read from their own data whose pages also
+/// carry it (Ashby).
+pub(crate) fn salary(html: &str) -> Option<Salary> {
+    let doc = Html::parse_document(html);
+    json_ld_values(&doc).find_map(|v| find_job(&v, 0)?.get("baseSalary").and_then(base_salary))
+}
+
+/// Every JSON-LD block in `doc` that parses.
+fn json_ld_values(doc: &Html) -> impl Iterator<Item = Value> + '_ {
+    static SCRIPTS: LazyLock<Selector> =
+        LazyLock::new(|| Selector::parse("script").expect("static selector"));
+    doc.select(&SCRIPTS)
         .filter(|s| {
             s.value()
                 .attr("type")
@@ -47,7 +64,6 @@ fn json_ld(doc: &Html) -> Option<Found> {
                 .or_else(|_| serde_json::from_str(&raw.replace(['\n', '\r'], " ")))
                 .ok()
         })
-        .find_map(|v| find_job(&v, 0).and_then(job_posting))
 }
 
 fn find_job(v: &Value, depth: u8) -> Option<&Value> {
@@ -99,8 +115,38 @@ fn job_posting(job: &Value) -> Option<Found> {
         title: job.get("title").and_then(Value::as_str).and_then(clean),
         company,
         location: place(&places, remote.then_some("remote")),
+        salary: job.get("baseSalary").and_then(base_salary),
         text: html_to_text(&description),
     })
+}
+
+/// A `MonetaryAmount`: `{ currency, value: { minValue, maxValue, value, unitText } }`, or `value` a bare number.
+/// Numbers may be written as strings.
+fn base_salary(amount: &Value) -> Option<Salary> {
+    let number = |v: Option<&Value>| match v? {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.replace(',', "").trim().parse().ok(),
+        _ => None,
+    };
+    let currency = amount
+        .get("currency")
+        .and_then(Value::as_str)
+        .unwrap_or("USD");
+    let value = amount.get("value");
+    let (min, max, unit) = match value {
+        Some(q @ Value::Object(_)) => {
+            let exact = number(q.get("value"));
+            (
+                number(q.get("minValue")).or(exact),
+                number(q.get("maxValue")).or(exact),
+                q.get("unitText")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            )
+        }
+        v => (number(v), number(v), ""),
+    };
+    salary::from_source(min, max, currency, unit)
 }
 
 /// `Locality, Region`, or the country when neither is given.

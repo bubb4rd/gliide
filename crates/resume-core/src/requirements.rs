@@ -93,5 +93,7 @@ pub enum KnockoutKind {
     Clearance,
     Authorization,
     Onsite,
+    /// Current students only, returning to school after the job, or a graduation window.
+    Enrollment,
     Other,
 }

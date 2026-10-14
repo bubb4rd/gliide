@@ -65,6 +65,8 @@ pub struct Component {
     /// 0–1, counting near forms (differs from `value` only for the skill components).
     pub value_near: f64,
     pub detail: String,
+    /// The gist in a few words, for the app's score popover: `2 of 3 · missing Docker`, `1.5 of 2 years`.
+    pub brief: String,
 }
 
 /// `resume` against `req`, with `facts` about its rendered page, on `today` (`(year, month)`, the month `present`
@@ -133,6 +135,17 @@ fn absent(id: &'static str, weight: f64, detail: impl Into<String>) -> Component
         value: 0.0,
         value_near: 0.0,
         detail: detail.into(),
+        brief: "Not in the posting".to_owned(),
+    }
+}
+
+/// The first two of `items`, then how many more: `Docker, Kafka +3`.
+fn first_few(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [a] => a.clone(),
+        [a, b] => format!("{a}, {b}"),
+        [a, b, rest @ ..] => format!("{a}, {b} +{}", rest.len()),
     }
 }
 
@@ -238,6 +251,15 @@ fn skills_component(
     if !near.is_empty() {
         detail += &format!("; near forms: {}", near.join(", "));
     }
+    let brief = if missing.is_empty() {
+        format!("All {} on the page", mine.len())
+    } else {
+        format!(
+            "{count} of {} · missing {}",
+            mine.len(),
+            first_few(&missing)
+        )
+    };
     Component {
         id,
         weight,
@@ -245,6 +267,7 @@ fn skills_component(
         value: met / all,
         value_near: met_near / all,
         detail,
+        brief,
     }
 }
 
@@ -275,26 +298,33 @@ fn title_component(r: &Resume, terms: &[String]) -> Component {
     }
     let page = Page::new(blocks.iter().map(|(s, t)| (*s, t.as_str())));
     let mut best = 0.0;
+    let mut brief = "Not in a subtitle or summary".to_owned();
     let mut notes = Vec::new();
     for term in terms {
-        let (value, note) = if let Some((_, hit)) = find_literal(&page, term, &[]) {
-            (1.0, format!("\"{term}\" stated: \"{}\"", hit.text))
+        let (value, note, gist) = if let Some((_, hit)) = find_literal(&page, term, &[]) {
+            (
+                1.0,
+                format!("\"{term}\" stated: \"{}\"", hit.text),
+                format!("“{term}” stated"),
+            )
         } else {
             let words: Vec<String> = title_words(term)
                 .into_iter()
                 .filter_map(|w| page.find(w).map(|h| h.text))
                 .collect();
             if words.is_empty() {
-                (0.0, format!("\"{term}\" not stated"))
+                (0.0, format!("\"{term}\" not stated"), String::new())
             } else {
                 (
                     0.5,
                     format!("\"{term}\" partly stated: \"{}\"", words.join("\", \"")),
+                    format!("Partly: {}", words.join(", ")),
                 )
             }
         };
         if value > best {
             best = value;
+            brief = gist;
         }
         notes.push(note);
     }
@@ -305,6 +335,7 @@ fn title_component(r: &Resume, terms: &[String]) -> Component {
         value: best,
         value_near: best,
         detail: format!("in a subtitle or summary: {}", notes.join("; ")),
+        brief,
     }
 }
 
@@ -441,6 +472,11 @@ fn experience_component(exp: &Experience, years_min: Option<u32>) -> Component {
         value,
         value_near: value,
         detail,
+        brief: format!(
+            "{} of {need} {}",
+            num(exp.years()),
+            if need == 1 { "year" } else { "years" }
+        ),
     }
 }
 
@@ -528,6 +564,16 @@ fn level_name(l: DegreeLevel) -> &'static str {
     }
 }
 
+/// A degree level as a brief names it: `Bachelor's`.
+fn level_title(l: DegreeLevel) -> &'static str {
+    match l {
+        DegreeLevel::Associate => "Associate's",
+        DegreeLevel::Bachelor => "Bachelor's",
+        DegreeLevel::Master => "Master's",
+        DegreeLevel::Phd => "PhD",
+    }
+}
+
 /// Years of experience that stand in for a degree when the posting accepts equivalent experience.
 fn equivalent_years(l: DegreeLevel) -> f64 {
     match l {
@@ -561,8 +607,10 @@ fn education_component(
     }
     let mut parts = Vec::new();
     let mut notes = Vec::new();
+    let mut briefs = Vec::new();
     if let Some(d) = &req.degree {
         let (mut value, mut note) = (0.0, "no degree stated in education sections".to_owned());
+        let mut brief = "No degree listed".to_owned();
         let entries = r
             .sections
             .iter()
@@ -611,6 +659,14 @@ fn education_component(
                 level_name(d.level),
             );
             if !found || v > value {
+                brief = match (level_ok, &field) {
+                    (false, _) => {
+                        format!("{} · {} asked", level_title(level), level_title(d.level))
+                    }
+                    (true, Some((f, _))) => format!("{} in {f}", level_title(level)),
+                    (true, None) if d.fields.is_empty() => level_title(level).to_owned(),
+                    (true, None) => format!("{}, field not listed", level_title(level)),
+                };
                 (value, note, found) = (v, n, true);
             }
         }
@@ -624,12 +680,14 @@ fn education_component(
             if stand_in > value {
                 value = stand_in;
                 note = format!("{note}; {eq} stands in");
+                brief = format!("Experience stands in: {} of {need} years", num(exp.years()));
             } else {
                 note = format!("{note}; {eq}");
             }
         }
         parts.push(value);
         notes.push(format!("degree {}: {note}", num(value)));
+        briefs.push(brief);
     }
     if !certs.is_empty() {
         let (met, missing): (Vec<&String>, Vec<&String>) = certs
@@ -648,6 +706,7 @@ fn education_component(
             );
         }
         notes.push(note);
+        briefs.push(format!("{} of {} certifications", met.len(), certs.len()));
     }
     let value = parts.iter().sum::<f64>() / parts.len() as f64;
     Component {
@@ -657,6 +716,7 @@ fn education_component(
         value,
         value_near: value,
         detail: notes.join("; "),
+        brief: briefs.join(" · "),
     }
 }
 
@@ -695,7 +755,8 @@ fn format_component(
     req: &Requirements,
     skills: &[SkillMatch],
 ) -> Component {
-    let mut checks: Vec<(bool, String)> = vec![
+    // Each check: passed, its note, and what the brief says when it fails.
+    let mut checks: Vec<(bool, String, String)> = vec![
         (
             facts.ats_safe,
             if facts.ats_safe {
@@ -704,6 +765,7 @@ fn format_component(
                 "template is not ATS-safe"
             }
             .to_owned(),
+            "Template isn’t ATS-safe".to_owned(),
         ),
         {
             let odd: Vec<&str> = r
@@ -713,9 +775,13 @@ fn format_component(
                 .map(|s| s.title.as_str())
                 .collect();
             if odd.is_empty() {
-                (true, "standard headings".to_owned())
+                (true, "standard headings".to_owned(), String::new())
             } else {
-                (false, format!("non-standard headings: {}", odd.join(", ")))
+                (
+                    false,
+                    format!("non-standard headings: {}", odd.join(", ")),
+                    "Non-standard headings".to_owned(),
+                )
             }
         },
         {
@@ -731,6 +797,7 @@ fn format_component(
                     "no email in contact"
                 }
                 .to_owned(),
+                "No email".to_owned(),
             )
         },
         {
@@ -746,32 +813,47 @@ fn format_component(
                     "no phone in contact"
                 }
                 .to_owned(),
+                "No phone".to_owned(),
             )
         },
         (
             facts.pages <= facts.page_limit,
             format!("{} of {} pages", facts.pages, facts.page_limit),
+            format!("{} pages, limit {}", facts.pages, facts.page_limit),
         ),
     ];
     if let Some(pdf) = &facts.pdf_text {
         let pdf = Page::of_text(pdf);
-        let lost: Vec<&str> = req
+        let lost: Vec<String> = req
             .skills
             .iter()
             .zip(skills)
             .filter(|(s, m)| {
                 m.status.literal() && find_literal(&pdf, &s.term, &s.aliases).is_none()
             })
-            .map(|(s, _)| s.term.as_str())
+            .map(|(s, _)| s.term.clone())
             .collect();
         checks.push(if lost.is_empty() {
-            (true, "PDF text carries every matched skill".to_owned())
+            (
+                true,
+                "PDF text carries every matched skill".to_owned(),
+                String::new(),
+            )
         } else {
-            (false, format!("PDF text lacks: {}", lost.join(", ")))
+            (
+                false,
+                format!("PDF text lacks: {}", lost.join(", ")),
+                format!("PDF drops {}", first_few(&lost)),
+            )
         });
     }
-    let passed = checks.iter().filter(|(ok, _)| *ok).count();
+    let passed = checks.iter().filter(|(ok, ..)| *ok).count();
     let value = passed as f64 / checks.len() as f64;
+    let failed: Vec<&str> = checks
+        .iter()
+        .filter(|(ok, ..)| !ok)
+        .map(|(_, _, b)| b.as_str())
+        .collect();
     Component {
         id: "format",
         weight: 10.0,
@@ -783,10 +865,15 @@ fn format_component(
             checks.len(),
             checks
                 .iter()
-                .map(|(_, n)| n.as_str())
+                .map(|(_, n, _)| n.as_str())
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
+        brief: if failed.is_empty() {
+            format!("All {} checks pass", checks.len())
+        } else {
+            failed.join(" · ")
+        },
     }
 }
 

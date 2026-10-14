@@ -1,0 +1,10 @@
+{
+  "input": "{\"timeRange\":\"1h\",\"limit\":10}",
+  "request": "https://api.apify.com/v2/acts/fantastic-jobs~career-site-job-listing-api/run-sync-get-dataset-items?token=dummy&timeout=240",
+  "url": "https://api.apify.com/v2/acts/fantastic-jobs~career-site-job-listing-api/run-sync-get-dataset-items?token=dummy&timeout=240",
+  "status": 401,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13"
+}

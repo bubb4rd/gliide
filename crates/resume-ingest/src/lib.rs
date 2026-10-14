@@ -1,19 +1,26 @@
 //! Postings in (ARCHITECTURE.md §7): a pasted link is fetched and parsed, anything else is the posting's text.
 //!
-//! A link is read from the best source that has it: the Greenhouse or Lever job APIs, Ashby's job page data,
-//! LinkedIn's guest job page (search and feed links rewritten to the job), else the page's schema.org `JobPosting`
-//! JSON-LD, else the page's main text. Sites that refuse automated requests, or only show the posting in a browser,
-//! end in an error that says to paste the text instead.
+//! A link is read from the best source that has it: the Greenhouse, Lever, Workday, SmartRecruiters, Workable or
+//! Recruitee job APIs, Ashby's job page data, LinkedIn's guest job page (search and feed links rewritten to the job),
+//! else the page's schema.org `JobPosting` JSON-LD, else the page's main text. Sites that refuse automated requests,
+//! or only show the posting in a browser, end in an error that says to paste the text instead.
 
 mod boards;
+pub mod fantastic;
+pub mod feed;
 mod fetch;
+pub mod freehire;
 mod link;
+pub mod linkedin;
+pub mod logos;
 mod page;
 pub mod record;
 mod text;
+pub mod watch;
 
 use std::time::{Duration, SystemTime};
 
+use resume_core::salary::Salary;
 use resume_core::{Method, Posting};
 
 pub use fetch::{Fetcher, HttpFetcher, Response};
@@ -53,6 +60,12 @@ pub enum IngestError {
     /// The link answered, but not with a posting (gone, not a page, not on the board).
     #[error("{url} isn't a job posting: {reason}")]
     NotAPosting { url: String, reason: String },
+    /// A watchlist board that answered 404 or 410: a wrong name, or the company moved boards.
+    #[error("{url} isn't a board gliide can read: {reason}")]
+    NotABoard { url: String, reason: String },
+    /// A paid service answered but wouldn't run: a refused token, no credit, a run that took too long.
+    #[error("{message}")]
+    Refused { host: String, message: String },
 }
 
 fn retry_hint(after: Option<Duration>) -> String {
@@ -70,6 +83,8 @@ pub(crate) struct Found {
     pub(crate) title: Option<String>,
     pub(crate) company: Option<String>,
     pub(crate) location: Option<String>,
+    /// Pay from the source's own fields.
+    pub(crate) salary: Option<Salary>,
     pub(crate) text: String,
 }
 
@@ -118,8 +133,22 @@ async fn read_link(
         Link::Lever { .. } => {
             boards::lever(&resp.body).ok_or_else(|| not_a_posting("Lever returned no posting"))?
         }
+        Link::Workday { .. } => boards::workday(&resp.body)
+            .ok_or_else(|| not_a_posting("Workday returned no posting"))?,
+        Link::SmartRecruiters { .. } => boards::smartrecruiters(&resp.body)
+            .ok_or_else(|| not_a_posting("SmartRecruiters returned no posting"))?,
+        Link::Workable { .. } => boards::workable(&resp.body)
+            .ok_or_else(|| not_a_posting("Workable returned no posting"))?,
+        Link::Recruitee { .. } => boards::recruitee(&resp.body)
+            .ok_or_else(|| not_a_posting("Recruitee returned no posting"))?,
         Link::Ashby { .. } => match boards::ashby(&resp.body) {
-            Some(found) => found.map_err(|r| not_a_posting(&r))?,
+            Some(found) => {
+                let found = found.map_err(|r| not_a_posting(&r))?;
+                Found {
+                    salary: found.salary.or_else(|| page::salary(&resp.body)),
+                    ..found
+                }
+            }
             None => page::read(&resp.body, MIN_PAGE_TEXT),
         },
         Link::Linkedin { .. } => {
@@ -150,7 +179,7 @@ async fn read_link(
     if found.text.is_empty() {
         return Err(not_a_posting("the posting has no text"));
     }
-    Ok(Posting::new(
+    let mut posting = Posting::new(
         found.method,
         Some(source.to_owned()),
         found.url.or(Some(page_url)),
@@ -158,7 +187,9 @@ async fn read_link(
         found.company,
         found.location,
         found.text,
-    ))
+    );
+    posting.salary = found.salary;
+    Ok(posting)
 }
 
 /// Statuses that end the read: refused, rate-limited, gone, or a server failure.

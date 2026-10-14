@@ -76,7 +76,7 @@
         "additionalProperties": false,
         "required": ["kind", "text"],
         "properties": {
-          "kind": { "enum": ["clearance", "authorization", "onsite", "other"] },
+          "kind": { "enum": ["clearance", "authorization", "onsite", "enrollment", "other"] },
           "text": { "type": "string", "minLength": 1, "maxLength": 120 }
         }
       }

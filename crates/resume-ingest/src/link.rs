@@ -15,6 +15,20 @@ pub(crate) enum Link {
     },
     /// `jobs.ashbyhq.com/{org}/{id}`.
     Ashby { org: String, id: String },
+    /// `{tenant}.wdN.myworkdayjobs.com/[{locale}/]{site}/job/{path}`; `path` is what follows `job/`.
+    Workday {
+        host: String,
+        tenant: String,
+        site: String,
+        path: String,
+    },
+    /// `jobs.smartrecruiters.com/{company}/{id}` or `/{company}/{id}-{slug}`.
+    SmartRecruiters { company: String, id: String },
+    /// `apply.workable.com/{account}/j/{shortcode}`.
+    Workable { account: String, shortcode: String },
+    /// `{company}.recruitee.com/o/{slug}`; a feed's `external_id` gives the offer's numeric id as `slug`, which the
+    /// API also takes.
+    Recruitee { company: String, slug: String },
     /// A LinkedIn job, from its own page or a search/feed link's `currentJobId`.
     Linkedin { id: String },
     /// Anything else: the page itself.
@@ -99,9 +113,117 @@ impl Link {
                     return Self::Linkedin { id };
                 }
             }
+            h if h.ends_with(".myworkdayjobs.com") => {
+                if let Some(job) = segments.iter().position(|s| *s == "job")
+                    && (job == 1 || (job == 2 && is_locale(segments[0])))
+                {
+                    let path: Vec<&str> = segments[job + 1..]
+                        .iter()
+                        .take_while(|s| **s != "apply")
+                        .copied()
+                        .collect();
+                    if !path.is_empty() {
+                        return Self::Workday {
+                            host: h.to_owned(),
+                            tenant: h.split('.').next().unwrap_or_default().to_owned(),
+                            site: segments[job - 1].to_owned(),
+                            path: path.join("/"),
+                        };
+                    }
+                }
+            }
+            "jobs.smartrecruiters.com" => {
+                if let [company, last, ..] = segments.as_slice() {
+                    let id = last.split('-').next().unwrap_or_default();
+                    if is_digits(id) {
+                        return Self::SmartRecruiters {
+                            company: (*company).to_owned(),
+                            id: id.to_owned(),
+                        };
+                    }
+                }
+            }
+            "apply.workable.com" => {
+                if let [account, "j", shortcode, ..] = segments.as_slice()
+                    && is_alphanumeric(shortcode)
+                {
+                    return Self::Workable {
+                        account: (*account).to_owned(),
+                        shortcode: (*shortcode).to_owned(),
+                    };
+                }
+            }
+            h if h.ends_with(".recruitee.com") && h.matches('.').count() == 2 => {
+                if let Some(slug) = segments.windows(2).find(|w| w[0] == "o").map(|w| w[1]) {
+                    return Self::Recruitee {
+                        company: h.split('.').next().unwrap_or_default().to_owned(),
+                        slug: slug.to_owned(),
+                    };
+                }
+            }
             _ => {}
         }
         Self::Page { url: url.into() }
+    }
+
+    /// A board job from its board and id (a feed's `external_id`), when `source` is a board this reads and the id
+    /// has the board's form; `eu` for a Lever job on `jobs.eu.lever.co`. A Workday board is `{host}/{site}` and its
+    /// id `/job/{path}`; a Recruitee id may be the offer's number.
+    pub(crate) fn board(source: &str, board: &str, id: &str, eu: bool) -> Option<Self> {
+        if source == "workday" {
+            let (host, site) = board.split_once('/')?;
+            let path = id.strip_prefix("/job/")?;
+            if site.is_empty() || site.contains('/') || path.contains(['?', '#']) {
+                return None;
+            }
+            let url = Url::parse(&format!("https://{host}/{site}/job/{path}")).ok()?;
+            return match Self::classify(url) {
+                link @ Self::Workday { .. } => Some(link),
+                _ => None,
+            };
+        }
+        if board.is_empty()
+            || !board
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        {
+            return None;
+        }
+        let board = board.to_owned();
+        match source {
+            "greenhouse" if is_digits(id) => Some(Self::Greenhouse {
+                board,
+                id: id.to_owned(),
+            }),
+            "lever" if is_uuid(id) => Some(Self::Lever {
+                eu,
+                company: board,
+                id: id.to_owned(),
+            }),
+            "ashby" if is_uuid(id) => Some(Self::Ashby {
+                org: board,
+                id: id.to_ascii_lowercase(),
+            }),
+            "smartrecruiters" if is_digits(id) => Some(Self::SmartRecruiters {
+                company: board,
+                id: id.to_owned(),
+            }),
+            "workable" if is_alphanumeric(id) => Some(Self::Workable {
+                account: board,
+                shortcode: id.to_owned(),
+            }),
+            "recruitee"
+                if !board.contains(['.', '_'])
+                    && !id.is_empty()
+                    && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') =>
+            {
+                Some(Self::Recruitee {
+                    company: board,
+                    slug: id.to_owned(),
+                })
+            }
+            _ => None,
+        }
     }
 
     /// The URL to GET.
@@ -119,6 +241,21 @@ impl Link {
                 format!("https://{host}/v0/postings/{company}/{id}")
             }
             Self::Ashby { org, id } => format!("https://jobs.ashbyhq.com/{org}/{id}"),
+            Self::Workday {
+                host,
+                tenant,
+                site,
+                path,
+            } => format!("https://{host}/wday/cxs/{tenant}/{site}/job/{path}"),
+            Self::SmartRecruiters { company, id } => {
+                format!("https://api.smartrecruiters.com/v1/companies/{company}/postings/{id}")
+            }
+            Self::Workable { account, shortcode } => {
+                format!("https://apply.workable.com/api/v2/accounts/{account}/jobs/{shortcode}")
+            }
+            Self::Recruitee { company, slug } => {
+                format!("https://{company}.recruitee.com/api/offers/{slug}")
+            }
             Self::Linkedin { id } => {
                 format!("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{id}")
             }
@@ -141,6 +278,18 @@ impl Link {
                 format!("https://{host}/{company}/{id}")
             }
             Self::Ashby { org, id } => format!("https://jobs.ashbyhq.com/{org}/{id}"),
+            Self::Workday {
+                host, site, path, ..
+            } => format!("https://{host}/{site}/job/{path}"),
+            Self::SmartRecruiters { company, id } => {
+                format!("https://jobs.smartrecruiters.com/{company}/{id}")
+            }
+            Self::Workable { account, shortcode } => {
+                format!("https://apply.workable.com/{account}/j/{shortcode}/")
+            }
+            Self::Recruitee { company, slug } => {
+                format!("https://{company}.recruitee.com/o/{slug}")
+            }
             Self::Linkedin { id } => format!("https://www.linkedin.com/jobs/view/{id}/"),
             Self::Page { url } => url.clone(),
         }
@@ -182,6 +331,19 @@ fn linkedin_path_id(segments: &[&str]) -> Option<String> {
 
 fn is_digits(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn is_alphanumeric(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
+/// `en-US`, `fr`: a language with an optional region, as Workday puts before the site.
+fn is_locale(s: &str) -> bool {
+    let (lang, region) = s.split_once('-').unwrap_or((s, "AA"));
+    lang.len() == 2
+        && lang.bytes().all(|b| b.is_ascii_lowercase())
+        && region.len() == 2
+        && region.bytes().all(|b| b.is_ascii_uppercase())
 }
 
 /// `8-4-4-4-12` hex digits.
@@ -286,6 +448,136 @@ mod tests {
             l.request_url(),
             "https://jobs.ashbyhq.com/runpod/b64a3935-931a-4b7f-9899-7ebe152164c5"
         );
+    }
+
+    #[test]
+    fn workday() {
+        let want = Link::Workday {
+            host: "nvidia.wd5.myworkdayjobs.com".into(),
+            tenant: "nvidia".into(),
+            site: "NVIDIAExternalCareerSite".into(),
+            path: "US-CA-Santa-Clara/Senior-Software-Engineer_JR2014880".into(),
+        };
+        let page = "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-Software-Engineer_JR2014880";
+        assert_eq!(link(page), want);
+        assert_eq!(
+            link(
+                "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-Software-Engineer_JR2014880/apply?source=x"
+            ),
+            want
+        );
+        assert_eq!(
+            want.request_url(),
+            "https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-Software-Engineer_JR2014880"
+        );
+        assert_eq!(want.page_url(), page);
+        // freehire's `external_id`: `{host}/{site}:/job/{path}`.
+        assert_eq!(
+            Link::board(
+                "workday",
+                "nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
+                "/job/US-CA-Santa-Clara/Senior-Software-Engineer_JR2014880",
+                false
+            ),
+            Some(want)
+        );
+        assert!(matches!(
+            link("https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite"),
+            Link::Page { .. }
+        ));
+    }
+
+    #[test]
+    fn smartrecruiters() {
+        let want = Link::SmartRecruiters {
+            company: "Experian".into(),
+            id: "744000155380189".into(),
+        };
+        assert_eq!(
+            link(
+                "https://jobs.smartrecruiters.com/Experian/744000155380189-senior-endpoint-systems-engineer"
+            ),
+            want
+        );
+        assert_eq!(
+            link("https://jobs.smartrecruiters.com/Experian/744000155380189"),
+            want
+        );
+        assert_eq!(
+            want.request_url(),
+            "https://api.smartrecruiters.com/v1/companies/Experian/postings/744000155380189"
+        );
+        assert_eq!(
+            want.page_url(),
+            "https://jobs.smartrecruiters.com/Experian/744000155380189"
+        );
+        assert_eq!(
+            Link::board("smartrecruiters", "Experian", "744000155380189", false),
+            Some(want)
+        );
+        assert!(matches!(
+            link("https://jobs.smartrecruiters.com/Experian"),
+            Link::Page { .. }
+        ));
+    }
+
+    #[test]
+    fn workable() {
+        let want = Link::Workable {
+            account: "huggingface".into(),
+            shortcode: "19A136F8E2".into(),
+        };
+        assert_eq!(
+            link("https://apply.workable.com/huggingface/j/19A136F8E2/"),
+            want
+        );
+        assert_eq!(
+            link("apply.workable.com/huggingface/j/19A136F8E2/apply"),
+            want
+        );
+        assert_eq!(
+            want.request_url(),
+            "https://apply.workable.com/api/v2/accounts/huggingface/jobs/19A136F8E2"
+        );
+        assert_eq!(
+            want.page_url(),
+            "https://apply.workable.com/huggingface/j/19A136F8E2/"
+        );
+        assert_eq!(
+            Link::board("workable", "huggingface", "19A136F8E2", false),
+            Some(want)
+        );
+        assert!(matches!(
+            link("https://apply.workable.com/huggingface/"),
+            Link::Page { .. }
+        ));
+    }
+
+    #[test]
+    fn recruitee() {
+        let want = Link::Recruitee {
+            company: "bunq".into(),
+            slug: "ios-developer-4".into(),
+        };
+        assert_eq!(link("https://bunq.recruitee.com/o/ios-developer-4"), want);
+        assert_eq!(link("bunq.recruitee.com/o/ios-developer-4/c/new"), want);
+        assert_eq!(
+            want.request_url(),
+            "https://bunq.recruitee.com/api/offers/ios-developer-4"
+        );
+        assert_eq!(
+            want.page_url(),
+            "https://bunq.recruitee.com/o/ios-developer-4"
+        );
+        // freehire's `external_id` names the offer by number, which the API also takes.
+        assert_eq!(
+            Link::board("recruitee", "bunq", "2770592", false).map(|l| l.request_url()),
+            Some("https://bunq.recruitee.com/api/offers/2770592".into())
+        );
+        assert!(matches!(
+            link("https://bunq.recruitee.com/"),
+            Link::Page { .. }
+        ));
     }
 
     #[test]

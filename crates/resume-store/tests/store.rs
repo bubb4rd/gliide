@@ -2,11 +2,13 @@
 //! suggestions, and made-up applications.
 
 use resume_core::change::{Decision, DraftEvent, Mode};
+use resume_core::feed::FeedJob;
+use resume_core::salary::{Period, Salary};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, NewAnalysis, Rev, Store, StoreError, applications_csv,
-    parse_ats_fit_csv,
+    AppStatus, Application, FeedState, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Rev, Store,
+    StoreError, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -172,6 +174,42 @@ fn postings_dedupe_by_text_and_list_newest_first() {
         "Other text"
     );
     assert!(store.posting("missing").unwrap().is_none());
+}
+
+#[test]
+fn your_salary_wins_over_the_postings_and_survives_a_reread() {
+    let store = Store::open_in_memory().unwrap();
+    let text = "Backend engineer.\nSalary: $80,000 to $105,000 per year";
+    let id = store.put_posting(&posting(text)).unwrap();
+    let salary = |id: &str| store.posting(id).unwrap().unwrap().salary();
+    let year = |lo: u32, hi: u32| Salary::new(Some(lo * 100), Some(hi * 100), "USD", Period::Year);
+    assert_eq!(salary(&id), year(80_000, 105_000), "read from the text");
+
+    let mut sourced = posting(text);
+    sourced.salary = year(90_000, 110_000);
+    store.put_posting(&sourced).unwrap();
+    assert_eq!(
+        salary(&id),
+        year(90_000, 110_000),
+        "the source's own fields beat the text"
+    );
+
+    let yours = year(95_000, 120_000).unwrap();
+    store.set_posting_salary(&id, Some(&yours)).unwrap();
+    store.put_posting(&sourced).unwrap();
+    assert_eq!(salary(&id), Some(yours), "yours stays through a re-read");
+
+    store.set_posting_salary(&id, None).unwrap();
+    assert_eq!(
+        salary(&id),
+        None,
+        "removed, the posting's doesn't come back"
+    );
+
+    assert!(matches!(
+        store.set_posting_salary("missing", None),
+        Err(StoreError::NotFound { .. })
+    ));
 }
 
 #[test]
@@ -513,14 +551,18 @@ fn migrating_to_covers_keeps_the_data() {
     };
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE covers; DROP TABLE companies; PRAGMA user_version = 1;")
-        .unwrap();
+    conn.execute_batch(
+        "DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
+         ALTER TABLE postings DROP COLUMN salary; PRAGMA user_version = 1;",
+    )
+    .unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
     assert_eq!(store.bank().unwrap().unwrap().1, bank);
     assert_eq!(store.master(&master.id).unwrap().unwrap().1, master);
-    assert!(store.posting(&posting_id).unwrap().is_some());
+    let row = store.posting(&posting_id).unwrap().unwrap();
+    assert_eq!(row.your_salary, None, "no salary of yours before version 4");
     assert_eq!(
         store.latest_analysis(&posting_id).unwrap().unwrap().id,
         analysis_id
@@ -558,7 +600,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 6);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -581,4 +623,223 @@ fn logos_replace_and_remove() {
     store.remove_logo("acme").unwrap();
     let keys: Vec<String> = store.logos().unwrap().into_iter().map(|(k, _)| k).collect();
     assert_eq!(keys, ["northwind"]);
+}
+
+/// A fetched logo fills a company without one and replaces a fetched one, never yours; yours replaces a fetched one.
+#[test]
+fn fetched_logos_never_replace_yours() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(
+        store
+            .put_fetched_logo("acme", b"fh", "image/png", LogoSource::Freehire)
+            .unwrap()
+    );
+    assert!(
+        store
+            .put_fetched_logo("acme", b"site", "image/png", LogoSource::Site)
+            .unwrap()
+    );
+    let fetched = store.logo("acme").unwrap().unwrap();
+    assert_eq!(
+        (fetched.bytes.as_slice(), fetched.source),
+        (b"site".as_slice(), LogoSource::Site)
+    );
+
+    let yours = store.put_logo("acme", b"<svg/>", "image/svg+xml").unwrap();
+    assert!(
+        !store
+            .put_fetched_logo("acme", b"fh2", "image/png", LogoSource::Freehire)
+            .unwrap()
+    );
+    let logo = store.logo("acme").unwrap().unwrap();
+    assert_eq!(
+        (
+            logo.bytes.as_slice(),
+            logo.media_type.as_str(),
+            logo.updated_at.as_str(),
+            logo.source
+        ),
+        (
+            b"<svg/>".as_slice(),
+            "image/svg+xml",
+            yours.as_str(),
+            LogoSource::Yours
+        )
+    );
+}
+
+/// The last lookup per company, replaced by the next.
+#[test]
+fn logo_lookups_keep_the_last() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.logo_lookup("acme").unwrap(), None);
+    store.put_logo_lookup("acme", LogoFound::Nothing).unwrap();
+    let first = store.logo_lookup("acme").unwrap().unwrap();
+    assert_eq!(first.found, LogoFound::Nothing);
+    store.put_logo_lookup("acme", LogoFound::Removed).unwrap();
+    let last = store.logo_lookup("acme").unwrap().unwrap();
+    assert_eq!(last.found, LogoFound::Removed);
+    assert!(last.tried_at > first.tried_at);
+}
+
+/// Logos set before fetched logos existed (schema version 5) stay yours.
+#[test]
+fn migrating_to_fetched_logos_keeps_yours() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v5-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    Store::open(&path)
+        .unwrap()
+        .put_logo("acme", b"png", "image/png")
+        .unwrap();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.logo("acme").unwrap().unwrap().source, LogoSource::Yours);
+    assert!(
+        !store
+            .put_fetched_logo("acme", b"fh", "image/png", LogoSource::Freehire)
+            .unwrap()
+    );
+    drop(store);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn feed_job(slug: &str, found_at: &str) -> NewFeedJob {
+    NewFeedJob {
+        job: FeedJob {
+            origin: Default::default(),
+            description: None,
+            slug: slug.into(),
+            title: "Junior Software Engineer".into(),
+            company: "Acme".into(),
+            company_slug: None,
+            location: None,
+            url: format!("https://acme.example/jobs/{slug}"),
+            source: "workday".into(),
+            external_id: None,
+            skills: vec!["rust".into()],
+            posted_at: None,
+            found_at: found_at.into(),
+            seniority: Some("junior".into()),
+            employment_type: None,
+            work_mode: None,
+            years_min: None,
+            salary: None,
+        },
+        state: FeedState::New,
+        overlap: 1.0,
+        reason: None,
+    }
+}
+
+/// A later pull finding a job again leaves its row (and what was decided about it) as it is.
+#[test]
+fn adding_feed_jobs_ignores_known_slugs() {
+    let store = Store::open_in_memory().unwrap();
+    let a = feed_job("a", "2026-10-13T10:00:00Z");
+    let b = feed_job("b", "2026-10-13T11:00:00Z");
+    assert_eq!(store.add_feed_jobs(&[a.clone(), b.clone()]).unwrap(), 2);
+    store
+        .set_feed_state("a", FeedState::Skipped, Some("asks for 5 years"))
+        .unwrap();
+    let again = NewFeedJob {
+        overlap: 9.0,
+        ..a.clone()
+    };
+    let c = feed_job("c", "2026-10-13T12:00:00Z");
+    assert_eq!(store.add_feed_jobs(&[again, c]).unwrap(), 1);
+    let a_row = store.feed_row("a").unwrap().unwrap();
+    assert_eq!(
+        (a_row.state, a_row.overlap, a_row.reason.as_deref()),
+        (FeedState::Skipped, 1.0, Some("asks for 5 years"))
+    );
+    assert_eq!(a_row.job, a.job);
+    let slugs: Vec<String> = store
+        .feed()
+        .unwrap()
+        .into_iter()
+        .map(|r| r.job.slug)
+        .collect();
+    assert_eq!(slugs, ["c", "b", "a"]);
+}
+
+#[test]
+fn deleting_a_feed_posting_clears_the_link() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .add_feed_jobs(&[feed_job("a", "2026-10-13T10:00:00Z")])
+        .unwrap();
+    let id = store
+        .put_posting(&posting("Junior Software Engineer at Acme."))
+        .unwrap();
+    store.set_feed_posting("a", &id).unwrap();
+    assert_eq!(
+        store.feed_row("a").unwrap().unwrap().posting_id,
+        Some(id.clone())
+    );
+    store.delete_posting(&id).unwrap();
+    let row = store.feed_row("a").unwrap().unwrap();
+    assert_eq!(row.posting_id, None);
+    assert!(matches!(
+        store.set_feed_posting("missing", &id),
+        Err(StoreError::NotFound { .. })
+    ));
+}
+
+#[test]
+fn feed_postings_stay_out_of_the_lists_until_opened() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .add_feed_jobs(&[
+            feed_job("a", "2026-10-13T10:00:00Z"),
+            feed_job("b", "2026-10-13T11:00:00Z"),
+        ])
+        .unwrap();
+    let a = store.put_posting(&posting("Posting A")).unwrap();
+    let b = store.put_posting(&posting("Posting B")).unwrap();
+    store.set_feed_posting("a", &a).unwrap();
+    store.set_feed_posting("b", &b).unwrap();
+    assert_eq!(
+        store.feed_unopened_postings().unwrap(),
+        [a.clone(), b.clone()].into_iter().collect()
+    );
+    store.set_feed_opened(&a).unwrap();
+    // A posting no feed row holds: nothing to mark.
+    store.set_feed_opened("pasted-posting").unwrap();
+    assert_eq!(
+        store.feed_unopened_postings().unwrap(),
+        [b].into_iter().collect()
+    );
+    assert!(store.feed_row("a").unwrap().unwrap().opened_at.is_some());
+}
+
+#[test]
+fn feed_checks_count_from_a_time() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .add_feed_jobs(&[
+            feed_job("a", "2026-10-13T10:00:00Z"),
+            feed_job("b", "2026-10-13T11:00:00Z"),
+        ])
+        .unwrap();
+    let before = "2000-01-01T00:00:00-05:00";
+    assert_eq!(store.feed_checked_since(before).unwrap(), 0);
+    store
+        .set_feed_checked("a", Some(62.5), Some("swe"))
+        .unwrap();
+    store.set_feed_checked("b", None, None).unwrap();
+    let row = store.feed_row("a").unwrap().unwrap();
+    assert_eq!(
+        (row.state, row.score, row.master_id.as_deref()),
+        (FeedState::Checked, Some(62.5), Some("swe"))
+    );
+    assert_eq!(store.feed_checked_since(before).unwrap(), 2);
+    let at = row.checked_at.unwrap();
+    assert_eq!(store.feed_checked_since(&at).unwrap(), 2);
+    assert_eq!(store.feed_checked_since("2999-01-01T00:00:00Z").unwrap(), 0);
 }

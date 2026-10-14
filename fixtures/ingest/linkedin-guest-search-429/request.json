@@ -1,0 +1,11 @@
+{
+  "input": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=0",
+  "request": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=0",
+  "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=0",
+  "status": 429,
+  "content_type": "text/html",
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13",
+  "note": "Body trimmed from 24633 bytes: the obfuscated script that redirects to linkedin.com is cut to its first lines."
+}

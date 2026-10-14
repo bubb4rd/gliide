@@ -4,6 +4,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::salary::Salary;
+
 /// How the posting's text was obtained.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -18,10 +20,23 @@ pub enum Method {
     Ashby,
     /// LinkedIn's public job page (guest API).
     Linkedin,
+    /// Workday's career-site job data (`/wday/cxs/…`).
+    Workday,
+    /// SmartRecruiters' public Posting API.
+    #[serde(rename = "smartrecruiters")]
+    SmartRecruiters,
+    /// Workable's public job API.
+    Workable,
+    /// Recruitee's public careers API.
+    Recruitee,
     /// A schema.org `JobPosting` JSON-LD block in the page.
     JsonLd,
     /// The page's main text, without navigation, footers and forms.
     Html,
+    /// freehire's copy of a posting, for sources gliide can't read itself.
+    Freehire,
+    /// Fantastic.jobs' copy of a posting, for career sites gliide can't read itself.
+    Fantastic,
 }
 
 /// A posting snapshot. `hash` identifies the text (and keys the Extract cache), so the same text read twice is the
@@ -38,6 +53,10 @@ pub struct Posting {
     pub title: Option<String>,
     pub company: Option<String>,
     pub location: Option<String>,
+    /// The pay the source states in its own fields (a JSON-LD `baseSalary`, Lever's `salaryRange`); the text's is
+    /// read when it's shown ([`crate::salary::find`]). Postings read before it existed have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub salary: Option<Salary>,
     /// The posting's text, as plain text with list items on their own lines.
     pub text: String,
     /// Lowercase hex SHA-256 of `text`.
@@ -63,6 +82,7 @@ impl Posting {
             title,
             company,
             location,
+            salary: None,
             text,
             hash,
         }

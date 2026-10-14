@@ -1,0 +1,10 @@
+{
+  "input": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=1000",
+  "request": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=1000",
+  "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=1000",
+  "status": 400,
+  "content_type": null,
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13"
+}

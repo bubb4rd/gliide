@@ -126,6 +126,8 @@ fn golden_jane_doe() {
         "4 of 8 on the page (11.5 of 17.5 weight); missing: JavaScript, Integration test, MongoDB or DynamoDB, C; \
          near forms: Integration test \u{2248} \"integration tests\""
     );
+    // The popover's gist: the first two missing, then how many more.
+    assert_eq!(c.brief, "4 of 8 · missing JavaScript, Integration test +2");
 
     // Domain + soft: Telemetry 2, help desk 1 (near), mentoring 1 = 4. Met 2; with near forms 3.
     let c = component(&s, "domain_soft");
@@ -140,6 +142,7 @@ fn golden_jane_doe() {
         c.detail,
         "in a subtitle or summary: \"Software Engineer\" partly stated: \"Software\"; \"Backend Engineer\" not stated"
     );
+    assert_eq!(c.brief, "Partly: Software");
 
     // Experience: the work section has Acme (Jun–Sep 2025, 4 months) and the library ("Summer 2023", no months).
     // Tidepool runs to present but is a project, not experience. 4 months of 12 needed: 1/3.
@@ -150,6 +153,7 @@ fn golden_jane_doe() {
         "0.3 years (4 months, overlaps once) from 1 dated entry in experience sections vs 1 required; 1 entry \
          without readable dates not counted"
     );
+    assert_eq!(c.brief, "0.3 of 1 year");
 
     // Education: "B.S. Computer Science" is a bachelor's in a required field: degree part 1. The AWS certification
     // isn't on the page: certifications part 0. Mean 0.5.
@@ -160,11 +164,16 @@ fn golden_jane_doe() {
         "degree 1: \"B.S. Computer Science\" (bachelor) meets bachelor; field Computer Science stated: \"Computer \
          Science\"; certifications 0 of 1; missing: AWS Certified Cloud Practitioner"
     );
+    assert_eq!(
+        c.brief,
+        "Bachelor's in Computer Science · 0 of 1 certifications"
+    );
 
     // Format: ATS-safe template, standard headings (WORK EXPERIENCE, PROJECTS, EDUCATION, SKILLS), a mailto email, a
     // 10-digit phone, 1 of 1 pages, no PDF to read back: 5 of 5.
     let c = component(&s, "format");
     assert!(close(c.value, 1.0), "{c:?}");
+    assert_eq!(c.brief, "All 5 checks pass");
 
     // Total: (45 × 11.5/17.5 + 10 × 0.5 + 10 × 0.5 + 15 × 1/3 + 10 × 0.5 + 10 × 1) / 100
     //      = (29.571 + 5 + 5 + 5 + 5 + 10) / 100 = 59.571 → 59.6.
@@ -206,6 +215,7 @@ fn golden_pdf_read_back() {
     let c = component(&s, "format");
     assert!(close(c.value, 5.0 / 6.0), "{c:?}");
     assert!(c.detail.ends_with("PDF text lacks: Docker"), "{}", c.detail);
+    assert_eq!(c.brief, "PDF drops Docker");
     // 59.571 − 10 × 1/6 = 57.905 → 57.9.
     assert_eq!(s.total, 57.9);
     // The page's own text reads back whole.
