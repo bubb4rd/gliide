@@ -24,7 +24,7 @@ marks: Array<string>,
  */
 was: string | null, 
 /**
- * Meta under the row: `Rewrite · same 2 lines`, `Adds Troubleshooting and Ticketing · takes 3 lines`.
+ * Meta under the row: `Rewrite · same 2 lines`, `Add skill · adds SQL` (terms the text doesn't show marked).
  */
 meta: string, state: ChangeState, 
 /**

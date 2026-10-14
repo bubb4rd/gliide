@@ -4833,6 +4833,7 @@ dependencies = [
  "resume-llm",
  "resume-render",
  "roxmltree 0.21.1",
+ "serde",
  "serde_json",
  "thiserror 2.0.21",
  "zip",
@@ -4843,6 +4844,7 @@ name = "resume-render"
 version = "0.1.0"
 dependencies = [
  "hayro-interpret",
+ "hayro-svg",
  "kurbo",
  "resume-core",
  "serde",

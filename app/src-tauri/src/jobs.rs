@@ -4,20 +4,29 @@
 use std::sync::Arc;
 
 use resume_core::requirements::Seniority;
+use resume_core::salary::{Period, Salary};
 use resume_core::{Method, Posting, Requirements, rank, score};
 use resume_llm::extract;
 use resume_pipeline::{extract_key, today};
 use resume_store::{PostingRow, Store};
 
-use crate::dto::{ChipState, JobHead, JobRow, JobView, MasterChoice, SkillChip, Stage};
+use crate::dto::{
+    ChipState, JobHead, JobRow, JobView, MasterChoice, SalaryPeriod, SalaryRange, SkillChip, Stage,
+};
 use crate::error::{AppError, Result};
 use crate::state::{App, Library, blocking, lock, model_call};
 
-/// Every posting, newest first.
+/// Every posting, newest first, but the feed's that you haven't opened.
 pub fn jobs(app: &App) -> Result<Vec<JobRow>> {
-    let rows = lock(&app.store).postings()?;
+    let (rows, unopened) = {
+        let store = lock(&app.store);
+        (store.postings()?, store.feed_unopened_postings()?)
+    };
     let now = app.masters_now()?;
-    rows.iter().map(|r| job_row(app, r, now.as_ref())).collect()
+    rows.iter()
+        .filter(|r| !unopened.contains(&r.id))
+        .map(|r| job_row(app, r, now.as_ref()))
+        .collect()
 }
 
 /// Reads `input` (a link or the posting's text) into a posting; the same text read again is the same posting.
@@ -34,7 +43,7 @@ pub async fn add_job(app: &Arc<App>, input: &str) -> Result<JobRow> {
     .await
 }
 
-/// The posting with its requirements and every master scored, best first.
+/// The posting with its requirements and every master scored, best first. A feed job is marked opened (and checked).
 pub async fn open_job(app: &Arc<App>, job: &str) -> Result<JobView> {
     let row = posting(app, job)?;
     let req = requirements(app, &row).await?;
@@ -73,6 +82,7 @@ pub async fn open_job(app: &Arc<App>, job: &str) -> Result<JobView> {
                 })
                 .collect(),
         };
+        crate::feed::opened(app, &row.id, &masters)?;
         Ok(JobView {
             job: job_row(app, &row, now.as_ref())?,
             head: head(&row.posting, Some(&req)),
@@ -95,6 +105,22 @@ pub fn delete_job(app: &App, job: &str) -> Result<Vec<JobRow>> {
     }
     lock(&app.store).delete_posting(job)?;
     jobs(app)
+}
+
+/// Sets the posting's salary range as yours (`None`: removed); its row with the range it now shows.
+pub fn set_salary(app: &App, job: &str, salary: Option<SalaryRange>) -> Result<JobRow> {
+    let salary = salary
+        .map(|s| {
+            Salary::new(s.min_cents, s.max_cents, &s.currency, s.period.into()).ok_or_else(|| {
+                AppError::other(
+                    "A salary range needs an amount, its low end at most its high end, and a 3-letter currency",
+                )
+            })
+        })
+        .transpose()?;
+    posting(app, job)?;
+    lock(&app.store).set_posting_salary(job, salary.as_ref())?;
+    job_row(app, &posting(app, job)?, app.masters_now()?.as_ref())
 }
 
 pub fn posting(app: &App, job: &str) -> Result<PostingRow> {
@@ -184,6 +210,7 @@ pub fn row_of(
         score,
         status,
         added_at: row.created_at.clone(),
+        salary: row.salary().map(Into::into),
     }
 }
 
@@ -235,7 +262,7 @@ fn seniority(s: Seniority) -> &'static str {
     }
 }
 
-/// `pasted`, `from Greenhouse`, `read from globex.com`.
+/// `pasted`, `from Greenhouse`, `from freehire`, `read from globex.com`.
 fn source(p: &Posting) -> String {
     let board = match p.method {
         Method::Pasted => return "pasted".to_owned(),
@@ -243,6 +270,12 @@ fn source(p: &Posting) -> String {
         Method::Lever => "Lever",
         Method::Ashby => "Ashby",
         Method::Linkedin => "LinkedIn",
+        Method::Workday => "Workday",
+        Method::SmartRecruiters => "SmartRecruiters",
+        Method::Workable => "Workable",
+        Method::Recruitee => "Recruitee",
+        Method::Freehire => "freehire",
+        Method::Fantastic => "Fantastic.jobs",
         Method::JsonLd | Method::Html => {
             let host = p
                 .url
@@ -291,6 +324,29 @@ impl From<crate::dto::AppStatus> for resume_store::AppStatus {
             S::Interviewing => Self::Interviewing,
             S::Offer => Self::Offer,
             S::Rejected => Self::Rejected,
+        }
+    }
+}
+
+impl From<Salary> for SalaryRange {
+    fn from(s: Salary) -> Self {
+        Self {
+            min_cents: s.min_cents,
+            max_cents: s.max_cents,
+            currency: s.currency,
+            period: match s.period {
+                Period::Year => SalaryPeriod::Year,
+                Period::Hour => SalaryPeriod::Hour,
+            },
+        }
+    }
+}
+
+impl From<SalaryPeriod> for Period {
+    fn from(p: SalaryPeriod) -> Self {
+        match p {
+            SalaryPeriod::Year => Self::Year,
+            SalaryPeriod::Hour => Self::Hour,
         }
     }
 }

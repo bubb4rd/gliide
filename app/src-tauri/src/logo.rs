@@ -1,13 +1,20 @@
-//! Company logos you set (ARCHITECTURE.md §7, Company logos): an image file, or the clipboard's, stored under the
-//! company's key and served to the UI at `logo://localhost/<key>`. Kept as the company publishes it: SVG as is, any
-//! other image scaled down to fit [`SIDE`] (never cropped, padded or recolored) and stored as PNG.
+//! Company logos (ARCHITECTURE.md §7, Company logos), stored under the company's key and served to the UI at
+//! `logo://localhost/<key>`: the ones you set (an image file, or the clipboard's), and for the companies the feed
+//! shows, ones fetched from freehire, else from the company's own site. Kept as the company publishes it: SVG as is,
+//! any other image scaled down to fit [`SIDE`] (never cropped, padded or recolored) and stored as PNG.
 
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::Path;
+use std::sync::Arc;
 
+use chrono::{DateTime, TimeDelta, Utc};
 use image::imageops::{self, FilterType};
 use image::{DynamicImage, ImageFormat, ImageReader, Rgba32FImage};
 use percent_encoding::percent_decode_str;
+use resume_ingest::logos::{MAX_LOGO_BYTES, company_website, freehire_logo_url, icon_links};
+use resume_ingest::{Fetcher, HttpFetcher};
+use resume_store::{LogoFound, LogoLookup, LogoSource as Stored};
 use tauri::http::{Response, StatusCode, header};
 
 use crate::dto::{LogoRow, LogoSource};
@@ -23,13 +30,19 @@ const SIDE: u32 = 128;
 const MAX_FILE: u64 = 20 * 1024 * 1024;
 /// The largest SVG kept (stored as is).
 const MAX_SVG: usize = 512 * 1024;
+/// A fetched logo is looked up again after this many days.
+const REFRESH_DAYS: i64 = 90;
+/// A company whose lookup found no logo is tried again after this many days.
+const RETRY_NONE_DAYS: i64 = 14;
+/// A fetched raster image shorter than this on its longer side isn't a logo (a 16px favicon).
+const MIN_SIDE: u32 = 32;
 
 /// The company's key: its name through [`slug`], so `Northwind Traders, Inc.` and `northwind traders inc` share a logo.
 pub fn key(company: &str) -> String {
     slug(company)
 }
 
-/// Every company with a logo you set.
+/// Every company with a logo: yours or fetched.
 pub fn logos(app: &App) -> Result<Vec<LogoRow>> {
     Ok(lock(&app.store)
         .logos()?
@@ -49,9 +62,230 @@ pub fn set_logo(app: &App, company: &str, source: LogoSource) -> Result<LogoRow>
     Ok(LogoRow { key, version })
 }
 
+/// Removes `company`'s logo; a fetched one is recorded as removed, so it isn't fetched again.
 pub fn remove_logo(app: &App, company: &str) -> Result<()> {
-    lock(&app.store).remove_logo(&named(company)?)?;
+    let key = named(company)?;
+    let store = lock(&app.store);
+    if store.logo(&key)?.is_some_and(|l| l.source != Stored::Yours) {
+        store.put_logo_lookup(&key, LogoFound::Removed)?;
+    }
+    store.remove_logo(&key)?;
     Ok(())
+}
+
+// ── Fetched logos ──
+
+/// A company the feed shows, as its rows name it.
+struct Company {
+    key: String,
+    name: String,
+    /// freehire's company, for its website.
+    slug: Option<String>,
+}
+
+/// A logo as stored: its bytes and media type.
+type Image = (Vec<u8>, &'static str);
+
+/// freehire (or the store) couldn't be reached: the run ends, and the next one retries.
+struct Stop;
+
+/// Holds `App.feed.fetching_logos` for a run, cleared however it ends.
+struct Fetching(Option<Arc<App>>);
+
+impl Fetching {
+    /// Ends the run, unless it was started again meanwhile (then it goes once more); whether it ended.
+    fn end(&mut self) -> bool {
+        let Some(app) = &self.0 else {
+            return true;
+        };
+        let mut run = lock(&app.feed);
+        if std::mem::take(&mut run.logos_again) {
+            return false;
+        }
+        run.fetching_logos = false;
+        drop(run);
+        self.0 = None;
+        true
+    }
+}
+
+impl Drop for Fetching {
+    fn drop(&mut self) {
+        if let Some(app) = self.0.take() {
+            let mut run = lock(&app.feed);
+            run.fetching_logos = false;
+            run.logos_again = false;
+        }
+    }
+}
+
+/// Fetches logos for the companies the feed shows, one at a time: freehire's logo for the name, else the company's
+/// own site's icon (its website from freehire's company page). A logo you set is never replaced. Each lookup is
+/// recorded: a company is looked up again after 90 days (14 when nothing was found), and never after you removed
+/// its fetched logo. Every logo stored sends the `feed` event. One run at a time: started while one runs, that run
+/// goes once more. Failing to reach freehire ends the run quietly; the next pull or check starts another. Postings
+/// you paste are never looked up: no third party learns which companies you look at.
+pub async fn fetch_logos(app: Arc<App>) {
+    {
+        let mut run = lock(&app.feed);
+        if run.fetching_logos {
+            run.logos_again = true;
+            return;
+        }
+        run.fetching_logos = true;
+    }
+    let mut fetching = Fetching(Some(Arc::clone(&app)));
+    let fetcher = HttpFetcher::new();
+    loop {
+        let Ok(companies) = due(&app) else {
+            return;
+        };
+        for company in &companies {
+            match fetch_one(&app, &fetcher, company).await {
+                Ok(true) => crate::feed::changed(&app),
+                Ok(false) => {}
+                Err(Stop) => return,
+            }
+        }
+        if fetching.end() {
+            return;
+        }
+    }
+}
+
+/// The companies the feed shows that are due a lookup, once each: not yours, and not looked up recently.
+fn due(app: &App) -> Result<Vec<Company>> {
+    let mut companies: Vec<Company> = Vec::new();
+    let mut at: HashMap<String, usize> = HashMap::new();
+    for (name, slug) in crate::feed::shown_companies(app)? {
+        let key = key(&name);
+        if key.is_empty() {
+            continue;
+        }
+        if let Some(&i) = at.get(&key) {
+            let known = &mut companies[i];
+            if known.slug.is_none() {
+                known.slug = slug;
+            }
+            continue;
+        }
+        at.insert(key.clone(), companies.len());
+        companies.push(Company { key, name, slug });
+    }
+    let now = Utc::now();
+    let store = lock(&app.store);
+    let mut due = Vec::new();
+    for c in companies {
+        if store.logo_lookup(&c.key)?.is_some_and(|l| fresh(&l, now))
+            || store.logo(&c.key)?.is_some_and(|l| l.source == Stored::Yours)
+        {
+            continue;
+        }
+        due.push(c);
+    }
+    Ok(due)
+}
+
+/// A lookup too recent to repeat: under 90 days after one that found a logo, 14 after one that found none; one whose
+/// logo you removed, for good.
+fn fresh(l: &LogoLookup, now: DateTime<Utc>) -> bool {
+    let days = match l.found {
+        LogoFound::Removed => return true,
+        LogoFound::Nothing => RETRY_NONE_DAYS,
+        LogoFound::Freehire | LogoFound::Site => REFRESH_DAYS,
+    };
+    DateTime::parse_from_rfc3339(&l.tried_at)
+        .is_ok_and(|t| now - t.with_timezone(&Utc) < TimeDelta::days(days))
+}
+
+/// Looks one company's logo up, stores it unless you set one, and records the lookup; whether a logo was stored.
+async fn fetch_one(
+    app: &App,
+    fetcher: &HttpFetcher,
+    c: &Company,
+) -> std::result::Result<bool, Stop> {
+    let mut found = freehire_logo(fetcher, &c.name)
+        .await?
+        .map(|logo| (logo, Stored::Freehire));
+    if found.is_none()
+        && let Some(slug) = &c.slug
+    {
+        found = site_logo(fetcher, slug).await?.map(|logo| (logo, Stored::Site));
+    }
+    let store = lock(&app.store);
+    let (stored, lookup) = match &found {
+        Some(((bytes, media_type), source)) => (
+            store
+                .put_fetched_logo(&c.key, bytes, media_type, *source)
+                .map_err(|_| Stop)?,
+            if *source == Stored::Site {
+                LogoFound::Site
+            } else {
+                LogoFound::Freehire
+            },
+        ),
+        None => (false, LogoFound::Nothing),
+    };
+    store.put_logo_lookup(&c.key, lookup).map_err(|_| Stop)?;
+    Ok(stored)
+}
+
+/// freehire's logo for the company's name.
+async fn freehire_logo(
+    fetcher: &HttpFetcher,
+    name: &str,
+) -> std::result::Result<Option<Image>, Stop> {
+    match fetcher
+        .get_image(&freehire_logo_url(name), MAX_LOGO_BYTES)
+        .await
+    {
+        Ok(Some((bytes, _))) => Ok(as_logo(bytes).await),
+        Ok(None) => Ok(None),
+        Err(_) => Err(Stop),
+    }
+}
+
+/// The first of the company's own site's icons that is a logo. Only freehire's failures stop the run: a site that
+/// doesn't answer just has no icon found.
+async fn site_logo(fetcher: &HttpFetcher, slug: &str) -> std::result::Result<Option<Image>, Stop> {
+    let Some(website) = company_website(fetcher, slug).await.map_err(|_| Stop)? else {
+        return Ok(None);
+    };
+    let (html, page) = match fetcher.get(&website).await {
+        Ok(r) if (200..300).contains(&r.status) => (r.body, r.url),
+        Ok(r) => (String::new(), r.url),
+        Err(_) => return Ok(None),
+    };
+    for url in icon_links(&html, &page) {
+        if let Ok(Some((bytes, _))) = fetcher.get_image(&url, MAX_LOGO_BYTES).await
+            && let Some(logo) = as_logo(bytes).await
+        {
+            return Ok(Some(logo));
+        }
+    }
+    Ok(None)
+}
+
+/// A fetched image as stored, when it's a logo: SVG as is; a raster at least [`MIN_SIDE`] on its longer side, fit
+/// to [`SIDE`] as PNG. Decoded off the async runtime.
+async fn as_logo(bytes: Vec<u8>) -> Option<Image> {
+    tokio::task::spawn_blocking(move || {
+        if is_svg(&bytes) {
+            return encode(bytes).ok();
+        }
+        let image = ImageReader::new(Cursor::new(bytes))
+            .with_guessed_format()
+            .ok()?
+            .decode()
+            .ok()?;
+        if image.width().max(image.height()) < MIN_SIDE {
+            return None;
+        }
+        to_png(image).ok()
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// The answer to a `logo://` request for `path` (`/<key>`, percent-encoded): the image, cached for good (its URL

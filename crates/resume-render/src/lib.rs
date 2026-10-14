@@ -6,6 +6,7 @@
 
 pub mod cover;
 mod fonts;
+mod pdf_svg;
 mod readback;
 mod template;
 mod world;
@@ -21,6 +22,7 @@ use typst::utils::{PicoStr, Scalar, hash128};
 use typst_layout::PagedDocument;
 
 pub use fonts::FontOptions;
+pub use pdf_svg::pdf_svgs;
 pub use readback::{Link, PdfRead, pdf_read, pdf_text};
 pub use template::{Manifest, Template};
 use world::ResumeWorld;

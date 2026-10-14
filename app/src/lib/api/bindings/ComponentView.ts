@@ -16,4 +16,8 @@ present: boolean,
 /**
  * 0–1.
  */
-value: number, detail: string, };
+value: number, 
+/**
+ * The gist in a few words: `2 of 3 · missing Docker`, `Partly: Software, Engineering`.
+ */
+brief: string, };

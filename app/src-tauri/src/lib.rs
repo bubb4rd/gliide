@@ -9,6 +9,8 @@ pub mod dto;
 pub mod entry;
 pub mod error;
 pub mod export;
+pub mod feed;
+pub mod folder;
 pub mod import;
 pub mod jobs;
 pub mod library;
@@ -23,7 +25,7 @@ use std::sync::Arc;
 
 use tauri::{Emitter, Manager};
 
-use crate::state::App;
+use crate::state::{App, Event};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -47,12 +49,16 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             let handle = app.handle().clone();
-            let emit: state::Emit = Box::new(move |p| {
-                let _ = handle.emit("progress", p);
+            let emit: state::Emit = Box::new(move |e| {
+                let _ = match e {
+                    Event::Progress(p) => handle.emit("progress", p),
+                    Event::Feed(s) => handle.emit("feed", s),
+                };
             });
             let state = Arc::new(App::open(&dir, emit).map_err(|e| e.message)?);
             let warm = Arc::clone(&state);
             std::thread::spawn(move || warm.warm());
+            tauri::async_runtime::spawn(feed::schedule(Arc::clone(&state)));
             app.manage(state);
             window::setup(app)?;
             Ok(())
@@ -69,10 +75,13 @@ pub fn run() {
             commands::entry,
             commands::edit_entry,
             commands::set_master_options,
+            commands::folder,
+            commands::folder_pdf,
             commands::jobs,
             commands::add_job,
             commands::open_job,
             commands::delete_job,
+            commands::set_salary,
             commands::start_review,
             commands::cancel,
             commands::decide,
@@ -97,6 +106,14 @@ pub fn run() {
             commands::set_cover_part,
             commands::rewrite_cover_paragraph,
             commands::export_cover,
+            commands::feed,
+            commands::pull_feed,
+            commands::search_feed,
+            commands::check_feed,
+            commands::dismiss_feed,
+            commands::open_feed_job,
+            commands::feed_settings,
+            commands::set_feed_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gliide");

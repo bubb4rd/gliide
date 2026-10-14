@@ -111,7 +111,7 @@ fn score_view(s: &Score) -> ScoreView {
                 weight: c.weight,
                 present: c.present,
                 value: c.value,
-                detail: c.detail.clone(),
+                brief: c.brief.clone(),
             })
             .collect(),
     }
@@ -408,6 +408,8 @@ fn change_view(r: &Review, c: &Change, draft: &Draft, t: &Tailored) -> ChangeVie
     let text = text_of(r, c, t);
     let page = Page::of_text(&text);
     let mut marks: Vec<String> = Vec::new();
+    // Terms the text doesn't show marked: the meta names them instead.
+    let mut unmarked: Vec<String> = Vec::new();
     for h in &c.hits {
         let aliases = r
             .req
@@ -415,10 +417,13 @@ fn change_view(r: &Review, c: &Change, draft: &Draft, t: &Tailored) -> ChangeVie
             .iter()
             .find(|k| same_term(&k.term, h))
             .map_or(&[][..], |k| &k.aliases[..]);
-        if let Some((_, hit)) = find_literal(&page, h, aliases)
-            && !marks.contains(&hit.text)
-        {
-            marks.push(hit.text);
+        match find_literal(&page, h, aliases) {
+            Some((_, hit)) => {
+                if !marks.contains(&hit.text) {
+                    marks.push(hit.text);
+                }
+            }
+            None => unmarked.push(h.clone()),
         }
     }
     let (state, mut reason, mut warning) = match t.states.get(&c.key) {
@@ -441,7 +446,7 @@ fn change_view(r: &Review, c: &Change, draft: &Draft, t: &Tailored) -> ChangeVie
     ChangeView {
         key: c.key.clone(),
         op: c.op.target().0.to_owned(),
-        meta: meta(r, c, t, is_in),
+        meta: meta(r, c, t, is_in, &unmarked),
         text,
         marks,
         was,
@@ -556,8 +561,9 @@ pub fn savable<'a>(r: &Review, c: &'a Change, t: &Tailored) -> Option<&'a str> {
     (!known && !text.trim().is_empty()).then_some(bullet.as_str())
 }
 
-/// `Rewrite · adds Python and SQL · same 2 lines`: what the op is, the terms it adds, and its lines when it's in.
-fn meta(r: &Review, c: &Change, t: &Tailored, is_in: bool) -> String {
+/// `Rewrite · same 2 lines`, `Add skill · adds SQL`: what the op is, the terms it adds that its text doesn't show
+/// marked (`unmarked`), and its lines when it's in. Your plain edits carry no label: the row's "Your edit" says it.
+fn meta(r: &Review, c: &Change, t: &Tailored, is_in: bool, unmarked: &[String]) -> String {
     let worded = r.changes.iter().any(|s| s.key == c.key);
     let label = match &c.op {
         Op::Rewrite { .. } => "Rewrite".to_owned(),
@@ -572,7 +578,7 @@ fn meta(r: &Review, c: &Change, t: &Tailored, is_in: bool) -> String {
         Op::Swap { to, .. } if to.trim().is_empty() => "Cut words".to_owned(),
         Op::Swap { .. } => "Reword".to_owned(),
         Op::Set { .. } if worded => "Your wording".to_owned(),
-        Op::Set { .. } => "Your edit".to_owned(),
+        Op::Set { .. } => String::new(),
         Op::Include { bullets, .. } if !bullets.is_empty() => {
             format!("From your bank · {} bullets", bullets.len())
         }
@@ -583,8 +589,8 @@ fn meta(r: &Review, c: &Change, t: &Tailored, is_in: bool) -> String {
         Op::Summary { .. } => "Summary".to_owned(),
     };
     let mut parts = vec![label];
-    if !c.hits.is_empty() {
-        parts.push(format!("adds {}", and_list(&c.hits)));
+    if !unmarked.is_empty() {
+        parts.push(format!("adds {}", and_list(unmarked)));
     }
     if is_in && let Some(lc) = line_count(c, t) {
         let lines = |n: u32| if n == 1 { "line" } else { "lines" };
@@ -594,7 +600,17 @@ fn meta(r: &Review, c: &Change, t: &Tailored, is_in: bool) -> String {
             format!("takes {} {}, not {}", lc.lines, lines(lc.lines), lc.orig)
         });
     }
-    parts.join(" · ")
+    let meta = parts
+        .iter()
+        .filter(|p| !p.is_empty())
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(" · ");
+    // Sentence case when it starts with "same 2 lines" or "adds …".
+    let mut chars = meta.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 /// The wrapped-line count of the bullet or skills line `c` edits, as laid out.

@@ -12,6 +12,7 @@ resume-llm = { path = "../resume-llm" }
 resume-render = { path = "../resume-render" }
 # DOCX import: the zip holding `word/document.xml`, read only (Word deflates its parts).
 roxmltree = "0.21"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }

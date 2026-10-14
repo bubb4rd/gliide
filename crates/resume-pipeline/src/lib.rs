@@ -5,6 +5,7 @@
 //! Callers own the caching: the CLI keeps model output in files under `local/cache/`, the app in its store. Both key
 //! it with [`extract_key`] and [`suggest_key`], so a change to a prompt, a model or the master invalidates it.
 
+pub mod feed;
 pub mod resume_file;
 
 use std::path::PathBuf;

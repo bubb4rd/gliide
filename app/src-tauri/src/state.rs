@@ -1,8 +1,9 @@
-//! The app's state (`tauri::State<Arc<App>>`): the store, the settings, the open review, warm renderers and the
-//! model calls running.
+//! The app's state (`tauri::State<Arc<App>>`): the store, the settings, the open review, warm renderers, the model
+//! calls running and the feed's run.
 //!
 //! Locks are `std::sync::Mutex`, never held across an `await`. Order, when one is taken under another: `review`, then
-//! `renderers`, then `pages`; `store` is always taken last and released before any other lock.
+//! `renderers`, then `pages`; `store` is always taken last and released before any other lock; `feed` is taken alone.
+//! `feed_lane` is the exception: a `tokio` mutex held across a feed check's awaits, so checks run one at a time.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -17,9 +18,10 @@ use resume_render::{FontOptions, Renderer};
 use resume_store::{Rev, Store};
 use tokio::task::AbortHandle;
 
-use crate::dto::{Mode, Progress, Settings, Stage, Theme};
+use crate::dto::{FeedStatus, Mode, Progress, Settings, Stage, Theme};
 use crate::error::Result;
 use crate::export;
+use crate::feed::FeedRun;
 use crate::import::Pending;
 use crate::review::Review;
 
@@ -30,8 +32,16 @@ const SETTINGS: &str = "settings";
 /// The template every master gets unless it names another (the only one so far).
 pub const DEFAULT_TEMPLATE: &str = "classic-serif";
 
-/// How the app tells the UI a model call started (Tauri's `progress` event; a no-op or a log without the webview).
-pub type Emit = Box<dyn Fn(&Progress) + Send + Sync>;
+/// What the app tells the UI: Tauri's events, by name.
+pub enum Event<'a> {
+    /// `progress`: a model call started for a job.
+    Progress(&'a Progress),
+    /// `feed`: a feed row or the feed's status changed.
+    Feed(&'a FeedStatus),
+}
+
+/// How the app tells the UI (Tauri's events; a no-op or a log without the webview).
+pub type Emit = Box<dyn Fn(Event<'_>) + Send + Sync>;
 
 pub struct App {
     pub store: Mutex<Store>,
@@ -48,6 +58,10 @@ pub struct App {
     pub calls: Mutex<HashMap<String, AbortHandle>>,
     /// Counts `start_review` calls: only the newest may put its review in the slot.
     pub review_generation: AtomicU64,
+    /// The feed's pull and checks (feed.rs).
+    pub feed: Mutex<FeedRun>,
+    /// Held while a feed job is checked: one at a time.
+    pub feed_lane: tokio::sync::Mutex<()>,
     pub emit: Emit,
 }
 
@@ -84,6 +98,8 @@ impl App {
             pages: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
             review_generation: AtomicU64::new(0),
+            feed: Mutex::new(FeedRun::default()),
+            feed_lane: tokio::sync::Mutex::new(()),
             emit,
         };
         let _ = export::import_applications_csv(&app);
@@ -223,10 +239,10 @@ pub async fn model_call<T: Send + 'static>(
     stage: Stage,
     call: impl Future<Output = std::result::Result<T, LlmError>> + Send + 'static,
 ) -> Result<T> {
-    (app.emit)(&Progress {
+    (app.emit)(Event::Progress(&Progress {
         job: job.to_owned(),
         stage,
-    });
+    }));
     let task = tokio::spawn(call);
     let handle = task.abort_handle();
     if let Some(old) = lock(&app.calls).insert(job.to_owned(), handle.clone()) {

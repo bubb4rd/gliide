@@ -393,6 +393,30 @@ pub struct JobRow {
     pub score: Option<f64>,
     pub status: Option<AppStatus>,
     pub added_at: String,
+    /// Yours once you've set or removed it, else the posting's (its source's fields, else its text).
+    pub salary: Option<SalaryRange>,
+}
+
+/// A salary range: either end open ("up to"), in one currency, per year or per hour.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SalaryRange {
+    /// In cents (minor units); `None` for "up to".
+    pub min_cents: Option<u32>,
+    /// In cents; `None` for "from". Equal to `minCents` for one amount.
+    pub max_cents: Option<u32>,
+    /// ISO 4217: `USD`.
+    pub currency: String,
+    pub period: SalaryPeriod,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum SalaryPeriod {
+    Year,
+    Hour,
 }
 
 /// A posting with its requirements and every master scored against it: what opens before Suggest runs.
@@ -506,7 +530,8 @@ pub struct ComponentView {
     pub present: bool,
     /// 0–1.
     pub value: f64,
-    pub detail: String,
+    /// The gist in a few words: `2 of 3 · missing Docker`, `Partly: Software, Engineering`.
+    pub brief: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -577,7 +602,7 @@ pub struct ChangeView {
     pub marks: Vec<String>,
     /// The line it replaces, for line edits (`Was “…”`).
     pub was: Option<String>,
-    /// Meta under the row: `Rewrite · same 2 lines`, `Adds Troubleshooting and Ticketing · takes 3 lines`.
+    /// Meta under the row: `Rewrite · same 2 lines`, `Add skill · adds SQL` (terms the text doesn't show marked).
     pub meta: String,
     pub state: ChangeState,
     /// Left out: why (`"40%" isn't in your resume`, `Takes 3 lines, not 2`).
@@ -725,9 +750,59 @@ pub struct ApplicationRow {
     pub status: AppStatus,
 }
 
+// ── The export folder ───────────────────────────────────────────────────────────────────────────────────────────
+
+/// The export folder's PDFs, newest first: what Resumes lists beside the masters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FolderView {
+    /// Absolute path of the export folder.
+    pub dir: String,
+    /// Empty when the folder holds no PDF yet, or doesn't exist yet.
+    pub files: Vec<FolderFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FolderFile {
+    /// `globex_jr_sde_doe_resume.pdf`: what `folder_pdf` takes.
+    pub name: String,
+    /// Absolute path.
+    pub path: String,
+    /// Last modified, RFC 3339.
+    pub modified_at: String,
+    pub kind: FileKind,
+}
+
+/// What a PDF in the export folder is, from its name: the app's exports end in `_resume` or `_cover_letter`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum FileKind {
+    /// The name says cover letter (`cover_letter`, `Cover Letter`, `coverletter`…).
+    CoverLetter,
+    /// Otherwise, the name says resume or CV.
+    Resume,
+    /// Neither.
+    Other,
+}
+
+/// One of the export folder's PDFs, for the desk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FolderPdf {
+    pub name: String,
+    pub path: String,
+    /// One SVG document per page.
+    pub pages: Vec<String>,
+}
+
 // ── Company logos ───────────────────────────────────────────────────────────────────────────────────────────────
 
-/// A company with a logo you set: the UI shows it from `logo://localhost/<key>?v=<version>`.
+/// A company with a logo, yours or fetched: the UI shows it from `logo://localhost/<key>?v=<version>`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -789,6 +864,199 @@ pub enum CoverPart {
         index: u32,
     },
     Closing,
+}
+
+// ── Job feed ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// Where a feed job stands. A checked job is a fit when its best master's score now reaches the threshold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum FeedItemState {
+    /// Pulled, waiting for its check.
+    New,
+    /// Left out by the local check (`reason` says why), or its posting couldn't be read.
+    Skipped,
+    /// Over the day's checks: checked after the next pull.
+    Waiting,
+    /// Its check is running.
+    Checking,
+    Fit,
+    NotFit,
+    Dismissed,
+}
+
+/// A job from one of the feed's sources: a feed row, or a search result.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FeedItem {
+    /// The feed's id for the job.
+    pub slug: String,
+    /// The source that found it, as a person reads it (`freehire`, `LinkedIn`, `Watchlist`, `Fantastic.jobs`).
+    pub origin: String,
+    pub role: String,
+    pub company: String,
+    /// The company's logo key (`LogoRow.key`), as `JobRow.companyKey`.
+    pub company_key: String,
+    pub location: String,
+    /// The employer's link (LinkedIn's job page for a LinkedIn job).
+    pub url: String,
+    pub state: FeedItemState,
+    /// The best master's score now, once checked.
+    pub score: Option<f64>,
+    /// The best master's title, once checked.
+    pub master: Option<String>,
+    /// The posting's id once read: what `/jobs/{id}` opens.
+    pub job: Option<String>,
+    /// The employer's posting date (RFC 3339), when the source states one.
+    pub posted_at: Option<String>,
+    /// When its source first recorded it (RFC 3339).
+    pub found_at: String,
+    /// Its requirements' knockouts, once checked.
+    pub knockouts: Vec<String>,
+    /// Why it was skipped, or why its check failed.
+    pub reason: Option<String>,
+    pub salary: Option<SalaryRange>,
+}
+
+/// Event `feed`, and the feed's heading: the pull and the day's checks.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FeedStatus {
+    /// Pulls run on their own (Settings → Feed).
+    pub enabled: bool,
+    /// LinkedIn is pulled and searched beside freehire (Settings → Feed).
+    pub linkedin: bool,
+    /// The sources are being read.
+    pub pulling: bool,
+    /// The slug of the job being checked.
+    pub checking: Option<String>,
+    /// The last pull that finished (RFC 3339).
+    pub last_pull: Option<String>,
+    /// When the next pull runs (RFC 3339); `None` with the feed off.
+    pub next_pull: Option<String>,
+    /// Checks since local midnight.
+    pub checked_today: u32,
+    pub daily_checks: u32,
+    /// The fit threshold, in percent.
+    pub threshold: f64,
+    /// A source the feed is leaving alone for now, and until when (LinkedIn after it limited requests); not an error.
+    pub paused: Option<String>,
+    /// Why the last pull or check failed.
+    pub error: Option<String>,
+}
+
+/// The feed: every row but skipped and dismissed ones. Fits first (best score first), then not fits, the one being
+/// checked, waiting, new.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FeedView {
+    pub items: Vec<FeedItem>,
+    pub status: FeedStatus,
+}
+
+/// One page of a search: freehire's matches in its order, then LinkedIn's. Jobs the feed has show as stored, the
+/// others as `new`.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SearchResults {
+    pub items: Vec<FeedItem>,
+    /// Every match freehire has, plus LinkedIn's found so far (LinkedIn doesn't say how many it has).
+    #[ts(type = "number")]
+    pub total: u64,
+    /// Where the next page starts; `None`: no more from either source.
+    pub next: Option<SearchCursor>,
+    /// A source that failed on this page, as a sentence (`LinkedIn: …`); the other's results still show.
+    pub error: Option<String>,
+}
+
+/// Where a search's next page starts in each source.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SearchCursor {
+    /// freehire's offset; `None`: freehire has no more.
+    pub freehire: Option<u32>,
+    /// LinkedIn's `start`; `None`: LinkedIn is off, failed or has no more.
+    pub linkedin: Option<u32>,
+    /// LinkedIn's found so far, for `total`.
+    pub linkedin_found: u32,
+    /// freehire's matches, for `total` once freehire has no more.
+    #[ts(type = "number")]
+    pub freehire_total: u64,
+}
+
+/// Settings → Feed: the settings, what Auto works out now, and the masters to choose from.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FeedSettingsView {
+    pub settings: FeedSettingsDto,
+    pub auto: FeedAuto,
+    pub masters: Vec<MasterRef>,
+    /// The watchlist's boards, in its order.
+    pub boards: Vec<WatchBoard>,
+}
+
+/// A company board on the watchlist.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WatchBoard {
+    /// The board's careers link, as stored.
+    pub url: String,
+    /// The ATS (`Greenhouse`, `Workday`).
+    pub ats: String,
+    /// The board's company slug or tenant (`wing`, `nvidia`).
+    pub name: String,
+}
+
+/// The feed's settings. `None` on a filter is Auto.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FeedSettingsDto {
+    /// Pulls run on their own: at launch and every `everyHours`.
+    pub enabled: bool,
+    /// The master the feed looks for; `None`: every master.
+    pub master: Option<String>,
+    pub seniority: Option<Vec<String>>,
+    pub employment: Option<Vec<String>>,
+    pub category: Option<Vec<String>>,
+    /// Lowercase ISO codes (`us`).
+    pub countries: Option<Vec<String>>,
+    pub needs_visa: bool,
+    pub include_clearance: bool,
+    /// Jobs freehire couldn't place.
+    pub include_unknown_location: bool,
+    pub daily_checks: u32,
+    /// In percent.
+    pub threshold: f64,
+    pub every_hours: u32,
+    /// Search LinkedIn on each pull.
+    pub linkedin: bool,
+    /// Company careers links polled on each pull (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable,
+    /// Recruitee).
+    pub watchlist: Vec<String>,
+    /// Apify API token for Fantastic.jobs; `None` leaves it off.
+    pub apify_token: Option<String>,
+}
+
+/// What Auto works out from the bank and the chosen master (empty without a bank).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FeedAuto {
+    /// Years of experience, overlaps merged.
+    pub years: f64,
+    pub seniority: Vec<String>,
+    pub employment: Vec<String>,
+    pub category: Vec<String>,
+    pub countries: Vec<String>,
 }
 
 // ── Events ──────────────────────────────────────────────────────────────────────────────────────────────────────

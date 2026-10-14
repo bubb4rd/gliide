@@ -17,6 +17,12 @@ import type { EditTargets } from "./bindings/EditTargets";
 import type { EntryEdit } from "./bindings/EntryEdit";
 import type { EntryView } from "./bindings/EntryView";
 import type { Exported } from "./bindings/Exported";
+import type { FeedSettingsDto } from "./bindings/FeedSettingsDto";
+import type { FeedSettingsView } from "./bindings/FeedSettingsView";
+import type { FeedStatus } from "./bindings/FeedStatus";
+import type { FeedView } from "./bindings/FeedView";
+import type { FolderPdf } from "./bindings/FolderPdf";
+import type { FolderView } from "./bindings/FolderView";
 import type { ImportChoices } from "./bindings/ImportChoices";
 import type { ImportView } from "./bindings/ImportView";
 import type { JobRow } from "./bindings/JobRow";
@@ -28,6 +34,9 @@ import type { Mode } from "./bindings/Mode";
 import type { Progress } from "./bindings/Progress";
 import type { ReviewView } from "./bindings/ReviewView";
 import type { Rewritten } from "./bindings/Rewritten";
+import type { SalaryRange } from "./bindings/SalaryRange";
+import type { SearchCursor } from "./bindings/SearchCursor";
+import type { SearchResults } from "./bindings/SearchResults";
 import type { Settings } from "./bindings/Settings";
 
 export type * from "./bindings/AgentStatus";
@@ -51,6 +60,17 @@ export type * from "./bindings/EntryRow";
 export type * from "./bindings/EntryView";
 export type * from "./bindings/ErrorKind";
 export type * from "./bindings/Exported";
+export type * from "./bindings/FeedAuto";
+export type * from "./bindings/FeedItem";
+export type * from "./bindings/FeedItemState";
+export type * from "./bindings/FeedSettingsDto";
+export type * from "./bindings/FeedSettingsView";
+export type * from "./bindings/FeedStatus";
+export type * from "./bindings/FeedView";
+export type * from "./bindings/FileKind";
+export type * from "./bindings/FolderFile";
+export type * from "./bindings/FolderPdf";
+export type * from "./bindings/FolderView";
 export type * from "./bindings/GapView";
 export type * from "./bindings/ImportChoices";
 export type * from "./bindings/ImportContact";
@@ -73,8 +93,12 @@ export type * from "./bindings/Mode";
 export type * from "./bindings/Progress";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
+export type * from "./bindings/SalaryPeriod";
+export type * from "./bindings/SalaryRange";
 export type * from "./bindings/SameEntry";
 export type * from "./bindings/ScoreView";
+export type * from "./bindings/SearchCursor";
+export type * from "./bindings/SearchResults";
 export type * from "./bindings/SectionRow";
 export type * from "./bindings/Settings";
 export type * from "./bindings/SkillChip";
@@ -83,6 +107,7 @@ export type * from "./bindings/Target";
 export type * from "./bindings/TemplateRow";
 export type * from "./bindings/Theme";
 export type * from "./bindings/Verdict";
+export type * from "./bindings/WatchBoard";
 export type * from "./bindings/WordingView";
 
 /** `e` as an `AppError`: commands reject with one; anything else (a bridge failure) becomes `other`. */
@@ -121,6 +146,12 @@ export const editEntry = (entry: string, edit: EntryEdit, preview: string | null
 export const setMasterOptions = (master: string, template: string, pageLimit: number) =>
   invoke<Library>("set_master_options", { master, template, pageLimit });
 
+// ── The export folder ──
+/** The export folder's PDFs, newest first. */
+export const folder = () => invoke<FolderView>("folder");
+/** One of them (`FolderFile.name`), its pages as SVG. */
+export const folderPdf = (name: string) => invoke<FolderPdf>("folder_pdf", { name });
+
 // ── Jobs ──
 export const jobs = () => invoke<JobRow[]>("jobs");
 /** Reads a link or pasted text into a posting (no model call). */
@@ -128,6 +159,8 @@ export const addJob = (input: string) => invoke<JobRow>("add_job", { input });
 /** The posting's requirements (Extract, cached per posting) and every master scored. Emits `progress`. */
 export const openJob = (job: string) => invoke<JobView>("open_job", { job });
 export const deleteJob = (job: string) => invoke<JobRow[]>("delete_job", { job });
+/** Sets the posting's salary range as yours (`null`: removed); its row with the range it now shows. */
+export const setSalary = (job: string, salary: SalaryRange | null) => invoke<JobRow>("set_salary", { job, salary });
 /**
  * Opens the review for `job`: Suggest (cached per posting × master × mode × model), then the fit check.
  * `master`/`mode` null: the job's last review's, else the best-ranked master and the default mode.
@@ -183,6 +216,25 @@ export const applications = () => invoke<ApplicationRow[]>("applications");
 export const setStatus = (application: string, status: AppStatus) =>
   invoke<ApplicationRow>("set_status", { application, status });
 
+// ── Job feed (freehire) ──
+/** Every row but skipped and dismissed: fits first (best score first), then not fit, checking, waiting, new. */
+export const feed = () => invoke<FeedView>("feed");
+/** Pulls new postings from every source that's on and checks them up to the daily cap; answers once both are done. */
+export const pullFeed = () => invoke<FeedView>("pull_feed");
+/** freehire's search with the feed's filters plus `query`, then LinkedIn's when it's on (no model call); `cursor` from
+ *  the last page's `next` for more. */
+export const searchFeed = (query: string, cursor: SearchCursor | null = null) =>
+  invoke<SearchResults>("search_feed", { query, cursor });
+/** Adds these jobs to the feed if missing and checks them now, past the daily cap. */
+export const checkFeed = (slugs: string[]) => invoke<FeedView>("check_feed", { slugs });
+/** Takes the job off the feed (its posting too, when you never opened it). */
+export const dismissFeed = (slug: string) => invoke<FeedView>("dismiss_feed", { slug });
+/** Reads and stores the posting if needed and marks it opened: from then on it's in Recent and Applications. */
+export const openFeedJob = (slug: string) => invoke<JobRow>("open_feed_job", { slug });
+export const feedSettings = () => invoke<FeedSettingsView>("feed_settings");
+export const setFeedSettings = (settings: FeedSettingsDto) =>
+  invoke<FeedSettingsView>("set_feed_settings", { settings });
+
 // ── Company logos ──
 export const logos = () => invoke<LogoRow[]>("logos");
 /** Sets the company's logo from an image file or the clipboard (a copied image file, else the copied picture), replacing
@@ -195,3 +247,6 @@ export const logoUrl = (logo: LogoRow) => `${convertFileSrc(logo.key, "logo")}?v
 // ── Events ──
 export const onProgress = (handler: (p: Progress) => void): Promise<UnlistenFn> =>
   listen<Progress>("progress", (e) => handler(e.payload));
+/** Event `feed`: a row or the feed's status changed. */
+export const onFeed = (handler: (s: FeedStatus) => void): Promise<UnlistenFn> =>
+  listen<FeedStatus>("feed", (e) => handler(e.payload));

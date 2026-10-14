@@ -7,11 +7,15 @@ use tauri::State;
 
 use crate::dto::{
     AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit, Decision,
-    EditTargets, EntryEdit, EntryView, Exported, ImportChoices, ImportView, JobRow, JobView,
-    Library, LogoRow, LogoSource, Mode, ReviewView, Rewritten, Settings,
+    EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView,
+    FolderPdf, FolderView, ImportChoices, ImportView, JobRow, JobView, Library, LogoRow,
+    LogoSource, Mode, ReviewView, Rewritten, SalaryRange, SearchCursor, SearchResults, Settings,
 };
 use crate::state::{App, blocking};
-use crate::{cover, entry, export, import, jobs, library as lib, logo, review, settings};
+use crate::{
+    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, review,
+    settings,
+};
 
 type Res<T> = Result<T, AppError>;
 type St<'a> = State<'a, Arc<App>>;
@@ -74,6 +78,18 @@ pub async fn set_master_options(
     .await
 }
 
+// ── The export folder ──
+
+#[tauri::command]
+pub async fn folder(app: St<'_>) -> Res<FolderView> {
+    blocking(&app, files::folder).await
+}
+
+#[tauri::command]
+pub async fn folder_pdf(app: St<'_>, name: String) -> Res<FolderPdf> {
+    blocking(&app, move |app| files::folder_pdf(app, &name)).await
+}
+
 #[tauri::command]
 pub async fn entry(app: St<'_>, entry: String, preview: Option<String>) -> Res<EntryView> {
     blocking(&app, move |app| {
@@ -115,6 +131,11 @@ pub async fn open_job(app: St<'_>, job: String) -> Res<JobView> {
 #[tauri::command]
 pub async fn delete_job(app: St<'_>, job: String) -> Res<Vec<JobRow>> {
     blocking(&app, move |app| jobs::delete_job(app, &job)).await
+}
+
+#[tauri::command]
+pub async fn set_salary(app: St<'_>, job: String, salary: Option<SalaryRange>) -> Res<JobRow> {
+    blocking(&app, move |app| jobs::set_salary(app, &job, salary)).await
 }
 
 #[tauri::command]
@@ -285,4 +306,50 @@ pub async fn rewrite_cover_paragraph(
 #[tauri::command]
 pub async fn export_cover(app: St<'_>, review: String) -> Res<Exported> {
     blocking(&app, move |app| export::export_cover(app, &review)).await
+}
+
+// ── Job feed ──
+
+#[tauri::command]
+pub async fn feed(app: St<'_>) -> Res<FeedView> {
+    blocking(&app, feed::feed).await
+}
+
+#[tauri::command]
+pub async fn pull_feed(app: St<'_>) -> Res<FeedView> {
+    feed::pull_feed(&app).await
+}
+
+#[tauri::command]
+pub async fn search_feed(
+    app: St<'_>,
+    query: String,
+    cursor: Option<SearchCursor>,
+) -> Res<SearchResults> {
+    feed::search_feed(&app, query, cursor).await
+}
+
+#[tauri::command]
+pub async fn check_feed(app: St<'_>, slugs: Vec<String>) -> Res<FeedView> {
+    feed::check_feed(&app, slugs).await
+}
+
+#[tauri::command]
+pub async fn dismiss_feed(app: St<'_>, slug: String) -> Res<FeedView> {
+    blocking(&app, move |app| feed::dismiss_feed(app, &slug)).await
+}
+
+#[tauri::command]
+pub async fn open_feed_job(app: St<'_>, slug: String) -> Res<JobRow> {
+    feed::open_feed_job(&app, &slug).await
+}
+
+#[tauri::command]
+pub async fn feed_settings(app: St<'_>) -> Res<FeedSettingsView> {
+    blocking(&app, feed::feed_settings).await
+}
+
+#[tauri::command]
+pub async fn set_feed_settings(app: St<'_>, settings: FeedSettingsDto) -> Res<FeedSettingsView> {
+    blocking(&app, move |app| feed::set_feed_settings(app, settings)).await
 }
