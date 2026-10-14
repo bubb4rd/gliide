@@ -2,15 +2,17 @@
   A sidebar link: icon (or a `lead` such as a company mark), label (truncates), count. `quiet` for list entries such
   as Recent jobs (regular weight). With `sub`, a second, meta-sized line under the label (a job's role), ending in an
   optional `status` (a dot in its tone, then its word); the lead centers on both lines and each line truncates on its
-  own, the status never.
+  own, the status never. `trailing` draws a mark at the first line's end instead of `meta` (a job's fit `ScoreBar`).
   States: hover wash, current (pressed wash, ink icon).
 -->
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
+  import type { HTMLAnchorAttributes } from "svelte/elements";
   import type { LucideProps } from "@lucide/svelte";
   import Icon from "./Icon.svelte";
+  import { tip } from "./tip.svelte";
 
-  interface Props {
+  interface Props extends HTMLAnchorAttributes {
     href: string;
     icon?: Component<LucideProps>;
     /** Drawn where the icon goes, for anything that isn't a Lucide icon. */
@@ -20,12 +22,13 @@
     meta?: string | number | null;
     /** What `meta` is, for its tooltip ("Fit score"). */
     metaTitle?: string;
+    /** Drawn at the first line's end instead of `meta`. */
+    trailing?: Snippet;
     /** A second line under the label. */
     sub?: string;
     /** At the end of the second line: `Applied` with an accent dot. Tones as `Badge`'s. */
     status?: { label: string; tone: "neutral" | "accent" | "gain" | "danger" } | null;
     quiet?: boolean;
-    title?: string;
     children: Snippet;
   }
 
@@ -36,26 +39,29 @@
     current = false,
     meta,
     metaTitle,
+    trailing,
     sub,
     status,
     quiet = false,
-    title,
     children,
+    class: className,
+    ...rest
   }: Props = $props();
 </script>
 
 <a
   {href}
-  {title}
-  class={["nav-item", quiet && "nav-item--quiet", sub != null && "nav-item--two"]}
+  class={["nav-item", quiet && "nav-item--quiet", sub != null && "nav-item--two", className]}
   aria-current={current ? "page" : undefined}
+  {...rest}
 >
   {#if lead || icon}<span class="lead"
       >{#if lead}{@render lead()}{:else if icon}<Icon {icon} weight={quiet ? "regular" : "medium"} />{/if}</span
     >{/if}
   <span class="line">
     <span class="text">{@render children()}</span>
-    {#if meta != null && meta !== ""}<span class="meta num" title={metaTitle}>{meta}</span>{/if}
+    {#if trailing}<span class="meta">{@render trailing()}</span
+      >{:else if meta != null && meta !== ""}<span class="meta num" {@attach tip(metaTitle)}>{meta}</span>{/if}
   </span>
   {#if sub != null}
     <span class="sub meta">

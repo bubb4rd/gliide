@@ -60,14 +60,17 @@
     border: 1px solid transparent;
     transition: background-color var(--dur-instant) var(--ease-out);
   }
+  /* As a change row's foot: when the label and the actions don't fit their full width on one line, the actions wrap
+     under the label instead of squeezing it. */
   .part__head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1) var(--space-2);
     min-height: var(--control-sm);
   }
   .part__label {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
     font-size: var(--text-sm);
     line-height: var(--leading-sm);
@@ -76,8 +79,10 @@
   }
   .part__actions {
     display: flex;
-    flex: none;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--space-0-5);
+    margin-inline-start: auto;
     opacity: 0;
   }
   .part:focus-within .part__actions,

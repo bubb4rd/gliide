@@ -8,6 +8,7 @@
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
   import Button from "./Button.svelte";
+  import { tip } from "./tip.svelte";
 
   interface Props {
     /** One SVG document per page, from our renderer. */
@@ -41,7 +42,7 @@
         disabled={zoomOut === undefined}
         onclick={() => zoomOut !== undefined && (zoom = zoomOut)}
       />
-      <button type="button" class="zoom meta num" title="Actual size" onclick={() => (zoom = 100)}>{zoom}%</button>
+      <button type="button" class="zoom meta num" {@attach tip("Actual size")} onclick={() => (zoom = 100)}>{zoom}%</button>
       <Button
         variant="ghost"
         size="sm"

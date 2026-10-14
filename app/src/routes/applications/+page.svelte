@@ -29,10 +29,12 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { appError, setStatus, type ApplicationRow, type JobRow } from "$lib/api";
+  import { appError, setStatus, type ApplicationRow, type JobRow, type SalaryRange } from "$lib/api";
+  import { applicationFit, scoreFit, type Fit } from "$lib/fit";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
   import { app } from "$lib/stores/app.svelte";
+  import { perYear, salaryText } from "$lib/salary";
   import { STATUS } from "$lib/status";
   import {
     Badge,
@@ -41,10 +43,12 @@
     Empty,
     Input,
     Menu,
+    ScoreBar,
     Segmented,
     Table,
     Toolbar,
     dayKey,
+    tip,
     toast,
     type TableColumn,
   } from "$lib/ui";
@@ -60,15 +64,22 @@
   const COLUMNS: TableColumn<Row>[] = [
     { key: "date", label: "Date", width: "88px", sortBy: (r) => r.date, sortFirst: "desc" },
     { key: "job", label: "Job", sortBy: (r) => `${r.company} ${r.role}` },
-    { key: "now", label: "Now", numeric: true, width: "64px", sortBy: (r) => r.application?.now },
+    // By the top of the range a year (hourly at 2,080 hours).
     {
-      key: "projected",
-      label: "Projected",
+      key: "salary",
+      label: "Salary",
       numeric: true,
-      width: "96px",
-      sortBy: (r) => (r.posting ? r.posting.score : r.application?.projected),
+      width: "128px",
+      sortBy: (r) => (r.salary ? perYear(r.salary) : null),
     },
-    { key: "onFile", label: "On file", numeric: true, width: "80px", sortBy: (r) => r.application?.onFile },
+    // The score that counts: on file once exported, else projected (a posting not sent yet: its fit score).
+    {
+      key: "fit",
+      label: "Fit",
+      numeric: true,
+      width: "176px",
+      sortBy: (r) => (r.fit ? (r.fit.onFile ?? r.fit.projected) : null),
+    },
     // Along the pipeline: not sent, then each status in order.
     {
       key: "status",
@@ -99,6 +110,10 @@
     url: string | null;
     application: ApplicationRow | null;
     posting: JobRow | null;
+    /** The posting's salary range (an application's through its posting). */
+    salary: SalaryRange | null;
+    /** The scores the Fit bar draws; none before a posting's requirements are read. */
+    fit: Fit | null;
   }
 
   let loaded = $state(false);
@@ -137,6 +152,7 @@
     }),
   );
 
+  const jobsById = $derived(new Map(app.jobs.map((j) => [j.id, j])));
   const rows = $derived<Row[]>(
     [
       ...app.applications.map(
@@ -150,6 +166,8 @@
           url: a.url,
           application: a,
           posting: null,
+          salary: (a.job && jobsById.get(a.job)?.salary) || null,
+          fit: applicationFit(a),
         }),
       ),
       ...app.unsent.map(
@@ -163,6 +181,8 @@
           url: j.url,
           application: null,
           posting: j,
+          salary: j.salary,
+          fit: scoreFit(j.score),
         }),
       ),
     ].sort((a, b) => b.date.localeCompare(a.date)),
@@ -199,7 +219,6 @@
     });
   }
 
-  const score = (n: number | null | undefined) => (n == null ? "—" : Math.round(n));
   const fileName = (path: string) => path.split("/").pop() || path;
 
   async function changeStatus(row: ApplicationRow, status: AppStatus) {
@@ -231,7 +250,7 @@
 <Toolbar>
   {#snippet crumbs()}<b>Applications</b>{/snippet}
   {#if csvPath}
-    <Button icon={FileSpreadsheet} title={csvPath} onclick={() => run("open applications.csv", () => openPath(csvPath))}>
+    <Button icon={FileSpreadsheet} {@attach tip(csvPath)} onclick={() => run("open applications.csv", () => openPath(csvPath))}>
       Open applications.csv
     </Button>
   {/if}
@@ -263,28 +282,30 @@
       <Table columns={COLUMNS} rows={shown} bind:sort={view.sort} key={(r) => r.key} label="Applications">
         {#snippet cell(row, column)}
           {#if column.key === "date"}
-            <span class="num" title={row.date}>{shortDate(row.date)}</span>
+            <span class="num" {@attach tip(row.date)}>{shortDate(row.date)}</span>
           {:else if column.key === "job"}
             <svelte:element
               this={row.href ? "a" : "span"}
               class={["job", row.href && "job--link"]}
               href={row.href}
-              title="{row.company} · {row.role}"
+              {@attach tip(`${row.company} · ${row.role}`)}
             >
               <CompanyMark size={28} src={app.logos[row.companyKey]} />
               <span class="company">{row.company}</span>
               <span class="role meta">{row.role}</span>
             </svelte:element>
-          {:else if column.key === "now"}
-            {score(row.application?.now)}
-          {:else if column.key === "projected"}
-            {#if row.posting}
-              <span title="Fit score">{score(row.posting.score)}</span>
+          {:else if column.key === "salary"}
+            {#if row.salary}
+              <span {@attach tip(salaryText(row.salary))}>{salaryText(row.salary, true)}</span>
             {:else}
-              {score(row.application?.projected)}
+              —
             {/if}
-          {:else if column.key === "onFile"}
-            {score(row.application?.onFile)}
+          {:else if column.key === "fit"}
+            {#if row.fit}
+              <ScoreBar now={row.fit.now} projected={row.fit.projected} onFile={row.fit.onFile} />
+            {:else}
+              —
+            {/if}
           {:else if column.key === "status"}
             {#if row.application}
               {@const application = row.application}
@@ -307,7 +328,7 @@
               <button
                 type="button"
                 class="file"
-                title="Show {path} in Finder"
+                {@attach tip(`Show ${path} in Finder`)}
                 onclick={() => run(`show ${fileName(path)} in Finder`, () => revealItemInDir(path))}
               >
                 {fileName(path)}
@@ -324,7 +345,7 @@
                 square
                 icon={ExternalLink}
                 aria-label="Open the {row.company} posting"
-                title={url}
+                {@attach tip(url)}
                 onclick={() => run("open the posting", () => openUrl(url))}
               />
             {:else}
@@ -339,7 +360,7 @@
                 square
                 icon={Trash2}
                 aria-label="Delete the {row.company || row.role} posting"
-                title="Delete posting"
+                {@attach tip("Delete posting")}
                 onclick={() => app.deleteJob(posting)}
               />
             </span>

@@ -52,16 +52,22 @@
     NavItem,
     PartRow,
     Popover,
+    ScoreBar,
     ScoreHeader,
     Segmented,
+    Sources,
     Table,
     Textarea,
     Thinking,
     Toolbar,
+    Tooltip,
+    tip,
+    type TipContent,
     toast,
     type TableColumn,
     type TableSort,
   } from "$lib/ui";
+  import { SEARCH_SOURCES_NOTE, searchSources } from "$lib/feed";
   import { FITS, LOGO, OVER, WIDE_LOGO } from "./sample";
 
   // ── Company photo: the job header's mark opens the panel; Paste sets the square logo, Choose file the wide one ──
@@ -265,13 +271,14 @@
     { value: "it", label: "IT Support", meta: "41%" },
     { value: "design", label: "Product Design", meta: "22%" },
   ];
+  // Every popover state: met in full (green), partial, none met, and one the posting doesn't ask for.
   const parts = [
-    { label: "Hard skills and tools", value: 0.72, weight: 0.4, present: true, detail: "13 of 18 terms" },
-    { label: "Domain and soft", value: 0.6, weight: 0.15, present: true, detail: "3 of 5 terms" },
-    { label: "Job title", value: 1, weight: 0.15, present: true, detail: "“Software Engineer” on the page" },
-    { label: "Experience", value: 0.5, weight: 0.15, present: true, detail: "1 of 2 years asked" },
-    { label: "Education", value: 1, weight: 0.1, present: true, detail: "B.S. Computer Science" },
-    { label: "Format", value: 0, weight: 0.05, present: false, detail: "Not in the posting" },
+    { id: "hard_tool", label: "Hard skills and tools", value: 0.72, weight: 45, present: true, brief: "13 of 18 · missing Kafka, Docker +3" },
+    { id: "domain_soft", label: "Domain and soft", value: 0.6, weight: 10, present: true, brief: "3 of 5 · missing collaborate, agile" },
+    { id: "title", label: "Job title", value: 1, weight: 10, present: true, brief: "“Software Engineer” stated" },
+    { id: "experience", label: "Experience", value: 0, weight: 15, present: true, brief: "0 of 2 years" },
+    { id: "education", label: "Education", value: 1, weight: 10, present: true, brief: "Bachelor's in Computer Science" },
+    { id: "format", label: "Format", value: 0, weight: 10, present: false, brief: "Not in the posting" },
   ];
   // Every command state: keys only (Select), can't run now (Toggle, Edit), runnable (Add your own, Export).
   const reviewKeys: KeyCommand[] = $derived([
@@ -339,6 +346,48 @@
     { key: "resume", label: "Resume", width: "22%", sortBy: (r) => r.resume },
   ];
   let appSort = $state<TableSort>({ key: "date", dir: "desc" });
+  /** The selected row (the Feed's keys act on it): Northwind to start; a click selects another. */
+  let appSelected = $state<string | null>("2");
+
+  // ── Score bar: Applications' Fit column ──
+  interface BarSample {
+    state: string;
+    now?: number | null;
+    projected: number;
+    onFile?: number | null;
+    ceiling?: number | null;
+  }
+  const barSamples: BarSample[] = [
+    { state: "Tailored, under its ceiling: 69 → 88, ceiling 92", now: 69, projected: 88, onFile: 88, ceiling: 92 },
+    { state: "Small gain: 80 → 82", now: 80, projected: 82, onFile: 82, ceiling: 84 },
+    { state: "At its ceiling: 64 → 85", now: 64, projected: 85, ceiling: 85 },
+    { state: "Gain, then lost in the PDF: 60 → 80, reads 70", now: 60, projected: 80, onFile: 70, ceiling: 86 },
+    { state: "Lost in the PDF, imported (no before): 76, reads 47", projected: 76, onFile: 47 },
+    { state: "No edits in: 72 → 72, ceiling 79", now: 72, projected: 72, ceiling: 79 },
+    { state: "Not sent: its fit only", projected: 60 },
+    { state: "Edges: 0", projected: 0 },
+    { state: "Edges: 90 → 100", now: 90, projected: 100, onFile: 100, ceiling: 100 },
+  ];
+  interface BarRow extends Omit<BarSample, "state"> {
+    id: string;
+    company: string;
+    role: string;
+  }
+  const barRows: BarRow[] = [
+    { id: "1", company: "Initech", role: "Software Engineer, New Grad", now: 80, projected: 82, onFile: 82, ceiling: 84 },
+    { id: "2", company: "OneImaging", role: "Full Stack Associate Software Engineer", now: 69, projected: 88, onFile: 88 },
+    { id: "3", company: "Amazon", role: "Front-End Engineer", now: 69, projected: 72, onFile: 72 },
+    { id: "4", company: "Whatnot", role: "Software Engineer, 2027 New Grad", projected: 60 },
+    { id: "5", company: "Together AI", role: "Software Engineer, New Grad", projected: 76, onFile: 47 },
+    { id: "6", company: "BAE Systems", role: "Entry Level Software Engineer", projected: 88, onFile: 73 },
+    { id: "7", company: "ID.me", role: "Software Development Engineer II", projected: 90, onFile: 90 },
+  ];
+  const barColumns: TableColumn<BarRow>[] = [
+    { key: "company", label: "Company", width: "28%", sortBy: (r) => r.company },
+    { key: "role", label: "Role" },
+    { key: "fit", label: "Fit", numeric: true, width: "176px", sortBy: (r) => r.onFile ?? r.projected },
+  ];
+  let barSort = $state<TableSort>({ key: "fit", dir: "desc" });
 
   // ── Heatmap: nine weeks of made-up activity ending on a fixed day, so the specimen never shifts ──
   const heatEnd = new Date(2026, 9, 13);
@@ -349,6 +398,47 @@
     if (n > 0) heatBusy.set(dayKey(new Date(2026, 9, 13 - i)), n);
   }
   const heatNone = new Map<string, number>();
+
+  // ── Tooltips: every kind, from a label to a chart's legend ──
+  const tipKinds: { name: string; content: TipContent }[] = [
+    { name: "Label", content: "Delete posting" },
+    { name: "Sentence", content: "Kept on by you: the fit check would leave it out, as “40%” isn’t in your resume" },
+    { name: "Value", content: { value: "78%" } },
+    { name: "Title and value", content: { title: "Fit", value: 78 } },
+    {
+      name: "Rows",
+      content: {
+        title: "Tue, Oct 13",
+        rows: [
+          { label: "Postings added", value: 2 },
+          { label: "Applications sent", value: 1 },
+        ],
+      },
+    },
+    {
+      name: "Rows with legend",
+      content: {
+        title: "Fit",
+        value: 88,
+        rows: [
+          { key: "base", label: "Before your edits", value: 69 },
+          { key: "gain", label: "From your edits", value: "+19", tone: "gain" },
+          { key: "tick", label: "Ceiling", value: 90 },
+        ],
+        note: "Read back from the exported PDF",
+      },
+    },
+    {
+      name: "Lost in the PDF",
+      content: {
+        title: "Fit",
+        value: 73,
+        tone: "warn",
+        rows: [{ key: "lost", label: "Lost in the PDF", value: "−15", tone: "warn" }],
+        note: "Read back from the exported PDF",
+      },
+    },
+  ];
 
   const swatches = [
     ["Surfaces", [["Paper", "--paper"], ["Surface", "--surface"], ["Sunken", "--sunken"], ["Desk", "--desk"], ["Sidebar", "--sidebar"]]],
@@ -400,35 +490,27 @@
                 href="#review"
                 quiet
                 current
-                meta="78%"
-                metaTitle="Fit score"
                 sub="Junior Software Engineer"
                 status={{ label: "Applied", tone: "accent" }}
               >
-                {#snippet lead()}<CompanyMark size={28} />{/snippet}Globex
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} now={53} projected={78} onFile={78} />{/snippet}
+                Globex
               </NavItem>
-              <NavItem
-                href="#review"
-                quiet
-                meta="71%"
-                metaTitle="Fit score"
-                sub="Support Engineer"
-                status={{ label: "Interviewing", tone: "accent" }}
-              >
-                {#snippet lead()}<CompanyMark size={28} />{/snippet}Northwind Traders
+              <NavItem href="#review" quiet sub="Support Engineer" status={{ label: "Interviewing", tone: "accent" }}>
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} now={64} projected={74} onFile={71} />{/snippet}
+                Northwind Traders
               </NavItem>
-              <NavItem
-                href="#review"
-                quiet
-                meta="64%"
-                metaTitle="Fit score"
-                sub="Product Designer"
-                status={{ label: "Saved", tone: "neutral" }}
-              >
-                {#snippet lead()}<CompanyMark size={28} />{/snippet}Fabrikam
+              <NavItem href="#review" quiet sub="Product Designer" status={{ label: "Saved", tone: "neutral" }}>
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} projected={64} />{/snippet}
+                Fabrikam
               </NavItem>
-              <NavItem href="#review" quiet meta="59%" metaTitle="Fit score" sub="IT Analyst">
-                {#snippet lead()}<CompanyMark size={28} />{/snippet}Contoso
+              <NavItem href="#review" quiet sub="IT Analyst">
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} projected={59} />{/snippet}
+                Contoso
               </NavItem>
             </Nav>
           </div>
@@ -758,7 +840,7 @@
               <Chip state="have" p1>TypeScript</Chip>
               <Chip state="add" p1>REST APIs</Chip>
               <Chip state="missing" p1>SQL Server</Chip>
-              <Chip state="have" disabled title="Only stated in your bullets">Agile</Chip>
+              <Chip state="have" disabled {@attach tip("Only stated in your bullets")}>Agile</Chip>
             </div>
             <p class="label">Checkbox · off · on · disabled</p>
             <div class="row">
@@ -889,9 +971,51 @@
       </div>
     </section>
 
+    <!-- ═══════════ Score bar ═══════════ -->
+    <section class="section">
+      <h2 class="title">Score bar</h2>
+      <p class="meta lede">
+        Applications’ Fit column: the review’s score bar in small, from 0 to 100, before the score that counts (on file
+        once exported, else projected). Ink 3 is what the master had, green what your edits added, amber what the PDF
+        lost; a tick marks the ceiling. Hover a bar for the numbers. The number alone (`bar={false}`), styled the
+        same with its percent sign: beside a name, in the sidebar’s Recent and the Overview’s lists.
+      </p>
+      <Card pad>
+        <div class="bars">
+          {#each barSamples as b, i (i)}
+            <p class="meta">{b.state}</p>
+            <ScoreBar now={b.now} projected={b.projected} onFile={b.onFile} ceiling={b.ceiling} />
+          {/each}
+        </div>
+      </Card>
+      <Card pad>
+        <div class="bars bars--alone">
+          {#each barSamples as b, i (i)}
+            <p class="meta">{b.state}</p>
+            <ScoreBar bar={false} now={b.now} projected={b.projected} onFile={b.onFile} ceiling={b.ceiling} />
+          {/each}
+        </div>
+      </Card>
+      <Card>
+        <div class="table">
+          <Table columns={barColumns} rows={barRows} bind:sort={barSort} key={(r) => r.id} label="Score bar (specimen)">
+            {#snippet cell(row, column)}
+              {#if column.key === "fit"}
+                <ScoreBar now={row.now} projected={row.projected} onFile={row.onFile} ceiling={row.ceiling} />
+              {:else if column.key === "company"}
+                <CompanyMark>{row.company}</CompanyMark>
+              {:else}
+                {row.role}
+              {/if}
+            {/snippet}
+          </Table>
+        </div>
+      </Card>
+    </section>
+
     <!-- ═══════════ New primitives ═══════════ -->
     <section class="section">
-      <h2 class="title">Menus, popovers, progress, company marks</h2>
+      <h2 class="title">Menus, popovers, progress, company marks, sources</h2>
       <div class="grid cols-2">
         <Card pad>
           <div class="tile">
@@ -995,6 +1119,16 @@
             </div>
           </div>
         </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Sources · with LinkedIn · without · no note · an icon not bundled (the blank tile)</p>
+            <Sources label="Searches" sources={searchSources(true)} note={SEARCH_SOURCES_NOTE} />
+            <Sources label="Searches" sources={searchSources(false)} note={SEARCH_SOURCES_NOTE} />
+            <Sources label="Pulls from" sources={searchSources(false).slice(0, 2)} />
+            <Sources label="Searches" sources={[...searchSources(false).slice(0, 2), { name: "Recruitee", src: null }]} />
+            <p class="meta">Each icon as its brand publishes it, at 16: scaled to fit, rounded like the tile. Hover one for its name.</p>
+          </div>
+        </Card>
       </div>
     </section>
 
@@ -1002,11 +1136,20 @@
       <h2 class="title">Table</h2>
       <p class="meta lede">
         Headers sort: the sorted column is ink with its arrow, others show the arrow faintly on hover or focus; a second
-        click reverses. Role doesn’t sort; empty On file sorts last either way.
+        click reverses. Role doesn’t sort; empty On file sorts last either way. One row can be selected (Northwind, in
+        the selected wash); a click selects another.
       </p>
       <Card>
         <div class="table">
-          <Table columns={appColumns} rows={appRows} bind:sort={appSort} key={(r) => r.id} label="Applications (specimen)">
+          <Table
+            columns={appColumns}
+            rows={appRows}
+            bind:sort={appSort}
+            key={(r) => r.id}
+            label="Applications (specimen)"
+            selected={appSelected}
+            onselect={(r) => (appSelected = r.id)}
+          >
             {#snippet cell(row, column)}
               {#if column.key === "status"}
                 <Badge tone={statusTone[row.status]}>{statuses.find((s) => s.value === row.status)?.label}</Badge>
@@ -1029,8 +1172,8 @@
     <section class="section">
       <h2 class="title">Heatmap</h2>
       <p class="meta lede">
-        Postings added and applications sent, by day. Shades step against the busiest day shown; a day's title says
-        what happened.
+        Postings added and applications sent, by day. Shades step against the busiest day shown; hover a day for what
+        happened.
       </p>
       <Card pad>
         <Heatmap counts={heatBusy} end={heatEnd} label="Activity (specimen), last 26 weeks">
@@ -1051,6 +1194,36 @@
           </div>
         </Card>
       </div>
+    </section>
+
+    <!-- ═══════════ Tooltips ═══════════ -->
+    <section class="section">
+      <h2 class="title">Tooltips</h2>
+      <p class="meta lede">
+        One at a time, centered above what you hover (below when there’s no room above). The first opens after 300ms of
+        rest, the next at once, so a chart reads as you move along it. Keyboard focus opens it at once; Esc, a click,
+        scrolling or leaving closes it. A label, or data: a title and its value, rows, legend keys, a note.
+      </p>
+      <Card pad>
+        <div class="tips">
+          {#each tipKinds as kind (kind.name)}
+            <div class="tile">
+              <p class="label">{kind.name}</p>
+              <Tooltip content={kind.content} />
+            </div>
+          {/each}
+        </div>
+      </Card>
+      <Card pad>
+        <div class="tile">
+          <p class="label">Live · hover, or Tab to a button</p>
+          <div class="row">
+            {#each tipKinds as kind (kind.name)}
+              <Button size="sm" {@attach tip(kind.content)}>{kind.name}</Button>
+            {/each}
+          </div>
+        </div>
+      </Card>
     </section>
 
     <!-- ═══════════ Feedback ═══════════ -->
@@ -1115,12 +1288,12 @@
               <NavItem
                 href="#review"
                 quiet
-                meta="76%"
-                metaTitle="Fit score"
                 sub="Senior Front-End Engineer, Payments Platform"
                 status={{ label: "Rejected", tone: "danger" }}
               >
-                {#snippet lead()}<CompanyMark size={28} />{/snippet}A company with a long name that truncates
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} now={70} projected={76} />{/snippet}
+                A company with a long name that truncates
               </NavItem>
             </Nav>
           </div>
@@ -1477,5 +1650,28 @@
   }
   :global(.sheet__mark) {
     background: var(--page-mark);
+  }
+
+  /* Score bar: each state beside its bar, at a table cell's width. */
+  .bars {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 176px;
+    align-items: center;
+    gap: var(--space-3) var(--space-8);
+  }
+  .bars p {
+    margin: 0;
+  }
+  .bars--alone {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  /* Tooltips: each kind in place, as wide as it draws. */
+  .tips {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--space-6) var(--space-4);
+  }
+  .tips .tile {
+    justify-items: start;
   }
 </style>

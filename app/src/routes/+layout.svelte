@@ -13,12 +13,15 @@
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
   import Palette from "@lucide/svelte/icons/palette";
+  import Rss from "@lucide/svelte/icons/rss";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
+  import { feed } from "$lib/stores/feed.svelte";
   import { shell } from "$lib/stores/shell.svelte";
+  import { jobFit } from "$lib/fit";
   import { STATUS } from "$lib/status";
-  import { CompanyMark, Nav, NavItem, Toaster } from "$lib/ui";
+  import { CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
 
   let { children }: { children: Snippet } = $props();
 
@@ -26,6 +29,9 @@
 
   onMount(() => {
     app.load();
+    void feed.refresh();
+    const listening = feed.listen();
+    return () => void listening.then((stop) => stop());
   });
 
   // Leaving a screen closes the compact sheet.
@@ -75,6 +81,9 @@
       >
         Applications
       </NavItem>
+      <NavItem href="/feed" icon={Rss} current={within("/feed")} meta={count(feed.fits.length)} metaTitle="Fits">
+        Feed
+      </NavItem>
       <NavItem href="/bank" icon={Archive} current={within("/bank")}>Experience</NavItem>
       <NavItem href="/masters" icon={FileText} current={within("/masters")}>Resumes</NavItem>
     </Nav>
@@ -85,17 +94,19 @@
         <Nav label="Recent jobs">
           {#each app.jobs.slice(0, RECENT) as job (job.id)}
             {@const status = job.status ? STATUS[job.status] : null}
+            {@const fit = jobFit(job, app.applications)}
             <NavItem
               href="/jobs/{job.id}"
               quiet
               current={path === `/jobs/${job.id}`}
-              meta={job.score === null ? null : `${Math.round(job.score)}%`}
-              metaTitle="Fit score"
               sub={job.role}
               {status}
-              title="{job.company} · {job.role}{status ? ` · ${status.label}` : ''}"
+              {@attach tip(`${job.company} · ${job.role}${status ? ` · ${status.label}` : ""}`)}
             >
               {#snippet lead()}<CompanyMark size={28} src={app.logos[job.companyKey]} />{/snippet}
+              {#snippet trailing()}
+                {#if fit}<ScoreBar bar={false} now={fit.now} projected={fit.projected} onFile={fit.onFile} />{/if}
+              {/snippet}
               {job.company}
             </NavItem>
           {/each}
@@ -110,7 +121,7 @@
         {#if dev}<NavItem href="/specimen" icon={Palette} current={within("/specimen")}>Specimen</NavItem>{/if}
         <NavItem href="/settings" icon={SlidersHorizontal} current={within("/settings")}>Settings</NavItem>
       </Nav>
-      <a class="agent" href="/settings" title={app.agent?.problem ?? undefined}>
+      <a class="agent" href="/settings" {@attach tip(app.agent?.problem)}>
         <span class="agent__dot agent__dot--{agentLine.tone}" aria-hidden="true"></span>
         <span class="agent__text">{agentLine.text}</span>
       </a>
@@ -120,6 +131,7 @@
   <main class="main">
     {@render children()}
     <Toaster />
+    <Tooltips />
   </main>
 </div>
 

@@ -39,6 +39,7 @@
     Segmented,
     Textarea,
     Toolbar,
+    tip,
     toast,
   } from "$lib/ui";
 
@@ -432,7 +433,7 @@
                       square
                       icon={Trash2}
                       aria-label="Remove this variant"
-                      title="Remove this variant (⌫)"
+                      {@attach tip("Remove this variant (⌫)")}
                       onclick={() => remove(row)}
                     />
                   {/if}

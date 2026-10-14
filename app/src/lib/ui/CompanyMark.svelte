@@ -2,11 +2,11 @@
   The company's logo slot: the logo you set (ARCHITECTURE.md §7, Company logos), else a blank tile. A logo shows as
   the company publishes it, scaled to fit the square and rounded like the tile: never recolored, filtered or outlined.
   Sizes: 16 (one-line sidebar items), 20 (one-line table cells, beside a name), 28 (two lines: the sidebar's Recent
-  jobs and the Applications table, from the company's cap height to the role's baseline), 48 (the job header: from
-  the company's cap height to the title's baseline). With children, the company's name follows the mark and
-  truncates. With `label` (its accessible name) it's a button that sets the logo (`onclick`, or `popovertarget` for a
-  panel): the blank tile shows an image icon on hover and focus, and `over` (files dragged over it) rings it in the
-  accent.
+  jobs, the Applications table and the Overview's Up next, from the company's cap height to the role's baseline), 48
+  (the job header: from the company's cap height to the title's baseline). With children, the company's name follows
+  the mark and truncates. With `label` (its accessible name) it's a button that sets the logo (`onclick`, or
+  `popovertarget` for a panel): the blank tile shows an image icon on hover and focus, and `over` (files dragged over
+  it) rings it in the accent.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";

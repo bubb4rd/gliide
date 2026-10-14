@@ -8,6 +8,7 @@
   import { onMount, type Snippet } from "svelte";
   import { goto } from "$app/navigation";
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+  import Banknote from "@lucide/svelte/icons/banknote";
   import BookmarkPlus from "@lucide/svelte/icons/bookmark-plus";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsDownUp from "@lucide/svelte/icons/chevrons-down-up";
@@ -24,13 +25,16 @@
   import {
     appError,
     editTargets,
+    setSalary,
     type ChangeView,
     type CustomEdit,
     type EditTargets,
     type LineView,
+    type SalaryRange,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { logo } from "$lib/logo.svelte";
+  import { salaryText } from "$lib/salary";
   import { app } from "$lib/stores/app.svelte";
   import { folds } from "$lib/stores/folds.svelte";
   import { shell } from "$lib/stores/shell.svelte";
@@ -56,9 +60,11 @@
     Textarea,
     Thinking,
     Toolbar,
+    tip,
     toast,
   } from "$lib/ui";
   import AddEdit from "./AddEdit.svelte";
+  import SalaryEdit from "./SalaryEdit.svelte";
   import Letter from "./Letter.svelte";
   import { Session } from "./session.svelte";
 
@@ -403,6 +409,30 @@
     return bindKeys({ v: paste, "mod+v": paste });
   });
 
+  // ── Salary range ──
+  let salaryOpen = $state(false);
+  let salaryAnchor = $state<HTMLButtonElement>();
+  const salary = $derived(row?.salary ?? null);
+
+  function openSalary() {
+    if (!row) return false;
+    salaryOpen = true;
+  }
+
+  /** Saves it as yours; the row comes back with the range it now shows. A failure leaves the panel open. */
+  async function saveSalary(next: SalaryRange | null): Promise<boolean> {
+    try {
+      const saved = await setSalary(job, next);
+      const i = app.jobs.findIndex((j) => j.id === saved.id);
+      if (i >= 0) app.jobs[i] = saved;
+      salaryOpen = false;
+      return true;
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+      return false;
+    }
+  }
+
   const KEYS: KeyCommand[] = $derived([
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["Space"], label: "Toggle", run: () => selected && void s.toggle(selected.key), disabled: !ready || !selected },
@@ -430,6 +460,7 @@
     { keys: ["R"], label: "Re-run", run: rerun, disabled: !ready },
     { keys: ["⌘Z"], label: "Undo", run: () => void s.undo(), disabled: !review?.canUndo },
     { keys: ["⇧⌘Z"], label: "Redo", run: () => void s.redo(), disabled: !review?.canRedo },
+    { keys: ["$"], label: "Salary range", run: openSalary, disabled: !row },
     { keys: ["⌘⌫"], label: "Delete posting", run: () => void removeJob(), disabled: !row },
     { keys: ["Tab"], label: "Cover letter", run: switchTab, disabled: !review },
   ]);
@@ -478,6 +509,7 @@
       e: () => void (onCover ? exportLetter() : exportNow()),
       r: () => (onCover ? false : rerun()),
       w: () => (onCover ? writeLetter() : false),
+      $: openSalary,
       s: () => (onCover || !selected?.savable ? false : void keepWording(selected)),
       "mod+z": (e) => {
         if (interactive(e.target) || onCover) return false;
@@ -551,7 +583,7 @@
     square
     icon={Trash2}
     aria-label="Delete posting"
-    title="Delete posting (⌘⌫)"
+    {@attach tip("Delete posting (⌘⌫)")}
     disabled={!row}
     onclick={removeJob}
   />
@@ -577,7 +609,13 @@
         <div class="row">
           {#if review}<Badge tone={VERDICTS[review.verdict].tone}>{VERDICTS[review.verdict].label}</Badge>{/if}
           <span class="meta">
-            {metaLine}{#if head.url}{metaLine ? " · " : ""}<a
+            {metaLine}{#if salary}{metaLine ? " · " : ""}<button
+                type="button"
+                class="salary"
+                {@attach tip("Change the salary range ($)")}
+                bind:this={salaryAnchor}
+                onclick={openSalary}>{salaryText(salary)}</button
+              >{/if}{#if head.url}{metaLine || salary ? " · " : ""}<a
                 class="source"
                 href={head.url}
                 onclick={(e) => {
@@ -586,10 +624,22 @@
                 }}>{head.source}</a
               >{/if}
           </span>
-          {#if head.companyKey && !logoSrc}
-            <Button variant="ghost" size="sm" icon={ImagePlus} class="upload" popovertarget="logo-panel"
-              >Upload company photo</Button
-            >
+          {#if (row && !salary) || (head.companyKey && !logoSrc)}
+            <span class="tools">
+              {#if row && !salary}
+                <Button
+                  bind:element={salaryAnchor}
+                  variant="ghost"
+                  size="sm"
+                  icon={Banknote}
+                  kbd="$"
+                  onclick={openSalary}>Add salary</Button
+                >
+              {/if}
+              {#if head.companyKey && !logoSrc}
+                <Button variant="ghost" size="sm" icon={ImagePlus} popovertarget="logo-panel">Upload company photo</Button>
+              {/if}
+            </span>
           {/if}
         </div>
         <div class={["named", !head.company && "named--solo"]}>
@@ -608,11 +658,14 @@
               <CompanyMark size={48} />
             {/if}
           </span>
-          {#if head.company}<p class="company" title={head.company}>{head.company}</p>{/if}
+          {#if head.company}<p class="company" {@attach tip(head.company)}>{head.company}</p>{/if}
           <h1 class="headline">{head.role}</h1>
         </div>
         {#if review?.headline}<p class="lede">{review.headline}</p>{/if}
       </div>
+      <Popover bind:open={salaryOpen} anchor={salaryAnchor} aria-label="Salary range">
+        {#if salaryOpen}<SalaryEdit {salary} onsave={saveSalary} />{/if}
+      </Popover>
       {#if head.companyKey}
         {@const company = head.company}
         <Popover bind:open={logoOpen} anchor={logoMark} id="logo-panel" aria-label="Company photo">
@@ -705,7 +758,7 @@
                     <Chip
                       state={chip.state}
                       p1={chip.priority === 1}
-                      title={chip.locked ?? undefined}
+                      {@attach tip(chip.locked)}
                       onclick={() => (chip.locked ? toast(chip.locked, { tone: "neutral" }) : s.skill(chip.term))}
                       >{chip.term}</Chip
                     >
@@ -784,7 +837,7 @@
                     meta={change.meta || undefined}
                     editor={editing === change.key ? editor : undefined}
                   >
-                    {#snippet text()}<span title={change.why || undefined}
+                    {#snippet text()}<span {@attach tip(change.why)}
                         ><Marked text={change.text} marks={change.marks} /></span
                       >{/snippet}
                     {#snippet actions()}
@@ -809,7 +862,7 @@
                           size="sm"
                           icon={BookmarkPlus}
                           kbd="S"
-                          title="Keep this wording in your bank, as a variant of the bullet"
+                          {@attach tip("Keep this wording in your bank, as a variant of the bullet")}
                           onclick={() => keepWording(change)}>Save as variant</Button
                         >
                       {/if}
@@ -820,7 +873,7 @@
                           square
                           icon={change.custom ? X : RotateCcw}
                           aria-label={change.custom ? "Remove your edit" : "Back to the suggested wording"}
-                          title={change.custom ? "Remove your edit" : "Back to the suggested wording"}
+                          {@attach tip(change.custom ? "Remove your edit" : "Back to the suggested wording")}
                           onclick={() => s.remove(change)}
                         />
                       {/if}
@@ -1094,7 +1147,9 @@
     margin: 0;
   }
   /* At the meta line's end, its text centered on the line's. */
-  .job :global(.upload) {
+  .tools {
+    display: flex;
+    gap: var(--space-1);
     margin-block: calc((var(--leading-sm) - var(--control-sm)) / 2);
     margin-inline-start: auto;
   }
@@ -1102,8 +1157,23 @@
     color: var(--accent-text);
     text-decoration: none;
   }
+  /* Reads as part of the line; a click opens the salary panel. */
+  .salary {
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: none;
+    font: inherit;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+    cursor: default;
+  }
   @media (hover: hover) {
     .source:hover {
+      text-decoration: underline;
+    }
+    .salary:hover {
+      color: var(--ink);
       text-decoration: underline;
     }
   }

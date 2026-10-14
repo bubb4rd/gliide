@@ -1,19 +1,38 @@
 <!--
   `/` is the Overview: a greeting, your activity (postings added and applications sent: counts over a range, and the
-  last 26 weeks by day) and what's up next (applications in interviews, then postings not sent yet, best fit first).
+  last 26 weeks by day), what's up next (applications in interviews, then postings not sent yet, best fit first) and
+  what's new for you (the feed's fits, best first; hidden while the feed is off).
   V (or ⌘V) pastes a posting, I imports a resume.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import FileUp from "@lucide/svelte/icons/file-up";
-  import type { AppStatus } from "$lib/api";
+  import type { AppStatus, FeedItem } from "$lib/api";
+  import { activity as feedActivity, checkedToday, openItem, postedText } from "$lib/feed";
+  import { applicationFit, jobFit, scoreFit, type Fit } from "$lib/fit";
   import { chooseResume } from "$lib/import";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
   import { app } from "$lib/stores/app.svelte";
+  import { feed } from "$lib/stores/feed.svelte";
   import { STATUS } from "$lib/status";
-  import { Badge, Button, Card, CompanyMark, Heatmap, Icon, Kbd, Segmented, Toolbar, dayKey } from "$lib/ui";
+  import {
+    Badge,
+    Button,
+    Card,
+    CompanyMark,
+    Heatmap,
+    Icon,
+    Kbd,
+    ScoreBar,
+    Segmented,
+    Toolbar,
+    dayKey,
+    tip,
+    type TipData,
+  } from "$lib/ui";
 
   type Range = "all" | 30 | 7;
   const RANGES: { value: Range; label: string }[] = [
@@ -23,12 +42,13 @@
   ];
   const WEEKS = 26;
   const NEXT = 5;
+  const FITS = 8;
   const WEEKDAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
 
   let range = $state<Range>("all");
 
   onMount(() => {
-    void Promise.all([app.refreshJobs(), app.refreshApplications(), app.refreshLibrary()]);
+    void Promise.all([app.refreshJobs(), app.refreshApplications(), app.refreshLibrary(), feed.refresh()]);
   });
 
   const importResume = () => chooseResume(app.settings?.exportDir);
@@ -95,17 +115,17 @@
     return `Most of your activity lands on ${WEEKDAYS[byWeekday.indexOf(Math.max(...byWeekday))]}.`;
   });
 
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const longDay = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
-  function describe(date: Date, count: number): string {
-    if (!count) return `${longDay.format(date)}: nothing`;
+  /** A day's tooltip: both counts on every day, so it keeps its shape as you move along the grid. */
+  function describe(date: Date): TipData {
     const key = dayKey(date);
-    const parts = [];
-    const p = added.get(key);
-    const a = sent.get(key);
-    if (p) parts.push(plural(p, "posting", "postings"));
-    if (a) parts.push(plural(a, "application", "applications"));
-    return `${longDay.format(date)}: ${parts.join(", ")}`;
+    return {
+      title: longDay.format(date),
+      rows: [
+        { label: "Postings added", value: added.get(key) ?? 0 },
+        { label: "Applications sent", value: sent.get(key) ?? 0 },
+      ],
+    };
   }
 
   // ── Up next: interviews first, then postings not sent yet, best fit first ──
@@ -113,9 +133,10 @@
     key: string;
     href: string;
     company: string;
+    companyKey: string;
     role: string;
     status: AppStatus | null;
-    score: number | null;
+    fit: Fit | null;
     day: string;
   }
   const interviewing = $derived<Next[]>(
@@ -125,9 +146,10 @@
         key: `application-${a.id}`,
         href: a.job ? `/jobs/${a.job}` : "/applications",
         company: a.company,
+        companyKey: a.companyKey,
         role: a.role,
         status: a.status,
-        score: a.onFile ?? a.projected,
+        fit: applicationFit(a),
         day: a.date,
       })),
   );
@@ -139,9 +161,10 @@
         key: `job-${j.id}`,
         href: `/jobs/${j.id}`,
         company: j.company,
+        companyKey: j.companyKey,
         role: j.role,
         status: j.status,
-        score: j.score,
+        fit: jobFit(j, app.applications),
         day: jobDay(j.addedAt),
       })),
   );
@@ -166,7 +189,34 @@
     });
   }
   const percent = (n: number | null) => (n === null ? "—" : `${Math.round(n)}%`);
+
+  // ── New for you: the feed's fits, best score first ──
+  const fits = $derived(feed.fits.slice(0, FITS));
+  const feedStatus = $derived(feed.status?.enabled ? feed.status : null);
+  const feedMeta = $derived(
+    feedStatus
+      ? `${feed.fits.length} ${feed.fits.length === 1 ? "fit" : "fits"} · ${checkedToday(feedStatus)}`
+      : "",
+  );
+  const feedNow = $derived(feedStatus && feedActivity(feedStatus, feed.items));
+  /** The job being opened: its posting may need reading first. */
+  let opening = $state<string | null>(null);
+
+  async function openFit(item: FeedItem) {
+    if (opening) return;
+    opening = item.slug;
+    await openItem(item);
+    opening = null;
+  }
 </script>
+
+{#snippet fitBar(fit: Fit | null)}
+  {#if fit}
+    <ScoreBar bar={false} now={fit.now} projected={fit.projected} onFile={fit.onFile} />
+  {:else}
+    <span class="meta num">—</span>
+  {/if}
+{/snippet}
 
 <Toolbar>
   {#snippet crumbs()}<b>Overview</b>{/snippet}
@@ -180,79 +230,113 @@
   <div class="column">
     <h1 class="headline">What’s up next{name ? `, ${name}` : ""}?</h1>
 
-    <Card pad as="section" aria-labelledby="activity">
-      <div class="activity">
+    <div class="split">
+      <section class="section" aria-labelledby="activity">
         <header class="head">
           <h2 class="heading" id="activity">Activity</h2>
           <Segmented options={RANGES} bind:value={range} label="Activity over" />
         </header>
-        <dl class="stats">
-          <div class="stat">
-            <dt>Postings</dt>
-            <dd class="title num">{stats.postings}</dd>
+        <Card pad>
+          <div class="activity">
+            <dl class="stats">
+              <div class="stat">
+                <dt class="meta">Postings</dt>
+                <dd class="title num">{stats.postings}</dd>
+              </div>
+              <div class="stat">
+                <dt class="meta">Applications</dt>
+                <dd class="title num">{stats.applications}</dd>
+              </div>
+              <div class="stat">
+                <dt class="meta">Interviews</dt>
+                <dd class="title num">{stats.interviews}</dd>
+              </div>
+              <div class="stat">
+                <dt class="meta">Active days</dt>
+                <dd class="title num">{stats.days.length}</dd>
+              </div>
+              <div class="stat" {@attach tip("On file, else projected, averaged over the applications")}>
+                <dt class="meta">Average fit</dt>
+                <dd class="title num">{percent(stats.fit)}</dd>
+              </div>
+              <div class="stat" {@attach tip("Projected minus now, averaged over the applications")}>
+                <dt class="meta">Points from tailoring</dt>
+                <dd class={["title", "num", stats.lift !== null && stats.lift > 0 && "gain"]}>
+                  {#if stats.lift === null}—{:else}{stats.lift > 0 ? "+" : ""}{Math.round(stats.lift)}{/if}
+                </dd>
+              </div>
+            </dl>
+            <Heatmap counts={activity} weeks={WEEKS} end={today} label="Postings added and applications sent, last {WEEKS} weeks" {describe}>
+              {#snippet caption()}{#if note}<p class="note">{note}</p>{/if}{/snippet}
+            </Heatmap>
           </div>
-          <div class="stat">
-            <dt>Applications</dt>
-            <dd class="title num">{stats.applications}</dd>
-          </div>
-          <div class="stat">
-            <dt>Interviews</dt>
-            <dd class="title num">{stats.interviews}</dd>
-          </div>
-          <div class="stat">
-            <dt>Active days</dt>
-            <dd class="title num">{stats.days.length}</dd>
-          </div>
-          <div class="stat">
-            <dt title="On file, else projected">Average fit</dt>
-            <dd class="title num">{percent(stats.fit)}</dd>
-          </div>
-          <div class="stat">
-            <dt title="Projected minus now, per application">Points from tailoring</dt>
-            <dd class={["title", "num", stats.lift !== null && stats.lift > 0 && "gain"]}>
-              {#if stats.lift === null}—{:else}{stats.lift > 0 ? "+" : ""}{Math.round(stats.lift)}{/if}
-            </dd>
-          </div>
-        </dl>
-        <Heatmap counts={activity} weeks={WEEKS} end={today} label="Postings added and applications sent, last {WEEKS} weeks" {describe}>
-          {#snippet caption()}{#if note}<p class="note">{note}</p>{/if}{/snippet}
-        </Heatmap>
-      </div>
-    </Card>
+        </Card>
+      </section>
 
-    <section class="next" aria-labelledby="next">
-      <header class="head">
-        <h2 class="heading" id="next">Up next</h2>
-        {#if nextMeta}<span class="meta num">{nextMeta}</span>{/if}
-      </header>
-      <Card>
-        <div class="list">
-          {#if noBank}
-            <button type="button" class="row row--action" onclick={importResume}>
-              <span class="lead"><Icon icon={FileUp} size={16} weight="medium" /></span>
-              <span class="company">Import your resume</span>
-              <span class="role">Resumes and fit scores start from your experience.</span>
-              <Kbd>I</Kbd>
-            </button>
-          {/if}
-          {#each next as item (item.key)}
-            <a class="row" href={item.href}>
-              <span class="company"><CompanyMark><span title={item.company}>{item.company}</span></CompanyMark></span>
-              <span class="role" title={item.role}>{item.role}</span>
-              <span class="status">
-                {#if item.status}<Badge tone={STATUS[item.status].tone}>{STATUS[item.status].label}</Badge>{/if}
-              </span>
-              <span class="score num" title="Fit score">{percent(item.score)}</span>
-              <span class="day meta num">{shortDay(item.day)}</span>
-            </a>
-          {:else}
-            {#if !noBank}
-              <p class="none">Nothing waiting. Paste a job link or a posting’s text and it lands here.</p>
+      <section class="section" aria-labelledby="next">
+        <header class="head">
+          <h2 class="heading" id="next">Up next</h2>
+          {#if nextMeta}<span class="meta num">{nextMeta}</span>{/if}
+        </header>
+        <Card>
+          <div class="list">
+            {#if noBank}
+              <button type="button" class="row row--action" onclick={importResume}>
+                <span class="lead lead--icon"><Icon icon={FileUp} size={16} weight="medium" /></span>
+                <span class="company">Import your resume</span>
+                <span class="role meta">Resumes and fit scores start from your experience.</span>
+                <span class="status"><Kbd>I</Kbd></span>
+              </button>
             {/if}
-          {/each}
-        </div>
-      </Card>
-    </section>
+            {#each next as item (item.key)}
+              <a class="row" href={item.href}>
+                <span class="lead"><CompanyMark size={28} src={app.logos[item.companyKey]} /></span>
+                <span class="company" {@attach tip(item.company)}>{item.company}</span>
+                <span class="role meta" {@attach tip(item.role)}>{item.role}</span>
+                <span class="status">
+                  {#if item.status}<Badge tone={STATUS[item.status].tone}>{STATUS[item.status].label}</Badge>{/if}
+                </span>
+                <span class="score">{@render fitBar(item.fit)}</span>
+                <span class="day meta num">{shortDay(item.day)}</span>
+              </a>
+            {:else}
+              {#if !noBank}
+                <p class="none">Nothing waiting. Paste a job link or a posting’s text and it lands here.</p>
+              {/if}
+            {/each}
+          </div>
+        </Card>
+      </section>
+    </div>
+
+    {#if feedStatus}
+      <section class="section" aria-labelledby="new">
+        <header class="head">
+          <h2 class="heading" id="new">New for you</h2>
+          <span class="meta" aria-live="polite">{feedNow ?? ""}</span>
+          <span class="meta num">{feedMeta}</span>
+          <Button size="sm" variant="ghost" onclick={() => goto("/feed")}>See all</Button>
+        </header>
+        <Card>
+          <div class="list">
+            {#each fits as item (item.slug)}
+              <button type="button" class="row row--fit" disabled={opening !== null} onclick={() => openFit(item)}>
+                <span class="lead"><CompanyMark size={28} src={app.logos[item.companyKey]} /></span>
+                <span class="company" {@attach tip(item.company)}>{item.company}</span>
+                <span class="role meta" {@attach tip(item.role)}>{item.role}</span>
+                <span class="score">{@render fitBar(scoreFit(item.score))}</span>
+                <span class="day meta num">{opening === item.slug ? "Opening…" : `${postedText(item)} · ${item.origin}`}</span>
+                {#if item.knockouts.length}
+                  <span class="knockouts meta" {@attach tip(item.knockouts.join(" · "))}>{item.knockouts.join(" · ")}</span>
+                {/if}
+              </button>
+            {:else}
+              <p class="none">{feedStatus.error ?? "No fits yet: new postings are checked as they come in, and the ones that fit land here."}</p>
+            {/each}
+          </div>
+        </Card>
+      </section>
+    {/if}
   </div>
 </div>
 
@@ -269,6 +353,24 @@
     max-width: 880px;
     margin-inline: auto;
     padding: var(--space-10) var(--space-6) var(--space-12);
+    container-type: inline-size;
+  }
+  /* Activity and Up next side by side; stacked once Activity's three stats would truncate their labels. */
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+    align-items: start;
+    gap: var(--space-6);
+  }
+  @container (width < 760px) {
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .section {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
   }
   .head {
     display: flex;
@@ -293,13 +395,16 @@
   .stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-4) var(--space-6);
+    gap: var(--space-4);
     margin: 0;
   }
   .stat {
     display: grid;
     gap: var(--space-0-5);
     min-width: 0;
+  }
+  /* Hairlines between the rows only: the card's edge already bounds the first. */
+  .stat:nth-child(n + 4) {
     padding-top: var(--space-3);
     box-shadow: inset 0 1px 0 var(--line);
   }
@@ -307,7 +412,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--ink-3);
   }
   dd {
     margin: 0;
@@ -319,23 +423,24 @@
     margin: 0;
   }
 
-  .next {
-    display: grid;
-    gap: var(--space-2);
-  }
   /* Inside the card's 1px border: 12 - 1, so a row's hover wash follows the corners. */
   .list {
     display: grid;
     overflow: hidden;
     border-radius: calc(var(--radius-lg) - 1px);
   }
+  /* Two lines: the company over its role, the status badge centered on both, the fit score over the day. The mark's
+     edges meet the company's cap height and the role's baseline (centered, then 1px down). Up next and New for you
+     share it. */
   .row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) 112px 48px 64px;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "lead company status score"
+      "lead role status day";
     align-items: center;
-    gap: var(--space-3);
-    min-height: 44px;
-    padding: var(--space-1-5) var(--space-5);
+    column-gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
     color: var(--ink);
     text-decoration: none;
     cursor: default;
@@ -345,39 +450,81 @@
   .row + .row {
     box-shadow: inset 0 1px 0 var(--line);
   }
-  .row--action {
-    grid-template-columns: 20px auto minmax(0, 1fr) auto;
+  button.row {
     width: 100%;
     border: 0;
     background: none;
     font: inherit;
     text-align: start;
   }
+  .row--action {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "lead company status"
+      "lead role status";
+  }
+  /* A fit: no status (it isn't yours yet); its knockouts, when it has any, a quiet third line under the role. */
+  .row--fit {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "lead company score"
+      "lead role day"
+      ". knockouts knockouts";
+  }
   .lead {
-    display: grid;
-    place-items: center;
+    grid-area: lead;
+    display: flex;
+    translate: 0 1px;
+  }
+  /* The icon in a mark-sized box, so the action's text lines up with the companies under it. */
+  .lead--icon {
+    width: 28px;
+    height: 28px;
+    place-content: center;
+    align-items: center;
     color: var(--accent-text);
   }
   .company {
+    grid-area: company;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: var(--weight-medium);
   }
   .role {
+    grid-area: role;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--ink-2);
   }
-  .status {
-    display: flex;
+  .row--action .role {
+    white-space: normal;
+    text-wrap: pretty;
   }
+  .status {
+    grid-area: status;
+    display: flex;
+    margin-inline-start: var(--space-1);
+  }
+  /* The fit as Applications draws it, in small: the bar's number keeps the column's end. */
   .score {
-    text-align: end;
-    color: var(--ink-2);
+    grid-area: score;
+    justify-self: end;
   }
   .day {
+    grid-area: day;
     text-align: end;
+  }
+  .knockouts {
+    grid-area: knockouts;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink-3);
   }
   .none {
     margin: 0;
@@ -386,7 +533,7 @@
     text-wrap: pretty;
   }
   @media (hover: hover) {
-    .row:hover {
+    .row:not(:disabled):hover {
       background: var(--hover);
     }
   }

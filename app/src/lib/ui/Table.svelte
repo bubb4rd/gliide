@@ -7,6 +7,9 @@
   sorted column's header is ink with an arrow (on the label's outer side, so end-aligned labels stay on the numbers'
   edge); others show the arrow faintly on hover. Empty values (`null`) sort last in both directions; ties keep the
   order `rows` came in.
+
+  With `selected`, one row is the screen's selection (its keys act on it; ↑↓ on the screen move it): the --selected
+  wash, scrolled into view when it changes. A click or focus inside a row selects it.
 -->
 <script lang="ts" module>
   export type SortDir = "asc" | "desc";
@@ -30,6 +33,21 @@
   }
 
   const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
+  /** `rows` in the order the table shows them under `sort` (a screen whose keys move a selection walks this). */
+  export function sortRows<Row>(rows: Row[], columns: TableColumn<Row>[], sort: TableSort | undefined): Row[] {
+    const by = sort && columns.find((c) => c.key === sort.key)?.sortBy;
+    if (!sort || !by) return rows;
+    const sign = sort.dir === "asc" ? 1 : -1;
+    const values = new Map(rows.map((row) => [row, by(row)]));
+    return [...rows].sort((a, b) => {
+      const x = values.get(a);
+      const y = values.get(b);
+      if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+      const order = typeof x === "number" && typeof y === "number" ? x - y : collator.compare(String(x), String(y));
+      return sign * order;
+    });
+  }
 </script>
 
 <script lang="ts" generics="Row">
@@ -48,23 +66,23 @@
     label: string;
     /** The column the rows are sorted by (bindable); none, they show in the order given. */
     sort?: TableSort;
+    /** The selected row's key; none, no row is. */
+    selected?: string | null;
+    /** A click or focus inside the row. */
+    onselect?: (row: Row) => void;
   }
 
-  let { columns, rows, key, cell, label, sort = $bindable() }: Props = $props();
+  let { columns, rows, key, cell, label, sort = $bindable(), selected = null, onselect }: Props = $props();
 
-  const sorted = $derived.by(() => {
-    const by = sort && columns.find((c) => c.key === sort!.key)?.sortBy;
-    if (!sort || !by) return rows;
-    const sign = sort.dir === "asc" ? 1 : -1;
-    const values = new Map(rows.map((row) => [row, by(row)]));
-    return [...rows].sort((a, b) => {
-      const x = values.get(a);
-      const y = values.get(b);
-      if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
-      const order = typeof x === "number" && typeof y === "number" ? x - y : collator.compare(String(x), String(y));
-      return sign * order;
-    });
+  let body = $state<HTMLTableSectionElement>();
+
+  // Keys move the selection past the scrolled edge: bring it back into view.
+  $effect(() => {
+    if (selected === null) return;
+    body?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
   });
+
+  const sorted = $derived(sortRows(rows, columns, sort));
 
   function sortOn(column: TableColumn<Row>) {
     const first = column.sortFirst ?? (column.numeric ? "desc" : "asc");
@@ -98,9 +116,17 @@
         {/each}
       </tr>
     </thead>
-    <tbody>
+    <tbody bind:this={body}>
       {#each sorted as row (key(row))}
-        <tr>
+        {@const on = selected !== null && key(row) === selected}
+        <!-- The screen's keys act on the selection; a row's own controls are its keyboard path. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+        <tr
+          class={[on && "selected"]}
+          aria-current={on ? "true" : undefined}
+          onclick={onselect && (() => onselect(row))}
+          onfocusin={onselect && (() => onselect(row))}
+        >
           {#each columns as column (column.key)}
             <td class={[column.numeric && "num", (column.numeric || column.align === "end") && "end"]}>
               {@render cell(row, column)}
@@ -148,6 +174,9 @@
     white-space: nowrap;
     border-bottom: 1px solid var(--line);
     transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .selected td {
+    background: var(--selected);
   }
   th:first-child,
   td:first-child {
@@ -198,7 +227,7 @@
     visibility: visible;
   }
   @media (hover: hover) {
-    tbody tr:hover td {
+    tbody tr:not(.selected):hover td {
       background: var(--hover);
     }
     .sort:hover {

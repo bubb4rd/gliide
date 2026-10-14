@@ -1,21 +1,34 @@
 <!--
   The score: now → projected in the serif, the ceiling, and a bar (now | gain | headroom). Updates are instant: the
-  numbers and the bar change with every toggle, so they never animate. Hover or focus the numbers for the parts.
+  numbers and the bar change with every toggle, so they never animate. Hover or focus the numbers for the parts: one
+  line each (icon, name, share of the score, how much is met), its gist under it; met in full turns green. Parts the
+  posting doesn't ask for are named in one line at the foot.
 -->
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import type { Component, Snippet } from "svelte";
+  import type { LucideProps } from "@lucide/svelte";
+  import Briefcase from "@lucide/svelte/icons/briefcase";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import FileCheck from "@lucide/svelte/icons/file-check";
+  import GraduationCap from "@lucide/svelte/icons/graduation-cap";
+  import IdCard from "@lucide/svelte/icons/id-card";
+  import MessagesSquare from "@lucide/svelte/icons/messages-square";
+  import Wrench from "@lucide/svelte/icons/wrench";
   import Icon from "./Icon.svelte";
   import Popover from "./Popover.svelte";
+  import { tip } from "./tip.svelte";
 
   interface Part {
+    /** `hard_tool`, `domain_soft`, `title`, `experience`, `education`, `format`: picks the icon. */
+    id: string;
     label: string;
     /** 0–1. */
     value: number;
     weight: number;
     /** The posting specifies it; absent parts don't count. */
     present: boolean;
-    detail: string;
+    /** The gist in a few words ("2 of 3 · missing Docker"). */
+    brief: string;
   }
 
   interface Props {
@@ -32,6 +45,15 @@
 
   let { now, projected, ceiling, components = [], nowTitle, children }: Props = $props();
 
+  const ICONS: Record<string, Component<LucideProps>> = {
+    hard_tool: Wrench,
+    domain_soft: MessagesSquare,
+    title: IdCard,
+    experience: Briefcase,
+    education: GraduationCap,
+    format: FileCheck,
+  };
+
   const id = $props.id();
   let numbers = $state<HTMLElement>();
   let open = $state(false);
@@ -41,11 +63,13 @@
   const projectedPct = $derived(Math.round(clamp(projected)));
   const ceilingPct = $derived(Math.round(clamp(ceiling)));
   const gain = $derived(Math.max(0, projectedPct - nowPct));
-  const weightTotal = $derived(components.filter((c) => c.present).reduce((s, c) => s + c.weight, 0));
+  const counted = $derived(components.filter((c) => c.present));
+  const absent = $derived(components.filter((c) => !c.present));
+  const weightTotal = $derived(counted.reduce((s, c) => s + c.weight, 0));
 </script>
 
 {#snippet figures()}
-  <span class="value value--now num" title={nowTitle}>{nowPct}<span class="unit">%</span></span>
+  <span class="value value--now num" {@attach tip(nowTitle)}>{nowPct}<span class="unit">%</span></span>
   <Icon icon={ChevronRight} class="arrow" />
   <span class="value value--projected num">{projectedPct}<span class="unit">%</span></span>
   <span class="ceiling"><span class="meta">Ceiling</span><strong class="num">{ceilingPct}%</strong></span>
@@ -88,23 +112,28 @@
 {#if components.length}
   <Popover bind:open anchor={numbers} mode="manual" id="{id}-parts" role="tooltip">
     <div class="parts__body">
-      <p class="label">What the score counts</p>
-      {#each components as part (part.label)}
-        <div class={["part", !part.present && "part--absent"]}>
+      <div class="part parts__head">
+        <span class="label">What the score counts</span>
+        <span class="label part__share">Weight</span>
+        <span class="label parts__met">Met</span>
+      </div>
+      {#each counted as part (part.label)}
+        {@const met = Math.round(clamp(part.value * 100))}
+        <div class={["part", met === 100 && "part--full", met === 0 && "part--none"]}>
+          <span class="part__icon">{#if ICONS[part.id]}<Icon icon={ICONS[part.id]} />{/if}</span>
           <span class="part__label">{part.label}</span>
+          <span class="part__share meta num">
+            {weightTotal > 0 ? Math.round((part.weight / weightTotal) * 100) : 0}%
+          </span>
           <span class="part__value num">
-            {#if part.present}{Math.round(part.value * 100)}%{:else}Not asked{/if}
+            <span class="part__meter" aria-hidden="true"><span style:width="{met}%"></span></span>{met}%
           </span>
-          <span class="part__track" aria-hidden="true">
-            {#if part.present}<span class="part__fill" style:width="{clamp(part.value * 100)}%"></span>{/if}
-          </span>
-          <span class="part__detail meta">
-            {part.present && weightTotal > 0
-              ? `${Math.round((part.weight / weightTotal) * 100)}% of the score · ${part.detail}`
-              : part.detail}
-          </span>
+          <span class="part__brief meta">{part.brief}</span>
         </div>
       {/each}
+      {#if absent.length}
+        <p class="meta parts__absent">Not in the posting: {absent.map((p) => p.label).join(", ")}</p>
+      {/if}
     </div>
   </Popover>
 {/if}
@@ -194,41 +223,85 @@
   .parts__body {
     width: 320px;
     display: grid;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4) var(--space-4);
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-2);
   }
+  /* icon | name and gist | share | met; the head shares the columns, its label across the icon's. */
   .part {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-1) var(--space-3);
+    grid-template-columns: 16px minmax(0, 1fr) 36px 64px;
+    column-gap: var(--space-2);
+    align-items: baseline;
+  }
+  .parts__head {
+    padding-block-end: var(--space-1);
+    border-bottom: 1px solid var(--line);
+  }
+  .parts__head > :first-child {
+    grid-column: 1 / 3;
+    padding-inline-start: var(--space-1);
+  }
+  .part__icon {
+    grid-row: 1 / 3;
+    align-self: start;
+    display: flex;
+    padding-top: 2px;
+    color: var(--ink-3);
   }
   .part__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: var(--weight-medium);
   }
-  .part__value {
-    color: var(--ink-2);
+  .part__share,
+  .parts__met {
+    text-align: end;
   }
-  .part__track {
-    grid-column: 1 / -1;
-    height: 4px;
-    border: 1px solid transparent;
+  /* The percent sets the row's baseline; the meter centers on it. */
+  .part__value {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: var(--space-1-5);
+    font-weight: var(--weight-medium);
+    color: var(--ink);
+  }
+  .part__meter {
+    align-self: center;
+    flex: none;
+    width: 24px;
+    height: 6px;
     border-radius: var(--radius-full);
+    border: 1px solid transparent;
     overflow: hidden;
     background: var(--sunken);
     box-shadow: inset 0 0 0 1px var(--line);
   }
-  .part__fill {
+  .part__meter > span {
     display: block;
     height: 100%;
     border-radius: var(--radius-full);
     background: var(--ink-3);
   }
-  .part__detail {
-    grid-column: 1 / -1;
+  .part__brief {
+    grid-column: 2 / -1;
     text-wrap: pretty;
   }
-  .part--absent .part__label,
-  .part--absent .part__value {
+  .part--full .part__icon,
+  .part--full .part__value {
+    color: var(--gain-text);
+  }
+  .part--full .part__meter > span {
+    background: var(--gain);
+  }
+  .part--none .part__value {
     color: var(--ink-3);
+  }
+  .parts__absent {
+    margin: 0;
+    padding-block-start: var(--space-2);
+    padding-inline-start: var(--space-1);
+    border-top: 1px solid var(--line);
   }
 </style>

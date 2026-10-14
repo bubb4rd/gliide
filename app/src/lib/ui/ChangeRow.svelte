@@ -8,6 +8,7 @@
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Checkbox from "./Checkbox.svelte";
   import Icon from "./Icon.svelte";
+  import { tip } from "./tip.svelte";
 
   interface Props {
     state: "in" | "off" | "left-out" | "forced";
@@ -98,7 +99,7 @@
     {#if editor}{@render editor()}{:else}{@render text()}{/if}
   </div>
   {#if pts !== null}<span class="change__pts num">{pts}</span>{/if}
-  {#if was && !editor}<div class="change__was" title={was}>Was “{was}”</div>{/if}
+  {#if was && !editor}<div class="change__was" {@attach tip(was)}>Was “{was}”</div>{/if}
   {#if reasonText || warning}
     <div class="change__notes">
       {#if reasonText}
@@ -162,21 +163,25 @@
     display: grid;
     gap: var(--space-1);
   }
-  /* One line: meta wraps inside itself, so hidden actions never push a blank line. */
+  /* Owner and meta, then the actions, which keep their place while hidden so hovering never moves the list. When
+     both don't fit their full width on one line, the actions wrap under the meta (and among themselves) instead of
+     squeezing it to a word per line. */
   .change__foot {
     grid-column: 2 / -1;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1) var(--space-2);
     min-height: var(--control-sm);
   }
   .change__meta {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
   }
   .change__actions {
     display: flex;
-    flex: none;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--space-0-5);
     margin-inline-start: auto;
     opacity: 0;

@@ -4,30 +4,26 @@
   Pressing toggles it; the state is also its color and icon, so nothing relies on motion.
 -->
 <script lang="ts">
+  import type { HTMLButtonAttributes } from "svelte/elements";
   import type { Snippet } from "svelte";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
   import Icon from "./Icon.svelte";
 
-  interface Props {
+  interface Props extends HTMLButtonAttributes {
     state: "have" | "add" | "missing" | "not-mine";
     p1?: boolean;
-    disabled?: boolean;
-    title?: string;
-    onclick?: (event: MouseEvent) => void;
     children: Snippet;
   }
 
-  let { state, p1 = false, disabled = false, title, onclick, children }: Props = $props();
+  let { state, p1 = false, children, class: className, ...rest }: Props = $props();
 </script>
 
 <button
   type="button"
-  class={["chip", `chip--${state}`, p1 && "chip--p1"]}
+  class={["chip", `chip--${state}`, p1 && "chip--p1", className]}
   aria-pressed={state === "have" || state === "add"}
-  {disabled}
-  {title}
-  {onclick}
+  {...rest}
 >
   {#if state === "have"}<Icon icon={Check} size={12} weight="medium" />{/if}
   {#if state === "add"}<Icon icon={Plus} size={12} weight="medium" />{/if}

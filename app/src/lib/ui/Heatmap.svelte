@@ -1,7 +1,7 @@
 <!--
   Heatmap: one cell per day, a column per week (Sunday on top), the last `weeks` weeks ending on `end`. A day's shade is
   its count against the busiest day shown: an empty well, then four steps of the accent. Months label the column they
-  start in; each cell's title says what happened that day. Under the grid, the `caption` and a Less–More legend.
+  start in; hovering a cell shows what happened that day. Under the grid, the `caption` and a Less–More legend.
 -->
 <script module lang="ts">
   /** A local day as the grid keys it: `2026-10-13`. */
@@ -14,6 +14,7 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { tip, type TipContent } from "./tip.svelte";
 
   interface Props {
     /** Counts by local day (`dayKey`); a missing day counts 0. */
@@ -23,8 +24,8 @@
     end?: Date;
     /** What the grid shows, for assistive tech ("Activity, last 26 weeks"). */
     label: string;
-    /** A cell's title. */
-    describe?: (day: Date, count: number) => string;
+    /** A day's tooltip; its date and count when omitted. */
+    describe?: (day: Date, count: number) => TipContent;
     /** Under the grid, before the legend. */
     caption?: Snippet;
   }
@@ -58,7 +59,7 @@
     return { cells, months };
   });
 
-  const title = (date: Date, count: number) => describe?.(date, count) ?? `${dayName.format(date)}: ${count}`;
+  const describeDay = (date: Date, count: number) => describe?.(date, count) ?? { title: dayName.format(date), value: count };
 </script>
 
 <div class="heatmap" style:--weeks={weeks}>
@@ -72,7 +73,7 @@
       {#if cell.future}
         <span class="cell cell--future"></span>
       {:else}
-        <span class="cell cell--{cell.level}" title={title(cell.date, cell.count)}></span>
+        <span class="cell cell--{cell.level}" {@attach tip(() => describeDay(cell.date, cell.count))}></span>
       {/if}
     {/each}
   </div>
