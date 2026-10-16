@@ -29,13 +29,13 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { appError, setStatus, type ApplicationRow, type JobRow, type SalaryRange } from "$lib/api";
+  import { appError, type ApplicationRow, type JobRow, type SalaryRange } from "$lib/api";
   import { applicationFit, scoreFit, type Fit } from "$lib/fit";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
   import { app } from "$lib/stores/app.svelte";
   import { perYear, salaryText } from "$lib/salary";
-  import { STATUS } from "$lib/status";
+  import { STATUS, STATUS_OPTIONS, STATUS_ORDER } from "$lib/status";
   import {
     Badge,
     Button,
@@ -53,12 +53,10 @@
     type TableColumn,
   } from "$lib/ui";
 
-  const ORDER = Object.keys(STATUS) as AppStatus[];
-  const STATUSES = ORDER.map((value) => ({ value, label: STATUS[value].label }));
   const SHOW: { value: Show; label: string }[] = [
     { value: "all", label: "All" },
     { value: "unsent", label: "Not sent" },
-    ...STATUSES,
+    ...STATUS_OPTIONS,
   ];
 
   const COLUMNS: TableColumn<Row>[] = [
@@ -85,7 +83,7 @@
       key: "status",
       label: "Status",
       width: "148px",
-      sortBy: (r) => (r.application ? ORDER.indexOf(r.application.status) + 1 : 0),
+      sortBy: (r) => (r.application ? STATUS_ORDER.indexOf(r.application.status) + 1 : 0),
     },
     {
       key: "resume",
@@ -221,23 +219,6 @@
 
   const fileName = (path: string) => path.split("/").pop() || path;
 
-  async function changeStatus(row: ApplicationRow, status: AppStatus) {
-    const before = row.status;
-    const i = app.applications.findIndex((a) => a.id === row.id);
-    if (i >= 0) app.applications[i] = { ...app.applications[i], status };
-    try {
-      const saved = await setStatus(row.id, status);
-      const j = app.applications.findIndex((a) => a.id === saved.id);
-      if (j >= 0) app.applications[j] = saved;
-      // The posting's status shows in the sidebar's Recent.
-      void app.refreshJobs();
-    } catch (e) {
-      const j = app.applications.findIndex((a) => a.id === row.id);
-      if (j >= 0) app.applications[j] = { ...app.applications[j], status: before };
-      toast(appError(e).message, { tone: "danger" });
-    }
-  }
-
   async function run(what: string, call: () => Promise<void>) {
     try {
       await call();
@@ -311,11 +292,11 @@
               {@const application = row.application}
               <Menu
                 value={application.status}
-                options={STATUSES}
+                options={STATUS_OPTIONS}
                 label="Status for {row.company}"
                 variant="ghost"
                 size="sm"
-                onchange={(s) => changeStatus(application, s)}
+                onchange={(s) => app.setStatus(application, s)}
               >
                 {#snippet trigger(current)}<Badge tone={STATUS[application.status].tone}>{current?.label}</Badge>{/snippet}
               </Menu>

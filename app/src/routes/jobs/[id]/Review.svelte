@@ -35,6 +35,7 @@
   import { bindKeys } from "$lib/keys";
   import { logo } from "$lib/logo.svelte";
   import { salaryText } from "$lib/salary";
+  import { STATUS, STATUS_OPTIONS } from "$lib/status";
   import { app } from "$lib/stores/app.svelte";
   import { folds } from "$lib/stores/folds.svelte";
   import { shell } from "$lib/stores/shell.svelte";
@@ -81,6 +82,8 @@
 
   onMount(() => {
     void s.start();
+    // The posting's application, for the status menu in the crumbs.
+    void app.refreshApplications();
     return () => {
       s.dispose();
       void app.refreshJobs();
@@ -120,6 +123,8 @@
   const head = $derived(review?.head ?? s.view?.head ?? null);
   const row = $derived(app.jobs.find((j) => j.id === job));
   const company = $derived(head?.company || row?.company || "Posting");
+  /** Its application once exported (a posting has at most one): its status is set from the crumbs. */
+  const application = $derived(app.applications.find((a) => a.job === job));
   /** Where and from where: the company has its own line, above the title. */
   const metaLine = $derived(head ? [head.location, head.url ? null : head.source].filter(Boolean).join(" · ") : "");
   const masters = $derived(
@@ -545,6 +550,19 @@
 <Toolbar>
   {#snippet crumbs()}
     <a href="/applications">Applications</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{company}</b>
+    {#if application}
+      {@const current = application}
+      <Menu
+        value={current.status}
+        options={STATUS_OPTIONS}
+        label="Status"
+        variant="ghost"
+        size="sm"
+        onchange={(status) => app.setStatus(current, status)}
+      >
+        {#snippet trigger(option)}<Badge tone={STATUS[current.status].tone}>{option?.label}</Badge>{/snippet}
+      </Menu>
+    {/if}
   {/snippet}
   <!-- What you're working on (the document, and its master or a rewrite), then a divider, then export and delete. -->
   {#if review}
