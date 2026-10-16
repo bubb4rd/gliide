@@ -1,8 +1,10 @@
 <!--
-  A bank entry's editor (DESIGN.md, Experience): the entry's facts, then each bullet as rows, one per wording
-  (its text, then the variants you wrote), with the masters that show each. Every edit goes to the bank and the whole
-  view comes back; the desk previews the entry, highlighted, in a master that shows it (or alone in the default
-  template when none does). One request at a time: its answer replaces the view, a failure leaves it and says why.
+  A bank entry's editor (DESIGN.md, Experience): the entry's details (its name, subtitle, place and dates, then the
+  lines under it, each edited in place; masters hold none of them, so every master that shows the entry prints the
+  new ones), then each bullet as rows, one per wording (its text, then the variants you wrote), with the masters that
+  show each. Every edit goes to the bank and the whole view comes back; the desk previews the entry, highlighted, in a
+  master that shows it (or alone in the default template when none does). One request at a time: its answer replaces
+  the view, a failure leaves it and says why.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -19,8 +21,10 @@
     entry,
     type BulletView,
     type EntryEdit,
+    type EntryFacts,
     type EntryView,
     type MasterRef,
+    type NoteLine,
     type WordingView,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
@@ -32,6 +36,7 @@
     Empty,
     GroupHead,
     Icon,
+    Input,
     KeyFooter,
     type KeyCommand,
     Menu,
@@ -46,7 +51,7 @@
   let { id }: { id: string } = $props();
 
   const PANES = [
-    { value: "bullets", label: "Bullets" },
+    { value: "entry", label: "Entry" },
     { value: "preview", label: "Preview" },
   ] as const;
   /** Fold options show this much of a bullet's text: the menu's widest line. */
@@ -58,33 +63,80 @@
   /** Bumped after every answer, so the menus show the view's choice again after one that failed. */
   let round = $state(0);
   let zoom = $state(100);
-  let pane = $state<"bullets" | "preview">("bullets");
+  let pane = $state<"entry" | "preview">("entry");
   let alive = true;
 
   const title = $derived(new Map(view?.masters.map((m) => [m.id, m.title]) ?? []));
   const fits = $derived(view !== null && view.pageCount <= view.pageLimit);
   const previewTitle = $derived(view?.preview ? (title.get(view.preview) ?? view.preview) : null);
   const masterOptions = $derived(view?.masters.map((m) => ({ value: m.id, label: m.title })) ?? []);
+  /** Every master that shows the entry: where its details print. */
+  const showingEntry = $derived(view?.masters.map((m) => m.id) ?? []);
 
-  // ── Rows: every wording of every bullet, in order ──
-  interface Row {
+  // ── Rows: the entry's details, then every wording of every bullet, in order ──
+  type Field = "name" | "subtitle" | "place" | "dates";
+  interface FactRow {
+    kind: "fact";
+    key: string;
+    field: Field;
+    label: string;
+  }
+  interface NoteRow {
+    kind: "note";
+    key: string;
+    index: number;
+    note: NoteLine;
+  }
+  interface WordingRow {
+    kind: "wording";
     key: string;
     bullet: BulletView;
     wording: WordingView;
   }
+  type Row = FactRow | NoteRow | WordingRow;
+
+  const FACT_ROWS: FactRow[] = (
+    [
+      ["name", "Name"],
+      ["subtitle", "Subtitle"],
+      ["place", "Place"],
+      ["dates", "Dates"],
+    ] as const
+  ).map(([field, label]) => ({ kind: "fact", key: `fact:${field}`, field, label }));
+  const noteKey = (index: number) => `note:${index}`;
   const keyOf = (bullet: string, variant: number | null) => `${bullet}:${variant ?? "text"}`;
+  const noteRows = $derived<NoteRow[]>(
+    view?.facts.notes.map((note, index) => ({ kind: "note", key: noteKey(index), index, note })) ?? [],
+  );
   const rows = $derived<Row[]>(
-    view?.bullets.flatMap((bullet) =>
-      bullet.wordings.map((wording) => ({ key: keyOf(bullet.id, wording.variant), bullet, wording })),
-    ) ?? [],
+    view
+      ? [
+          ...FACT_ROWS,
+          ...noteRows,
+          ...view.bullets.flatMap((bullet) =>
+            bullet.wordings.map(
+              (wording): WordingRow => ({ kind: "wording", key: keyOf(bullet.id, wording.variant), bullet, wording }),
+            ),
+          ),
+        ]
+      : [],
   );
   let selectedKey = $state<string | null>(null);
   const selectedIndex = $derived(Math.max(0, rows.findIndex((r) => r.key === selectedKey)));
   const selected = $derived<Row | undefined>(rows[selectedIndex]);
+  /** The selected row when it's a bullet's wording: what the bullet keys act on. */
+  const selectedWording = $derived(selected?.kind === "wording" ? selected : undefined);
 
-  /** The open editor: one wording's words, or a new variant of `bullet`. */
-  let editing = $state<{ key: string; bullet: string; variant: number | null; adding: boolean } | null>(null);
+  /** The open editor: a detail, a line under the entry (`index` null: a new one), or a wording of `bullet`'s (a new
+   *  variant when `adding`). */
+  type Editing =
+    | { kind: "fact"; key: string; field: Field }
+    | { kind: "note"; key: string; index: number | null }
+    | { kind: "wording"; key: string; bullet: string; variant: number | null; adding: boolean };
+  let editing = $state<Editing | null>(null);
   let draft = $state("");
+  /** The edited line's bold label. */
+  let draftLabel = $state("");
 
   onMount(() => {
     void open();
@@ -121,12 +173,13 @@
   }
 
   const edit = (change: EntryEdit) => request(() => editEntry(id, change, view?.preview ?? null));
+  const setFacts = (facts: EntryFacts) => edit({ kind: "set-facts", facts });
 
   /** The masters that show `bullet` (in any wording). */
   const showing = (bullet: BulletView) => (master: MasterRef) => bullet.wordings.some((w) => w.masters.includes(master.id));
 
   /** Masters that show the row's bullet in another wording, with the key that shows it there (1–9). */
-  function elsewhere(row: Row): { master: MasterRef; key: string }[] {
+  function elsewhere(row: WordingRow): { master: MasterRef; key: string }[] {
     if (!view) return [];
     const shows = showing(row.bullet);
     return view.masters.flatMap((master, i) =>
@@ -159,31 +212,60 @@
   }
 
   function startEdit(row: Row | undefined) {
-    if (!row) return;
+    if (!row || !view) return;
     selectedKey = row.key;
-    editing = { key: row.key, bullet: row.bullet.id, variant: row.wording.variant, adding: false };
-    draft = row.wording.text;
+    if (row.kind === "fact") {
+      editing = { kind: "fact", key: row.key, field: row.field };
+      draft = view.facts[row.field];
+    } else if (row.kind === "note") {
+      editing = { kind: "note", key: row.key, index: row.index };
+      draftLabel = row.note.label;
+      draft = row.note.text;
+    } else {
+      editing = { kind: "wording", key: row.key, bullet: row.bullet.id, variant: row.wording.variant, adding: false };
+      draft = row.wording.text;
+    }
   }
 
   function startAdd(bullet: BulletView | undefined) {
     if (!bullet) return;
-    editing = { key: `${bullet.id}:new`, bullet: bullet.id, variant: null, adding: true };
+    editing = { kind: "wording", key: `${bullet.id}:new`, bullet: bullet.id, variant: null, adding: true };
+    draft = "";
+  }
+
+  function startLine() {
+    if (!view) return;
+    editing = { kind: "note", key: "note:new", index: null };
+    draftLabel = "";
     draft = "";
   }
 
   async function save() {
     const open = editing;
-    if (!open) return;
+    if (!open || !view) return;
     const text = draft.trim();
-    const bullet = view?.bullets.find((b) => b.id === open.bullet);
-    if (open.adding) {
+    const { facts } = view;
+    if (open.kind === "fact") {
+      // An entry keeps its name: emptied, the edit is dropped. The other details may be cleared.
+      if (text === facts[open.field] || (!text && open.field === "name")) return void (editing = null);
+      if (!(await setFacts({ ...facts, [open.field]: text }))) return;
+    } else if (open.kind === "note") {
+      const line = { label: draftLabel.trim(), text };
+      const was = open.index === null ? undefined : facts.notes[open.index];
+      if (!text || (was && was.label === line.label && was.text === line.text)) return void (editing = null);
+      const notes =
+        open.index === null ? [...facts.notes, line] : facts.notes.map((n, i) => (i === open.index ? line : n));
+      if (!(await setFacts({ ...facts, notes }))) return;
+      selectedKey = noteKey(open.index ?? facts.notes.length);
+    } else if (open.adding) {
       if (!text) return void (editing = null);
       // The new variant comes last: after the text and every variant there is now.
+      const bullet = view.bullets.find((b) => b.id === open.bullet);
       const index = bullet ? bullet.wordings.length - 1 : 0;
       if (!(await edit({ kind: "add-variant", bullet: open.bullet, text }))) return;
       selectedKey = keyOf(open.bullet, index);
     } else {
-      const was = bullet?.wordings.find((w) => w.variant === open.variant)?.text;
+      const was = view.bullets.find((b) => b.id === open.bullet)?.wordings.find((w) => w.variant === open.variant)?.text;
       if (!text || text === was) return void (editing = null);
       if (!(await edit({ kind: "set-wording", bullet: open.bullet, variant: open.variant, text }))) return;
     }
@@ -200,15 +282,43 @@
     }
   }
 
-  async function makeMain(row: Row | undefined) {
+  async function makeMain(row: WordingRow | undefined) {
     if (!row || row.wording.variant === null) return;
     if (await edit({ kind: "make-main", bullet: row.bullet.id, variant: row.wording.variant }))
       selectedKey = keyOf(row.bullet.id, null);
   }
 
+  /** What ⌫ removes: a line under the entry, or a variant (a bullet's text stays). */
+  const removable = (row: Row | undefined) =>
+    row?.kind === "note" || (row?.kind === "wording" && row.wording.variant !== null);
+
+  function remove(row: Row | undefined) {
+    if (row?.kind === "note") return removeLine(row);
+    if (row?.kind === "wording") return removeVariant(row);
+  }
+
+  /** Removes a line under the entry; the toast's Undo puts it back where it was. */
+  async function removeLine(row: NoteRow) {
+    if (!view) return;
+    const { facts } = view;
+    if (!(await setFacts({ ...facts, notes: facts.notes.filter((_, i) => i !== row.index) }))) return;
+    selectedKey = row.index > 0 ? noteKey(row.index - 1) : "fact:dates";
+    toast("Removed the line", {
+      action: {
+        label: "Undo",
+        run: async () => {
+          if (!view) return;
+          const now = view.facts;
+          const notes = [...now.notes.slice(0, row.index), row.note, ...now.notes.slice(row.index)];
+          if (await setFacts({ ...now, notes })) selectedKey = row.key;
+        },
+      },
+    });
+  }
+
   /** Removes a variant; the toast's Undo adds its words back as a variant and shows them where they were shown. */
-  async function remove(row: Row | undefined) {
-    if (!row || row.wording.variant === null) return;
+  async function removeVariant(row: WordingRow) {
+    if (row.wording.variant === null) return;
     const { bullet } = row;
     const { text, masters } = row.wording;
     if (!(await edit({ kind: "remove-variant", bullet: bullet.id, variant: row.wording.variant }))) return;
@@ -227,7 +337,7 @@
     });
   }
 
-  function show(row: Row | undefined, master: string) {
+  function show(row: WordingRow | undefined, master: string) {
     if (!row) return;
     selectedKey = row.key;
     void edit({ kind: "show", master, bullet: row.bullet.id, variant: row.wording.variant });
@@ -248,27 +358,33 @@
   const KEYS: KeyCommand[] = $derived([
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["⏎"], label: "Edit", run: () => startEdit(selected), disabled: !selected },
-    { keys: ["V"], label: "Add a variant", run: () => startAdd(selected?.bullet), disabled: !selected },
+    { keys: ["L"], label: "Add a line", run: startLine, disabled: !view },
+    {
+      keys: ["V"],
+      label: "Add a variant",
+      run: () => startAdd(selectedWording?.bullet),
+      disabled: !selectedWording,
+    },
     {
       keys: ["M"],
       label: "Make it the text",
-      run: () => void makeMain(selected),
-      disabled: selected?.wording.variant == null,
+      run: () => void makeMain(selectedWording),
+      disabled: selectedWording?.wording.variant == null,
     },
     ...(view?.masters.length ? [{ keys: [view.masters.length > 1 ? "1–9" : "1"], label: "Show in a master" }] : []),
     {
       keys: ["⌫"],
-      label: "Remove variant",
+      label: selected?.kind === "note" ? "Remove line" : "Remove variant",
       run: () => void remove(selected),
-      disabled: selected?.wording.variant == null,
+      disabled: !removable(selected),
     },
     ...((view?.bullets.length ?? 0) > 1
       ? [
           {
             keys: ["F"],
             label: "Fold into…",
-            run: () => selected && openMenu(`fold:${selected.bullet.id}`),
-            disabled: !selected,
+            run: () => selectedWording && openMenu(`fold:${selectedWording.bullet.id}`),
+            disabled: !selectedWording,
           },
         ]
       : []),
@@ -290,19 +406,20 @@
         if (interactive(e.target)) return false;
         startEdit(selected);
       },
-      v: () => startAdd(selected?.bullet),
-      m: () => void makeMain(selected),
+      l: startLine,
+      v: () => startAdd(selectedWording?.bullet),
+      m: () => void makeMain(selectedWording),
       Backspace: () => void remove(selected),
       Delete: () => void remove(selected),
-      f: () => (selected ? openMenu(`fold:${selected.bullet.id}`) : false),
+      f: () => (selectedWording ? openMenu(`fold:${selectedWording.bullet.id}`) : false),
       p: () => openMenu("preview"),
       ...Object.fromEntries(
         DIGITS.map((digit) => [
           digit,
           () => {
-            const target = selected && elsewhere(selected).find((t) => t.key === digit);
+            const target = selectedWording && elsewhere(selectedWording).find((t) => t.key === digit);
             if (!target) return false;
-            show(selected, target.master.id);
+            show(selectedWording, target.master.id);
           },
         ]),
       ),
@@ -313,7 +430,7 @@
 <Toolbar>
   {#snippet crumbs()}
     <a href="/bank">Experience</a><Icon icon={ChevronRight} size={14} weight="medium" /><b
-      >{view?.name || "Entry"}</b
+      >{view?.facts.name || "Entry"}</b
     >
   {/snippet}
 </Toolbar>
@@ -351,26 +468,103 @@
     {:else}
       <header class="head">
         <p class="meta">{view.section}</p>
-        <h1 class="title">{view.name}</h1>
-        {#if view.subtitle || view.place || view.dates}
-          <div class="facts">
-            {#if view.subtitle || view.place}
-              <span class="subtitle">{[view.subtitle, view.place].filter(Boolean).join(" · ")}</span>
-            {/if}
-            {#if view.dates}<span class="dates meta num">{view.dates}</span>{/if}
-          </div>
-        {/if}
-        {#each view.notes as note, i (i)}<p class="meta">{note}</p>{/each}
+        <h1 class="title">{view.facts.name}</h1>
       </header>
 
-      <div class="bullets">
+      {#snippet where()}
+        {#if showingEntry.length}<p class="meta hint">Changes it in {list(showingEntry)}</p>{/if}
+      {/snippet}
+      {#snippet lineFields(name: string, labelFirst: boolean)}
+        <div class="line-fields">
+          <Input
+            size="md"
+            bind:value={draftLabel}
+            placeholder="Label, like Major (optional)"
+            aria-label="{name}’s label"
+            {@attach labelFirst && focus}
+            onkeydown={onEditorKey}
+          />
+          <Textarea
+            size="lg"
+            bind:value={draft}
+            placeholder="What it says"
+            aria-label={name}
+            {@attach !labelFirst && focus}
+            onkeydown={onEditorKey}
+          />
+        </div>
+        {@render where()}
+      {/snippet}
+
+      <div class="parts">
+        <section
+          class="group"
+          aria-label="Details"
+          data-current={selected?.kind === "fact" || selected?.kind === "note" || undefined}
+        >
+          <GroupHead label="Details" />
+          {#each FACT_ROWS as row (row.key)}
+            {@const value = view.facts[row.field]}
+            {#snippet editor()}
+              <Input bind:value={draft} aria-label={row.label} {@attach focus} onkeydown={onEditorKey} />
+              {@render where()}
+            {/snippet}
+            <PartRow
+              label={row.label}
+              selected={row.key === selected?.key}
+              onselect={() => (selectedKey = row.key)}
+              editor={editing?.key === row.key ? editor : undefined}
+            >
+              {#snippet text()}
+                {#if value}<p class="words">{value}</p>{:else}<p class="words none">None</p>{/if}
+              {/snippet}
+              {#snippet actions()}
+                <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(row)}>Edit</Button>
+              {/snippet}
+            </PartRow>
+          {/each}
+          {#each noteRows as row (row.key)}
+            {#snippet editor()}{@render lineFields(`Line ${row.index + 1}`, false)}{/snippet}
+            <PartRow
+              label="Line {row.index + 1}"
+              selected={row.key === selected?.key}
+              onselect={() => (selectedKey = row.key)}
+              editor={editing?.key === row.key ? editor : undefined}
+            >
+              {#snippet text()}
+                <p class="words">{#if row.note.label}<strong>{row.note.label}:</strong>{" "}{/if}{row.note.text}</p>
+              {/snippet}
+              {#snippet actions()}
+                <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(row)}>Edit</Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  square
+                  icon={Trash2}
+                  aria-label="Remove this line"
+                  {@attach tip("Remove this line (⌫)")}
+                  onclick={() => removeLine(row)}
+                />
+              {/snippet}
+            </PartRow>
+          {/each}
+
+          {#if editing?.kind === "note" && editing.index === null}
+            <div class="adding">{@render lineFields("New line", true)}</div>
+          {/if}
+
+          <div class="foot">
+            <Button variant="ghost" size="sm" icon={Plus} kbd="L" onclick={startLine}>Add a line</Button>
+          </div>
+        </section>
+
         {#each view.bullets as bullet, b (bullet.id)}
           {@const variants = bullet.wordings.length - 1}
           {@const others = view.bullets.filter((o) => o.id !== bullet.id)}
           <section
-            class="bullet"
+            class="group"
             aria-label="Bullet {b + 1}"
-            data-current={selected?.bullet.id === bullet.id || undefined}
+            data-current={selectedWording?.bullet.id === bullet.id || undefined}
           >
             <GroupHead
               label="Bullet {b + 1}"
@@ -379,7 +573,7 @@
               )}
             />
             {#each bullet.wordings as wording (wording.variant ?? "text")}
-              {@const row = { key: keyOf(bullet.id, wording.variant), bullet, wording }}
+              {@const row = { kind: "wording" as const, key: keyOf(bullet.id, wording.variant), bullet, wording }}
               {#snippet editor()}
                 <Textarea
                   size="lg"
@@ -434,14 +628,14 @@
                       icon={Trash2}
                       aria-label="Remove this variant"
                       {@attach tip("Remove this variant (⌫)")}
-                      onclick={() => remove(row)}
+                      onclick={() => removeVariant(row)}
                     />
                   {/if}
                 {/snippet}
               </PartRow>
             {/each}
 
-            {#if editing?.adding && editing.bullet === bullet.id}
+            {#if editing?.kind === "wording" && editing.adding && editing.bullet === bullet.id}
               <div class="adding">
                 <Textarea
                   size="lg"
@@ -455,7 +649,7 @@
               </div>
             {/if}
 
-            <div class="bullet__foot">
+            <div class="foot">
               <Button variant="ghost" size="sm" icon={Plus} kbd="V" onclick={() => startAdd(bullet)}
                 >Add a variant</Button
               >
@@ -485,7 +679,7 @@
     {/if}
   </div>
 
-  <div class="desk" hidden={shell.compact && pane === "bullets"}>
+  <div class="desk" hidden={shell.compact && pane === "entry"}>
     {#if shell.compact}
       <div class="tabs"><Segmented options={[...PANES]} bind:value={pane} label="Show" /></div>
     {/if}
@@ -581,37 +775,32 @@
   .head p {
     margin: 0;
   }
-  .facts {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-  .subtitle {
-    min-width: 0;
-    color: var(--ink-2);
-  }
-  .dates {
-    flex: none;
-    margin-inline-start: auto;
-    white-space: nowrap;
-  }
-  .bullets {
+  .parts {
     display: grid;
     margin-inline: calc(var(--space-2) * -1);
   }
-  .bullet {
+  .group {
     display: grid;
   }
-  .bullet:first-child :global(.group-head) {
+  .group:first-child :global(.group-head) {
     padding-top: 0;
   }
-  /* The foot above already spaces the groups (its actions hide until you reach the bullet). */
-  .bullet + .bullet :global(.group-head) {
+  /* The foot above already spaces the groups (its actions hide until you reach the group). */
+  .group + .group :global(.group-head) {
     padding-top: var(--space-2);
   }
   .words {
     margin: 0;
+  }
+  .words strong {
+    font-weight: var(--weight-semibold);
+  }
+  .none {
+    color: var(--ink-3);
+  }
+  .line-fields {
+    display: grid;
+    gap: var(--space-2);
   }
   .shown {
     display: flex;
@@ -626,8 +815,8 @@
   .adding {
     padding: var(--space-2) var(--space-3);
   }
-  /* The bullet's own actions show, like a row's, on hover, focus or when one of its rows is selected. */
-  .bullet__foot {
+  /* A group's own actions show, like a row's, on hover, focus or when one of its rows is selected. */
+  .foot {
     display: flex;
     align-items: center;
     gap: var(--space-0-5);
@@ -635,8 +824,8 @@
     padding: var(--space-1) var(--space-1-5) 0;
     opacity: 0;
   }
-  .bullet:focus-within .bullet__foot,
-  .bullet[data-current] .bullet__foot {
+  .group:focus-within .foot,
+  .group[data-current] .foot {
     opacity: 1;
   }
   .menu {
@@ -675,7 +864,7 @@
   }
 
   @media (hover: hover) {
-    .bullet:hover .bullet__foot {
+    .group:hover .foot {
       opacity: 1;
     }
   }
