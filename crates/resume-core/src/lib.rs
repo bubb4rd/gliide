@@ -7,6 +7,7 @@ pub mod candidates;
 pub mod change;
 pub mod changes;
 pub mod dates;
+pub mod facts;
 pub mod feed;
 pub mod import;
 pub mod master;
