@@ -19,4 +19,9 @@ exportDir: string,
 /**
  * The `claude` binary; `None` finds it (`resume_llm::find_claude`).
  */
-claudePath: string | null, };
+claudePath: string | null, 
+/**
+ * The first-run setup (`/welcome`) is done or skipped. Settings saved before it existed belong to someone
+ * already using the app, so they load as done; a new install starts without it.
+ */
+onboarded: boolean, };

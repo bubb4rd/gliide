@@ -64,6 +64,7 @@ pub enum Backdrop {
     #[default]
     None,
     Meadow,
+    Tokyo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -82,6 +83,14 @@ pub struct Settings {
     pub export_dir: String,
     /// The `claude` binary; `None` finds it (`resume_llm::find_claude`).
     pub claude_path: Option<String>,
+    /// The first-run setup (`/welcome`) is done or skipped. Settings saved before it existed belong to someone
+    /// already using the app, so they load as done; a new install starts without it.
+    #[serde(default = "set_up")]
+    pub onboarded: bool,
+}
+
+fn set_up() -> bool {
+    true
 }
 
 /// What Settings and the sidebar show about `claude`: found (`claude --version`) and signed in
@@ -163,9 +172,20 @@ pub struct EntryRow {
     /// The entry's name, or a skills line's label.
     pub name: String,
     pub subtitle: String,
+    pub place: String,
     pub dates: String,
+    /// First month, `YYYY-MM`; `None` when the printed dates couldn't be read, and for a skills line.
+    pub start: Option<String>,
+    /// Last month, `YYYY-MM`, or `present`; `None` as `start`.
+    pub end: Option<String>,
     /// Bullets, or a skills line's items.
     pub items: u32,
+    /// The first bullet's text; `""` for none and for a skills line.
+    pub lead: String,
+    /// Wordings beyond the bullets' texts, across the entry.
+    pub variants: u32,
+    /// A skills line's items; empty for an entry.
+    pub skills: Vec<String>,
     pub tags: Vec<String>,
     /// Ids of the masters that show it.
     pub masters: Vec<String>,
@@ -291,8 +311,8 @@ pub struct ImportChoices {
     pub title: String,
 }
 
-/// One bank entry in its editor: every bullet with its wordings (its text, then its variants) and which master shows
-/// which, and the desk's preview.
+/// One bank entry in its editor: its facts, every bullet with its wordings (its text, then its variants) and which
+/// master shows which, and the desk's preview.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -300,12 +320,7 @@ pub struct EntryView {
     pub id: String,
     /// The bank section's title.
     pub section: String,
-    pub name: String,
-    pub subtitle: String,
-    pub place: String,
-    pub dates: String,
-    /// Note lines as printed: `Label: text`, or the text alone.
-    pub notes: Vec<String>,
+    pub facts: EntryFacts,
     pub bullets: Vec<BulletView>,
     /// The masters that show this entry, by title.
     pub masters: Vec<MasterRef>,
@@ -315,6 +330,29 @@ pub struct EntryView {
     pub pages: Vec<String>,
     pub page_count: u32,
     pub page_limit: u32,
+}
+
+/// What heads a bank entry on the page; the editor sends them back whole (`set-facts`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EntryFacts {
+    pub name: String,
+    pub subtitle: String,
+    pub place: String,
+    /// As printed, e.g. `Aug 2022 – May 2026`.
+    pub dates: String,
+    /// Lines under the entry (an education entry's major or coursework).
+    pub notes: Vec<NoteLine>,
+}
+
+/// A line under an entry: `label: text`, the label bold, or the text alone when the label is `""`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NoteLine {
+    pub label: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -347,12 +385,17 @@ pub struct WordingView {
     pub masters: Vec<String>,
 }
 
-/// An edit of a bank entry's bullets and their wordings. Every master keeps showing the words it showed, except where
-/// the edit says otherwise (`show`, or editing the wording it shows).
+/// An edit of a bank entry: its facts, or its bullets and their wordings. Every master keeps showing the words it
+/// showed, except where the edit says otherwise (`show`, or editing the wording it shows); every master that shows the
+/// entry prints its facts.
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[ts(export)]
 pub enum EntryEdit {
+    /// The entry's facts, whole.
+    SetFacts {
+        facts: EntryFacts,
+    },
     /// A new variant of a bullet.
     AddVariant {
         bullet: String,
@@ -1103,11 +1146,18 @@ pub enum Stage {
 mod tests {
     use super::{Backdrop, Settings};
 
+    const SAVED_BEFORE: &str = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"sonnet",
+        "suggestModel":"sonnet","exportDir":"/tmp","claudePath":null}"#;
+
     #[test]
     fn settings_saved_before_backdrops_load_with_none() {
-        let saved = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"sonnet","suggestModel":"sonnet",
-            "exportDir":"/tmp","claudePath":null}"#;
-        let settings: Settings = serde_json::from_str(saved).unwrap();
+        let settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
         assert_eq!(settings.backdrop, Backdrop::None);
+    }
+
+    #[test]
+    fn settings_saved_before_setup_existed_skip_it() {
+        let settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
+        assert!(settings.onboarded);
     }
 }

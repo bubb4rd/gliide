@@ -1,14 +1,17 @@
-//! A bank entry's editor (DESIGN.md, Experience bank): its bullets with every wording and which master shows which,
-//! edits of the wordings (`resume_core::variants`: every master keeps the words it showed unless the edit is about
-//! what it shows), and the desk's preview: a master that shows the entry, or the entry alone in the default template.
+//! A bank entry's editor (DESIGN.md, Experience bank): its facts (`resume_core::facts`), its bullets with every wording
+//! and which master shows which, edits of the wordings (`resume_core::variants`: every master keeps the words it showed
+//! unless the edit is about what it shows), and the desk's preview: a master that shows the entry, or the entry alone
+//! in the default template.
 
+use resume_core::bank::Note;
+use resume_core::facts::{Facts, set_facts};
 use resume_core::master::{MasterBullet, MasterEntry, MasterSection};
 use resume_core::variants::{
     self, VariantError, add_variant, fold_into, make_main, remove_variant, set_wording,
 };
 use resume_core::{Bank, Master, Resume, resolve};
 
-use crate::dto::{BulletView, EntryEdit, EntryView, MasterRef, WordingView};
+use crate::dto::{BulletView, EntryEdit, EntryFacts, EntryView, MasterRef, NoteLine, WordingView};
 use crate::error::{AppError, Result};
 use crate::state::{App, DEFAULT_TEMPLATE, lock};
 use crate::view::sentence_case;
@@ -32,54 +35,20 @@ pub fn edit_entry(
         find(bank, entry).is_some_and(|(_, e)| e.bullets.iter().any(|b| b.id == bullet))
     };
     let bullet = match &edit {
+        EntryEdit::SetFacts { .. } => None,
         EntryEdit::AddVariant { bullet, .. }
         | EntryEdit::SetWording { bullet, .. }
         | EntryEdit::RemoveVariant { bullet, .. }
         | EntryEdit::MakeMain { bullet, .. }
-        | EntryEdit::Show { bullet, .. } => bullet,
-        EntryEdit::Fold { from, .. } => from,
+        | EntryEdit::Show { bullet, .. } => Some(bullet),
+        EntryEdit::Fold { from, .. } => Some(from),
     };
-    if !owns(&bank, bullet) {
+    if bullet.is_some_and(|b| !owns(&bank, b)) {
         return Err(AppError::missing(
             "This bullet isn't in the entry any more; reopen it",
         ));
     }
-    match edit {
-        EntryEdit::AddVariant { bullet, text } => add_variant(&mut bank, &bullet, &text).map(drop),
-        EntryEdit::SetWording {
-            bullet,
-            variant,
-            text,
-        } => set_wording(&mut bank, &bullet, variant.map(|v| v as usize), &text),
-        EntryEdit::RemoveVariant { bullet, variant } => {
-            remove_variant(&mut bank, &mut masters, &bullet, variant as usize)
-        }
-        EntryEdit::MakeMain { bullet, variant } => {
-            make_main(&mut bank, &mut masters, &bullet, variant as usize)
-        }
-        EntryEdit::Fold { from, into } => fold_into(&mut bank, &mut masters, &from, &into),
-        EntryEdit::Show {
-            master,
-            bullet,
-            variant,
-        } => {
-            let m = masters
-                .iter_mut()
-                .find(|m| m.id == master)
-                .ok_or_else(|| AppError::missing("This master was deleted"))?;
-            match variants::show(&bank, m, &bullet, variant.map(|v| v as usize)) {
-                Ok(true) => Ok(()),
-                Ok(false) => {
-                    return Err(AppError::other(format!(
-                        "{} doesn't show this bullet",
-                        m.title
-                    )));
-                }
-                Err(e) => Err(e),
-            }
-        }
-    }
-    .map_err(variant_error)?;
+    apply(&mut bank, &mut masters, entry, edit)?;
     {
         let store = lock(&app.store);
         store.put_bank(&bank)?;
@@ -92,8 +61,70 @@ pub fn edit_entry(
     view(app, &bank, &masters, entry, preview)
 }
 
+fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) -> Result<()> {
+    match edit {
+        EntryEdit::SetFacts { facts } => {
+            return set_facts(bank, entry, facts.into())
+                .map_err(|e| AppError::other(e.to_string()));
+        }
+        EntryEdit::AddVariant { bullet, text } => add_variant(bank, &bullet, &text).map(drop),
+        EntryEdit::SetWording {
+            bullet,
+            variant,
+            text,
+        } => set_wording(bank, &bullet, variant.map(|v| v as usize), &text),
+        EntryEdit::RemoveVariant { bullet, variant } => {
+            remove_variant(bank, masters, &bullet, variant as usize)
+        }
+        EntryEdit::MakeMain { bullet, variant } => {
+            make_main(bank, masters, &bullet, variant as usize)
+        }
+        EntryEdit::Fold { from, into } => fold_into(bank, masters, &from, &into),
+        EntryEdit::Show {
+            master,
+            bullet,
+            variant,
+        } => {
+            let m = masters
+                .iter_mut()
+                .find(|m| m.id == master)
+                .ok_or_else(|| AppError::missing("This master was deleted"))?;
+            match variants::show(bank, m, &bullet, variant.map(|v| v as usize)) {
+                Ok(true) => Ok(()),
+                Ok(false) => {
+                    return Err(AppError::other(format!(
+                        "{} doesn't show this bullet",
+                        m.title
+                    )));
+                }
+                Err(e) => Err(e),
+            }
+        }
+    }
+    .map_err(variant_error)
+}
+
 pub fn variant_error(e: VariantError) -> AppError {
     AppError::other(e.to_string())
+}
+
+impl From<EntryFacts> for Facts {
+    fn from(f: EntryFacts) -> Self {
+        Self {
+            name: f.name,
+            subtitle: f.subtitle,
+            place: f.place,
+            dates: f.dates,
+            notes: f
+                .notes
+                .into_iter()
+                .map(|n| Note {
+                    label: n.label,
+                    text: n.text,
+                })
+                .collect(),
+        }
+    }
 }
 
 fn bank_and_masters(app: &App) -> Result<(Bank, Vec<Master>)> {
@@ -200,21 +231,20 @@ fn view(
     Ok(EntryView {
         id: e.id.clone(),
         section: sentence_case(&bank.sections[section].title),
-        name: e.name.clone(),
-        subtitle: e.subtitle.clone(),
-        place: e.place.clone(),
-        dates: e.dates.clone(),
-        notes: e
-            .notes
-            .iter()
-            .map(|n| {
-                if n.label.is_empty() {
-                    n.text.clone()
-                } else {
-                    format!("{}: {}", n.label, n.text)
-                }
-            })
-            .collect(),
+        facts: EntryFacts {
+            name: e.name.clone(),
+            subtitle: e.subtitle.clone(),
+            place: e.place.clone(),
+            dates: e.dates.clone(),
+            notes: e
+                .notes
+                .iter()
+                .map(|n| NoteLine {
+                    label: n.label.clone(),
+                    text: n.text.clone(),
+                })
+                .collect(),
+        },
         bullets,
         masters: showing
             .iter()

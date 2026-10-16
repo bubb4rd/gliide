@@ -4,11 +4,31 @@ export type EntryRow = { id: string,
 /**
  * The entry's name, or a skills line's label.
  */
-name: string, subtitle: string, dates: string, 
+name: string, subtitle: string, place: string, dates: string, 
+/**
+ * First month, `YYYY-MM`; `None` when the printed dates couldn't be read, and for a skills line.
+ */
+start: string | null, 
+/**
+ * Last month, `YYYY-MM`, or `present`; `None` as `start`.
+ */
+end: string | null, 
 /**
  * Bullets, or a skills line's items.
  */
-items: number, tags: Array<string>, 
+items: number, 
+/**
+ * The first bullet's text; `""` for none and for a skills line.
+ */
+lead: string, 
+/**
+ * Wordings beyond the bullets' texts, across the entry.
+ */
+variants: number, 
+/**
+ * A skills line's items; empty for an entry.
+ */
+skills: Array<string>, tags: Array<string>, 
 /**
  * Ids of the masters that show it.
  */

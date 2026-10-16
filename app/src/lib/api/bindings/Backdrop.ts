@@ -3,4 +3,4 @@
 /**
  * The picture behind the top of the Overview (Settings → Appearance); `none` by default.
  */
-export type Backdrop = "none" | "meadow";
+export type Backdrop = "none" | "meadow" | "tokyo";

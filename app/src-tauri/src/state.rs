@@ -277,6 +277,7 @@ fn default_settings() -> Settings {
         suggest_model: DEFAULT_SUGGEST_MODEL.to_owned(),
         export_dir: home.join("Documents/Resumes").display().to_string(),
         claude_path: None,
+        onboarded: false,
     }
 }
 
