@@ -13,7 +13,9 @@ import {
   logos,
   logoUrl,
   setSettings,
+  setStatus as saveStatus,
   type AgentStatus,
+  type AppStatus,
   type ApplicationRow,
   type JobRow,
   type Library,
@@ -96,6 +98,26 @@ class AppStore {
     if (rows) this.applications = rows;
   }
 
+  /**
+   * Sets an application's status at once, here and on its posting (the sidebar's Recent), and saves it (rewriting
+   * applications.csv); puts it back, with the error in a toast, if the save fails.
+   */
+  async setStatus(row: ApplicationRow, status: AppStatus) {
+    const put = (s: AppStatus) => {
+      this.applications = this.applications.map((a) => (a.id === row.id ? { ...a, status: s } : a));
+      if (row.job) this.jobs = this.jobs.map((j) => (j.id === row.job ? { ...j, status: s } : j));
+    };
+    const before = row.status;
+    put(status);
+    try {
+      const saved = await saveStatus(row.id, status);
+      this.applications = this.applications.map((a) => (a.id === saved.id ? saved : a));
+    } catch (e) {
+      put(before);
+      toast(appError(e).message, { tone: "danger" });
+    }
+  }
+
   async refreshLogos() {
     const rows = await attempt("logos", logos);
     if (rows) this.logos = Object.fromEntries(rows.map((row) => [row.key, logoUrl(row)]));
@@ -130,16 +152,31 @@ class AppStore {
     theme.apply(this.settings.theme);
   }
 
-  /** Everything the shell shows, in parallel. */
+  /**
+   * The first-run setup is due: settings and the library are in, the setup was never done or skipped, and there's no
+   * bank yet (someone with a bank is already using the app, whatever their settings say).
+   */
+  setupDue = $derived(
+    this.settings !== null && !this.settings.onboarded && this.library !== null && this.library.bank === null,
+  );
+
+  /** Ends the first-run setup (done or skipped) for good. */
+  async finishSetup() {
+    if (!this.settings || this.settings.onboarded) return;
+    try {
+      await this.saveSettings({ ...this.settings, onboarded: true });
+    } catch (e) {
+      toast(`Couldn’t save that setup is done: ${appError(e).message}`, { tone: "danger" });
+    }
+  }
+
+  /**
+   * Everything the shell shows, in parallel. Resolves once settings and the library are in, which is all the window
+   * needs to pick its first screen; the rest goes on loading.
+   */
   async load() {
-    await Promise.all([
-      this.loadSettings(),
-      this.refreshJobs(),
-      this.refreshApplications(),
-      this.refreshLogos(),
-      this.refreshLibrary(),
-      this.refreshAgent(),
-    ]);
+    void Promise.all([this.refreshJobs(), this.refreshApplications(), this.refreshLogos(), this.refreshAgent()]);
+    await Promise.all([this.loadSettings(), this.refreshLibrary()]);
   }
 }
 

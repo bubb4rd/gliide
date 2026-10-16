@@ -5,8 +5,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { appError } from "$lib/api";
 import { toast } from "$lib/ui";
 
-/** Asks for a resume (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its import review. */
-export async function chooseResume(defaultPath?: string) {
+/**
+ * Asks for a resume (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its import review, which goes to
+ * `back` once it's added or discarded (Experience without one).
+ */
+export async function chooseResume(defaultPath?: string, back?: string | null) {
   const path = await open({
     title: "Import a resume",
     multiple: false,
@@ -17,5 +20,8 @@ export async function chooseResume(defaultPath?: string) {
     toast(appError(e).message, { tone: "danger" });
     return null;
   });
-  if (path) await goto(`/bank/import?file=${encodeURIComponent(path)}`);
+  if (!path) return;
+  const query = new URLSearchParams({ file: path });
+  if (back) query.set("back", back);
+  await goto(`/bank/import?${query}`);
 }

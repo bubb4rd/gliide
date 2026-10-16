@@ -2,8 +2,9 @@
   The screen's toolbar (52px): crumbs at the leading edge, the screen's controls trailing with the primary action
   last (only a delete follows it). Drags the window from any empty part. An `<hr>` among the controls draws a short
   divider. When the window is compact the sidebar becomes a sheet, and the toolbar makes room for the traffic lights
-  and its toggle. `over` lays it over the top of the screen's scroll area (which starts under it) in paper with its
-  hairline; `clear` drops both, so a `Backdrop` shows through it until the content scrolls under it.
+  and its toggle; in a window without a sidebar (the first-run setup) it makes room for the lights alone. `over`
+  lays it over the top of the screen's scroll area (which starts under it) in paper with its hairline; `clear` drops
+  both, so a `Backdrop` shows through it until the content scrolls under it.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -22,10 +23,15 @@
 </script>
 
 <header
-  class={["toolbar", shell.compact && "toolbar--compact", over && "toolbar--over", clear && "toolbar--clear"]}
+  class={[
+    "toolbar",
+    (shell.compact || shell.bare) && "toolbar--compact",
+    over && "toolbar--over",
+    clear && "toolbar--clear",
+  ]}
   data-tauri-drag-region="deep"
 >
-  {#if shell.compact}
+  {#if shell.compact && !shell.bare}
     <Button
       variant="ghost"
       square
@@ -65,12 +71,15 @@
     background: none;
     box-shadow: none;
   }
+  /* Room for a focus ring (2px + 2px offset) inside the clip, without moving anything. */
   .crumbs {
     display: flex;
     flex: 1;
     align-items: center;
     gap: var(--space-1-5);
     min-width: 0;
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
     overflow: hidden;
     white-space: nowrap;
     color: var(--ink-3);
@@ -90,7 +99,7 @@
     color: var(--ink);
     font-weight: var(--weight-medium);
   }
-  .crumbs :global(.icon) {
+  .crumbs > :global(.icon) {
     color: var(--ink-4);
   }
   .trailing {

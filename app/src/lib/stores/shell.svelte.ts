@@ -7,6 +7,8 @@ class Shell {
   compact = $state(false);
   /** The sidebar sheet is showing (compact only). */
   sidebarOpen = $state(false);
+  /** No sidebar at all: the first-run setup, and the import review it opens. The layout sets it per screen. */
+  bare = $state(false);
 
   constructor() {
     if (typeof window === "undefined") return;

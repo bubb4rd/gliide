@@ -1,6 +1,8 @@
 <!--
   The window: a 232px sidebar (native vibrancy behind a translucent --sidebar; the traffic lights sit in its top 52px)
-  and the main area, where each screen draws its own Toolbar. Under 960px the sidebar becomes a sheet.
+  and the main area, where each screen draws its own Toolbar. Under 960px the sidebar becomes a sheet. A new install
+  opens on the first-run setup (`/welcome`), which has no sidebar, nor has the import review it opens; until settings
+  and the library are in (and with them whether the setup is due), the window is paper.
 -->
 <script lang="ts">
   import "../app.css";
@@ -27,8 +29,14 @@
 
   const RECENT = 8;
 
+  /** Settings and the library are in: the first screen can draw. */
+  let ready = $state(false);
+
   onMount(() => {
-    app.load();
+    void app
+      .load()
+      .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
+      .finally(() => (ready = true));
     void feed.refresh();
     const listening = feed.listen();
     return () => void listening.then((stop) => stop());
@@ -50,9 +58,16 @@
     }),
   );
 
+  const SETUP = "/welcome";
   const path = $derived<string>(page.url.pathname);
   const within = (href: string) => path === href || path.startsWith(`${href}/`);
   const count = (n: number | undefined) => (n ? n : null);
+  const bare = $derived(
+    path === SETUP || (path === "/bank/import" && !!page.url.searchParams.get("back")?.startsWith(SETUP)),
+  );
+  $effect(() => {
+    shell.bare = bare;
+  });
 
   const agentLine = $derived.by(() => {
     const a = app.agent;
@@ -64,72 +79,74 @@
   });
 </script>
 
-<div class={["window", shell.compact && "window--compact"]}>
-  {#if shell.compact && shell.sidebarOpen}
-    <button class="scrim" type="button" aria-label="Hide sidebar" onclick={() => (shell.sidebarOpen = false)}></button>
-  {/if}
-  <aside class={["sidebar", shell.sidebarOpen && "sidebar--open"]} aria-label="Sidebar">
-    <div class="sidebar__top" data-tauri-drag-region></div>
-
-    <Nav label="Main">
-      <NavItem href="/" icon={LayoutDashboard} current={path === "/"}>Overview</NavItem>
-      <NavItem
-        href="/applications"
-        icon={ListChecks}
-        current={within("/applications")}
-        meta={count(app.applications.length + app.unsent.length)}
-      >
-        Applications
-      </NavItem>
-      <NavItem href="/feed" icon={Rss} current={within("/feed")} meta={count(feed.fits.length)} metaTitle="Fits">
-        Feed
-      </NavItem>
-      <NavItem href="/bank" icon={Archive} current={within("/bank")}>Experience</NavItem>
-      <NavItem href="/masters" icon={FileText} current={within("/masters")}>Resumes</NavItem>
-    </Nav>
-
-    {#if app.jobs.length}
-      <section class="recent" aria-labelledby="recent-label">
-        <h2 class="label" id="recent-label">Recent</h2>
-        <Nav label="Recent jobs">
-          {#each app.jobs.slice(0, RECENT) as job (job.id)}
-            {@const status = job.status ? STATUS[job.status] : null}
-            {@const fit = jobFit(job, app.applications)}
-            <NavItem
-              href="/jobs/{job.id}"
-              quiet
-              current={path === `/jobs/${job.id}`}
-              sub={job.role}
-              {status}
-              {@attach tip(`${job.company} · ${job.role}${status ? ` · ${status.label}` : ""}`)}
-            >
-              {#snippet lead()}<CompanyMark size={28} src={app.logos[job.companyKey]} />{/snippet}
-              {#snippet trailing()}
-                {#if fit}<ScoreBar bar={false} now={fit.now} projected={fit.projected} onFile={fit.onFile} />{/if}
-              {/snippet}
-              {job.company}
-            </NavItem>
-          {/each}
-        </Nav>
-      </section>
-    {:else}
-      <div class="recent"></div>
+<div class={["window", (shell.compact || bare || !ready) && "window--compact"]}>
+  {#if ready && !bare}
+    {#if shell.compact && shell.sidebarOpen}
+      <button class="scrim" type="button" aria-label="Hide sidebar" onclick={() => (shell.sidebarOpen = false)}></button>
     {/if}
+    <aside class={["sidebar", shell.sidebarOpen && "sidebar--open"]} aria-label="Sidebar">
+      <div class="sidebar__top" data-tauri-drag-region></div>
 
-    <div class="foot">
-      <Nav label="App">
-        {#if dev}<NavItem href="/specimen" icon={Palette} current={within("/specimen")}>Specimen</NavItem>{/if}
-        <NavItem href="/settings" icon={SlidersHorizontal} current={within("/settings")}>Settings</NavItem>
+      <Nav label="Main">
+        <NavItem href="/" icon={LayoutDashboard} current={path === "/"}>Overview</NavItem>
+        <NavItem
+          href="/applications"
+          icon={ListChecks}
+          current={within("/applications")}
+          meta={count(app.applications.length + app.unsent.length)}
+        >
+          Applications
+        </NavItem>
+        <NavItem href="/feed" icon={Rss} current={within("/feed")} meta={count(feed.fits.length)} metaTitle="Fits">
+          Feed
+        </NavItem>
+        <NavItem href="/bank" icon={Archive} current={within("/bank")}>Experience</NavItem>
+        <NavItem href="/masters" icon={FileText} current={within("/masters")}>Resumes</NavItem>
       </Nav>
-      <a class="agent" href="/settings" {@attach tip(app.agent?.problem)}>
-        <span class="agent__dot agent__dot--{agentLine.tone}" aria-hidden="true"></span>
-        <span class="agent__text">{agentLine.text}</span>
-      </a>
-    </div>
-  </aside>
+
+      {#if app.jobs.length}
+        <section class="recent" aria-labelledby="recent-label">
+          <h2 class="label" id="recent-label">Recent</h2>
+          <Nav label="Recent jobs">
+            {#each app.jobs.slice(0, RECENT) as job (job.id)}
+              {@const status = job.status ? STATUS[job.status] : null}
+              {@const fit = jobFit(job, app.applications)}
+              <NavItem
+                href="/jobs/{job.id}"
+                quiet
+                current={path === `/jobs/${job.id}`}
+                sub={job.role}
+                {status}
+                {@attach tip(`${job.company} · ${job.role}${status ? ` · ${status.label}` : ""}`)}
+              >
+                {#snippet lead()}<CompanyMark size={28} src={app.logos[job.companyKey]} />{/snippet}
+                {#snippet trailing()}
+                  {#if fit}<ScoreBar bar={false} now={fit.now} projected={fit.projected} onFile={fit.onFile} />{/if}
+                {/snippet}
+                {job.company}
+              </NavItem>
+            {/each}
+          </Nav>
+        </section>
+      {:else}
+        <div class="recent"></div>
+      {/if}
+
+      <div class="foot">
+        <Nav label="App">
+          {#if dev}<NavItem href="/specimen" icon={Palette} current={within("/specimen")}>Specimen</NavItem>{/if}
+          <NavItem href="/settings" icon={SlidersHorizontal} current={within("/settings")}>Settings</NavItem>
+        </Nav>
+        <a class="agent" href="/settings" {@attach tip(app.agent?.problem)}>
+          <span class="agent__dot agent__dot--{agentLine.tone}" aria-hidden="true"></span>
+          <span class="agent__text">{agentLine.text}</span>
+        </a>
+      </div>
+    </aside>
+  {/if}
 
   <main class="main">
-    {@render children()}
+    {#if ready}{@render children()}{/if}
     <Toaster />
     <Tooltips />
   </main>

@@ -2,7 +2,8 @@
   Import review: the resume file at `path` copied into the bank's shape, before anything is added. The column lists
   each section of the file and where it goes (a bank section, or a new one), each entry new or the same as one of
   yours (merged into it unless you keep it separate), each skills line's new items, and contact items you may add;
-  the desk shows the master it makes, with what's new to your bank highlighted. ⌘⏎ adds it, Esc discards it.
+  the desk shows the master it makes, with what's new to your bank highlighted. ⌘⏎ adds it, Esc discards it. Both go
+  to Experience, or `back` when the first-run setup opened it.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -51,7 +52,8 @@
     { value: "preview", label: "Preview" },
   ] as const;
 
-  let { path }: { path: string } = $props();
+  let { path, back }: { path: string; back: string | null } = $props();
+  const leave = $derived(back ?? "/bank");
   const file = $derived(path.split("/").pop() || path);
 
   let view = $state<ImportView | null>(null);
@@ -83,7 +85,7 @@
 
   onMount(() => {
     if (!path) {
-      void goto("/bank");
+      void goto(leave);
       return;
     }
     let unlisten: (() => void) | undefined;
@@ -104,10 +106,10 @@
 
   const KEYS: KeyCommand[] = $derived([
     { keys: ["⌘", "⏎"], label: "Add to bank", run: () => void add(), disabled: !choices || adding },
-    { keys: ["Esc"], label: "Discard", run: () => void goto("/bank") },
+    { keys: ["Esc"], label: "Discard", run: () => void goto(leave) },
   ]);
 
-  $effect(() => bindKeys({ "mod+Enter": () => void add(), Escape: () => void goto("/bank") }));
+  $effect(() => bindKeys({ "mod+Enter": () => void add(), Escape: () => void goto(leave) }));
 
   async function read() {
     failed = null;
@@ -117,7 +119,7 @@
     } catch (e) {
       const err = appError(e);
       if (!alive) return;
-      if (err.kind === "cancelled") void goto("/bank");
+      if (err.kind === "cancelled") void goto(leave);
       else failed = err.message;
     } finally {
       running = null;
@@ -170,7 +172,7 @@
           (sameEntries ? `, merged ${plural(sameEntries, "entry", "entries")}` : "") +
           ` · ${replace ? "Updated" : "New"} master: ${master}`,
       );
-      await goto("/bank?added");
+      await goto(back ?? "/bank?added");
     } catch (e) {
       toast(appError(e).message, { tone: "danger" });
     } finally {
@@ -196,9 +198,9 @@
 
 <Toolbar>
   {#snippet crumbs()}
-    <a href="/bank">Experience</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{file}</b>
+    <a href={leave}>{back ? "Setup" : "Experience"}</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>{file}</b>
   {/snippet}
-  <Button variant="ghost" kbd="Esc" onclick={() => goto("/bank")}>Discard</Button>
+  <Button variant="ghost" kbd="Esc" onclick={() => goto(leave)}>Discard</Button>
   <Button variant="primary" icon={Check} kbd="⌘⏎" disabled={!view || adding} onclick={add}>Add to bank</Button>
 </Toolbar>
 
@@ -213,7 +215,7 @@
         <Empty title="Couldn’t import {file}" body={failed}>
           {#snippet action()}
             <div class="row">
-              <Button variant="primary" size="lg" onclick={() => chooseResume(app.settings?.exportDir)}>
+              <Button variant="primary" size="lg" onclick={() => chooseResume(app.settings?.exportDir, back)}>
                 Choose another file
               </Button>
               <Button size="lg" onclick={read}>Try again</Button>
