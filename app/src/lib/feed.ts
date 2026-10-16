@@ -73,13 +73,23 @@ export const SEARCH_SOURCES_NOTE = "and 260+ more boards through freehire";
 const DAY_MS = 86_400_000;
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
-/** How long ago `iso` was, in whole days ("today", "yesterday", "3 days ago"); null when it doesn't parse. */
+/** A day without a time: bare (`2026-10-14`), or at exactly midnight UTC (`2026-10-14T00:00:00Z`), which is how
+ * date-only sources (LinkedIn's cards, Workday's "Posted Today", bare dates from the boards) are stored. */
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00))?$/;
+
+/** When `iso` was, in ms. A date without a time is that calendar day where you are (its local midnight), not
+ * midnight UTC, which west of UTC falls on the evening before. NaN when it doesn't parse. */
+function when(iso: string): number {
+  const day = DATE_ONLY.exec(iso.trim());
+  return day ? new Date(+day[1], +day[2] - 1, +day[3]).getTime() : Date.parse(iso);
+}
+
+/** How long ago `iso` was, in whole local days ("today", "yesterday", "3 days ago"); null when it doesn't parse. */
 function daysAgo(iso: string): string | null {
-  const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return null;
-  const today = new Date();
+  const at = when(iso);
+  if (Number.isNaN(at)) return null;
   const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((start(today) - start(then)) / DAY_MS);
+  const days = Math.round((start(new Date()) - start(new Date(at))) / DAY_MS);
   return relative.format(-Math.max(0, days), "day");
 }
 
@@ -89,6 +99,15 @@ export function postedText(item: FeedItem): string {
   if (posted) return posted.charAt(0).toUpperCase() + posted.slice(1);
   const found = daysAgo(item.foundAt);
   return found ? `Found ${found}` : "";
+}
+
+/** When the job went up, as `postedText` dates it (the employer's date, else when its source found it), in ms; 0 when
+ * neither parses. */
+export function postedTime(item: FeedItem): number {
+  const posted = item.postedAt ? when(item.postedAt) : NaN;
+  if (!Number.isNaN(posted)) return posted;
+  const found = when(item.foundAt);
+  return Number.isNaN(found) ? 0 : found;
 }
 
 /** What the feed is doing now, as one sentence; null when it's idle. */

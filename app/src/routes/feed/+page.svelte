@@ -61,7 +61,15 @@
   import X from "@lucide/svelte/icons/x";
   import { appError, checkFeed, dismissFeed, pullFeed, searchFeed, type FeedItemState } from "$lib/api";
   import { scoreFit } from "$lib/fit";
-  import { activity, checkedToday, openItem, postedText, SEARCH_SOURCES_NOTE, searchSources } from "$lib/feed";
+  import {
+    activity,
+    checkedToday,
+    openItem,
+    postedText,
+    postedTime,
+    SEARCH_SOURCES_NOTE,
+    searchSources,
+  } from "$lib/feed";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
@@ -107,7 +115,7 @@
     { key: "job", label: "Job", sortBy: (i) => `${i.company} ${i.role}` },
     { key: "score", label: "Fit", numeric: true, width: "176px", sortBy: (i) => i.score },
     // The employer's date, else the day its source found it; newest first. The source under it.
-    { key: "posted", label: "Posted", width: "128px", sortBy: (i) => i.postedAt ?? i.foundAt, sortFirst: "desc" },
+    { key: "posted", label: "Posted", width: "128px", sortBy: postedTime, sortFirst: "desc" },
     { key: "master", label: "Master", width: "16%", sortBy: (i) => i.master },
     { key: "state", label: "State", width: "16%", sortBy: (i) => STATE_ORDER.indexOf(i.state) },
     // Check, the employer's page and Dismiss, inside the 24px edge.

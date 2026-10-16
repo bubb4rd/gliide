@@ -49,6 +49,7 @@
   --page-mark: oklch(0.93 0.09 95);        /* inserted keywords on the sheet, both themes */
   --backdrop-veil: 0.4;                    /* paper over a backdrop picture, so ink reads on it */
   --backdrop-screen: 0.55;                 /* the backdrop's dot screen, in paper */
+  --backdrop-card: 85%;                    /* a card's surface over a backdrop, so the picture shows through */
 
   /* ── Ink: one warm graphite family ── */
   --ink: oklch(0.22 0.008 85);             /* primary text  16.6:1 on paper */

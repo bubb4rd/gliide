@@ -1,7 +1,7 @@
 <!--
   `/` is the Overview: a greeting, your activity (postings added and applications sent: counts over a range, and the
   last 26 weeks by day), what's up next (applications in interviews, then postings not sent yet, best fit first) and
-  what's new for you (the feed's fits, best first; hidden while the feed is off).
+  what's new for you (the feed's fits, newest posting first; hidden while the feed is off).
   V (or ⌘V) pastes a posting, I imports a resume. The backdrop chosen in Settings → Appearance, if any, sits behind
   the top of the screen, toolbar included: the toolbar lies over it unpainted and without its crumb, and takes its
   paper back once the content scrolls under it.
@@ -12,7 +12,7 @@
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import FileUp from "@lucide/svelte/icons/file-up";
   import type { AppStatus, FeedItem } from "$lib/api";
-  import { activity as feedActivity, checkedToday, openItem, postedText } from "$lib/feed";
+  import { activity as feedActivity, openItem, postedText, postedTime } from "$lib/feed";
   import { applicationFit, jobFit, scoreFit, type Fit } from "$lib/fit";
   import { chooseResume } from "$lib/import";
   import { bindKeys } from "$lib/keys";
@@ -197,14 +197,10 @@
   }
   const percent = (n: number | null) => (n === null ? "—" : `${Math.round(n)}%`);
 
-  // ── New for you: the feed's fits, best score first ──
-  const fits = $derived(feed.fits.slice(0, FITS));
+  // ── New for you: the feed's fits, newest posting first (best score first on a tie: the sort is stable) ──
+  const fits = $derived([...feed.fits].sort((a, b) => postedTime(b) - postedTime(a)).slice(0, FITS));
   const feedStatus = $derived(feed.status?.enabled ? feed.status : null);
-  const feedMeta = $derived(
-    feedStatus
-      ? `${feed.fits.length} ${feed.fits.length === 1 ? "fit" : "fits"} · ${checkedToday(feedStatus)}`
-      : "",
-  );
+  const feedMeta = $derived(feedStatus ? `${feedStatus.checkedToday} checked today` : "");
   const feedNow = $derived(feedStatus && feedActivity(feedStatus, feed.items));
   /** The job being opened: its posting may need reading first. */
   let opening = $state<string | null>(null);
@@ -372,6 +368,10 @@
   /* Starts under the toolbar, so the backdrop runs behind it. */
   .scroll--under .column {
     padding-block-start: calc(var(--toolbar-height) + var(--space-10));
+  }
+  /* The cards let the backdrop through. */
+  .scroll--under .column :global(.card) {
+    background: color-mix(in oklab, var(--surface) var(--backdrop-card), transparent);
   }
   /* Activity and Up next side by side; stacked once Activity's three stats would truncate their labels. */
   .split {

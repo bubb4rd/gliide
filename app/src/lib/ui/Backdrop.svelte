@@ -9,6 +9,7 @@
   /** The pictures a backdrop can show, bundled in `static/backdrops/` (where each came from in its README). */
   export const BACKDROPS = {
     meadow: "/backdrops/meadow.webp",
+    tokyo: "/backdrops/tokyo.webp",
   } as const;
   export type BackdropName = keyof typeof BACKDROPS;
 </script>
