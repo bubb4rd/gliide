@@ -57,8 +57,11 @@
     Popover,
     ScoreBar,
     ScoreHeader,
+    SectionNav,
+    type NavSection,
     Segmented,
     Sources,
+    Steps,
     Table,
     Textarea,
     Thinking,
@@ -67,6 +70,7 @@
     tip,
     type TipContent,
     toast,
+    exit,
     type TableColumn,
     type TableSort,
   } from "$lib/ui";
@@ -93,6 +97,40 @@
   let replay = $state(0);
   /** The backdrop sample has scrolled under its toolbar. */
   let backdropScrolled = $state(false);
+
+  // ── Setup steps: the bar in every state, and a sample that turns as the setup's steps do ──
+  const SETUP = ["Welcome", "Appearance", "Claude Code", "Experience", "Feed", "Ready"];
+  const TURNS = [
+    { title: "Your resume, fitted to every job", body: "The first step enters from the right, its parts 100ms apart." },
+    { title: "Choose how it looks", body: "Next: this one leaves to the left and the new one comes in from the right." },
+    { title: "Connect Claude Code", body: "Back: the reverse, and the bar’s fill sweeps back out." },
+    { title: "You’re set", body: "Reduced motion: the steps only fade, the fill only fades." },
+  ];
+  let turnAt = $state(0);
+  let turnForward = $state(true);
+  let turned = $state(false);
+  function turnTo(index: number) {
+    if (index < 0 || index >= TURNS.length || index === turnAt) return;
+    turnForward = index > turnAt;
+    turned = true;
+    turnAt = index;
+  }
+
+  // ── Section nav: Settings' links to its cards, over a sample scroll in each orientation ──
+  const JUMPS: (NavSection & { body: string; tall?: boolean })[] = [
+    { id: "agent", label: "Claude Code", body: "Short: a jump lands it at the top." },
+    { id: "tailoring", label: "Tailoring", body: "Scroll: each section turns current as its top reaches the top." },
+    { id: "feed", label: "Feed", body: "Tall, as Settings’ Feed card.", tall: true },
+    { id: "sources", label: "Sources", body: "A part of the one before: indented, regular weight.", sub: true },
+    { id: "long", label: "A section with a long name that truncates", body: "Its link truncates in the column." },
+    { id: "appearance", label: "Appearance", body: "Last and short: current at the end, or once jumped to." },
+  ];
+  const jumpsIn = (prefix: string): NavSection[] =>
+    JUMPS.map(({ id, label, sub }) => ({ id: `${prefix}-${id}`, label, sub }));
+  const JUMPS_COLUMN = jumpsIn("spec-jump-column");
+  const JUMPS_ROW = jumpsIn("spec-jump-row");
+  let jumpColumn = $state<HTMLElement>();
+  let jumpRow = $state<HTMLElement>();
 
   // ── The composed Review screen: toggles update the score instantly ──
   type State = "in" | "off" | "left-out" | "forced";
@@ -531,6 +569,11 @@
           <Toolbar>
             {#snippet crumbs()}
               <a href="#review">Applications</a><Icon icon={ChevronRight} size={14} weight="medium" /><b>Globex</b>
+              <Menu bind:value={menuValue} options={statuses} label="Status" variant="ghost" size="sm">
+                {#snippet trigger(current)}
+                  <Badge tone={statusTone[menuValue as keyof typeof statusTone]}>{current?.label}</Badge>
+                {/snippet}
+              </Menu>
             {/snippet}
             <Segmented
               options={[
@@ -1082,6 +1125,14 @@
             <CompanyMark>Northwind Traders, a company name long enough that it truncates in a narrow cell</CompanyMark>
             <CompanyMark src={LOGO}>Northwind Traders, with its logo</CompanyMark>
             <p class="meta">Blank until you set a logo. A logo shows as the company publishes it: scaled to fit, rounded like the tile, never recolored.</p>
+            <p class="label">Agents (the setup's Claude Code step) · Claude · off: Codex, Gemini, not supported yet</p>
+            <div class="row">
+              <CompanyMark size={28} src="/agents/claude.png" />
+              <CompanyMark size={28} src="/agents/openai.png" off />
+              <CompanyMark size={28} src="/agents/gemini.png" off />
+              <CompanyMark size={28} off />
+            </div>
+            <p class="meta">Off: grayscale at half opacity, the one treatment a logo gets, for an agent gliide can’t run yet.</p>
           </div>
         </Card>
         <Card pad>
@@ -1221,7 +1272,7 @@
             <h3 class="headline">What’s up next, Jane?</h3>
             <Card pad>
               <div class="tile">
-                <p class="label">Cards sit on it unchanged</p>
+                <p class="label">Cards let it through, faintly</p>
                 <p class="meta">Paste a job link or a posting’s text and it lands here.</p>
               </div>
             </Card>
@@ -1282,6 +1333,114 @@
               {#snippet action()}<Button variant="primary" kbd="V">Paste from clipboard</Button>{/snippet}
             </Empty>
           {/key}
+        </Card>
+      </div>
+    </section>
+
+    <!-- ═══════════ Steps ═══════════ -->
+    <section class="section">
+      <h2 class="title">Steps</h2>
+      <p class="meta lede">
+        The first-run setup’s progress: a bar per step over its name, done and current in accent. The fill sweeps in
+        from the leading edge as you go on and back out as you go back. Done steps are buttons back to themselves; under
+        480px the names give way to one caption.
+      </p>
+      <div class="grid">
+        <Card pad>
+          <div class="tile">
+            <p class="label">First step · a middle one (done steps are buttons) · the last · all done · no way back</p>
+            <Steps steps={SETUP} current={0} label="Setup, first step" onselect={() => {}} />
+            <Steps steps={SETUP} current={3} label="Setup, a middle step" onselect={() => {}} />
+            <Steps steps={SETUP} current={5} label="Setup, the last step" onselect={() => {}} />
+            <Steps steps={SETUP} current={6} label="Setup, all done" />
+            <Steps steps={SETUP} current={3} label="Setup without a way back" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Under 480px · first · a middle one · all done</p>
+            <div class="narrow">
+              <Steps steps={SETUP} current={0} label="Narrow setup, first step" onselect={() => {}} />
+              <Steps steps={SETUP} current={3} label="Narrow setup, a middle step" onselect={() => {}} />
+              <Steps steps={SETUP} current={6} label="Narrow setup, all done" />
+            </div>
+          </div>
+        </Card>
+      </div>
+      <Card pad>
+        <div class="tile">
+          <p class="label">Live · a step turning: .turn in, exit({"{ side }"}) out</p>
+          <Steps steps={SETUP.slice(0, TURNS.length)} current={turnAt} label="Sample steps" onselect={turnTo} />
+          <div class="turns">
+            {#key turnAt}
+              <div
+                class="turns__page"
+                style:--side={turnForward ? 1 : -1}
+                style:--wait={turned ? "var(--dur-fast)" : "0ms"}
+                out:exit={{ side: turnForward ? -1 : 1 }}
+              >
+                <h3 class="title turn" style:--i="0">{TURNS[turnAt].title}</h3>
+                <p class="meta turn" style:--i="1">{TURNS[turnAt].body}</p>
+              </div>
+            {/key}
+          </div>
+          <div class="row">
+            <Button variant="ghost" disabled={turnAt === 0} onclick={() => turnTo(turnAt - 1)}>Back</Button>
+            <Button variant="primary" disabled={turnAt === TURNS.length - 1} onclick={() => turnTo(turnAt + 1)}>
+              Continue
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </section>
+
+    <!-- ═══════════ Section nav ═══════════ -->
+    <section class="section">
+      <h2 class="title">Section nav</h2>
+      <p class="meta lede">
+        Settings’ links to its cards. The one you’re reading is ink with an accent tick: it follows the scroll, and the
+        last is current at the end. A link jumps at once and moves focus to its section, which stays current while its
+        top is in view. Under 720px of its container: a row over a hairline, the tick on it, scrolling sideways when
+        the links don’t fit.
+      </p>
+      <div class="grid">
+        <Card>
+          <div class="jump" bind:this={jumpColumn}>
+            <div class="jump__layout">
+              <div class="jump__rail">
+                <SectionNav sections={JUMPS_COLUMN} root={jumpColumn} label="Sample sections, column" />
+              </div>
+              <div class="jump__body">
+                {#each JUMPS as j (j.id)}
+                  <section id="spec-jump-column-{j.id}" class="jump__section" tabindex="-1">
+                    <h3 class="jump__name">{j.label}</h3>
+                    <p class="meta">{j.body}</p>
+                    {#if j.tall}<div class="jump__well"></div>{/if}
+                  </section>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </Card>
+        <Card>
+          <div class="narrow">
+            <div class="jump" bind:this={jumpRow}>
+              <div class="jump__layout">
+                <div class="jump__rail">
+                  <SectionNav sections={JUMPS_ROW} root={jumpRow} label="Sample sections, row" />
+                </div>
+                <div class="jump__body">
+                  {#each JUMPS as j (j.id)}
+                    <section id="spec-jump-row-{j.id}" class="jump__section" tabindex="-1">
+                      <h3 class="jump__name">{j.label}</h3>
+                      <p class="meta">{j.body}</p>
+                      {#if j.tall}<div class="jump__well"></div>{/if}
+                    </section>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          </div>
         </Card>
       </div>
     </section>
@@ -1630,6 +1789,88 @@
     border: 1px solid transparent;
     box-shadow: var(--shadow-border);
   }
+  .narrow {
+    display: grid;
+    gap: var(--space-4);
+    max-width: 360px;
+  }
+  /* A sample scroll for SectionNav, as Settings': the rail held beside the sections, or a row held over them. */
+  .jump {
+    height: 280px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    container-type: inline-size;
+    /* Inside the card's 1px border. */
+    border-radius: calc(var(--radius-lg) - 1px);
+  }
+  .jump__layout {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-6);
+    padding: var(--space-5);
+  }
+  .jump__rail {
+    position: sticky;
+    top: var(--space-5);
+  }
+  .jump__body {
+    display: grid;
+    gap: var(--space-6);
+  }
+  .jump__section {
+    display: grid;
+    gap: var(--space-1);
+    scroll-margin-top: var(--space-5);
+  }
+  .jump__section:focus {
+    outline: none;
+  }
+  .jump__name,
+  .jump__section .meta {
+    margin: 0;
+  }
+  .jump__name {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+  }
+  .jump__well {
+    height: 240px;
+    margin-top: var(--space-2);
+    border-radius: var(--radius-md);
+    background: var(--sunken);
+  }
+  @container (width < 720px) {
+    .jump__layout {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-5);
+      padding-top: 0;
+    }
+    .jump__rail {
+      top: 0;
+      z-index: 1;
+      margin-inline: calc(var(--space-5) * -1);
+      padding: var(--space-2) var(--space-5) 0;
+      background: var(--surface);
+    }
+    .jump__section {
+      scroll-margin-top: calc(var(--control-md) + var(--space-4) + var(--space-5));
+    }
+  }
+  /* The leaving step and the arriving one share the cell while they cross. */
+  .turns {
+    display: grid;
+    min-height: 96px;
+  }
+  .turns__page {
+    grid-area: 1 / 1;
+    display: grid;
+    align-content: start;
+    gap: var(--space-2);
+  }
+  .turns__page p {
+    margin: 0;
+  }
   .backdrop-frame {
     position: relative;
     height: 640px;
@@ -1652,6 +1893,9 @@
     max-width: 560px;
     margin-inline: auto;
     padding: calc(var(--toolbar-height) + var(--space-10)) var(--space-6) 640px;
+  }
+  .backdrop-content :global(.card) {
+    background: color-mix(in oklab, var(--surface) var(--backdrop-card), transparent);
   }
   .backdrop-content .headline {
     margin: 0;

@@ -1,6 +1,6 @@
 /*
  * The app's base: the tokens, the root type, and the few global utilities DESIGN.md names (.num, .label, .title,
- * .headline, .meta, .enter). Every primitive owns its styles in app/src/lib/ui/.
+ * .headline, .meta, .enter, .turn). Every primitive owns its styles in app/src/lib/ui/.
  */
 
 @import "../../design/tokens.css";
@@ -122,6 +122,27 @@ select {
     opacity: 0;
     filter: blur(var(--enter-blur));
     translate: 0 var(--enter-y);
+  }
+}
+/*
+ * A step of a sequence arriving (the first-run setup): as .enter, but sideways from where you're heading. The step sets
+ * --side (1: from the trailing side, as you go on; -1: from the leading side, as you go back) and --wait (the leaving
+ * step's exit, `--dur-fast`; 0ms for the first); its parts set --i. The leaving step goes with `exit({ side })`.
+ */
+.turn {
+  animation: fade var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--wait, 0ms) + var(--i, 0) * var(--stagger));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .turn {
+    animation-name: turn;
+  }
+}
+@keyframes turn {
+  from {
+    opacity: 0;
+    filter: blur(var(--enter-blur));
+    translate: calc(var(--side, 1) * var(--enter-y)) 0;
   }
 }
 @keyframes fade {
