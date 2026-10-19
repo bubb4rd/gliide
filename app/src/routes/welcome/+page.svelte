@@ -63,6 +63,7 @@
     { value: "none", label: "None" },
     { value: "meadow", label: "Meadow" },
     { value: "tokyo", label: "Tokyo" },
+    { value: "sakura", label: "Sakura" },
   ];
   const PROMISES = [
     {

@@ -10,6 +10,7 @@
   export const BACKDROPS = {
     meadow: "/backdrops/meadow.webp",
     tokyo: "/backdrops/tokyo.webp",
+    sakura: "/backdrops/sakura.webp",
   } as const;
   export type BackdropName = keyof typeof BACKDROPS;
 </script>

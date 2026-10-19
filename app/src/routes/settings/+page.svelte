@@ -71,6 +71,7 @@
     { value: "none", label: "None" },
     { value: "meadow", label: "Meadow" },
     { value: "tokyo", label: "Tokyo" },
+    { value: "sakura", label: "Sakura" },
   ];
   /** Agents gliide will run once they're supported (ARCHITECTURE.md §1): listed, grayed, so you know what's coming. */
   const LATER = [
