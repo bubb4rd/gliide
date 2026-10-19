@@ -24,6 +24,8 @@ export { default as Nav } from "./Nav.svelte";
 export { default as NavItem } from "./NavItem.svelte";
 export { default as PartRow } from "./PartRow.svelte";
 export { default as Popover } from "./Popover.svelte";
+export { default as PlaceMap } from "./PlaceMap.svelte";
+export type { MapPlace } from "./placemap";
 export { default as ScoreBar } from "./ScoreBar.svelte";
 export { default as ScoreHeader } from "./ScoreHeader.svelte";
 export { default as Segmented } from "./Segmented.svelte";

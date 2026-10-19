@@ -26,6 +26,17 @@ pub struct Response {
 pub trait Fetcher {
     fn get(&self, url: &str) -> impl Future<Output = Result<Response, String>> + Send;
 
+    /// [`get`](Self::get) as `user_agent` instead of a browser: for services whose policy asks callers to name
+    /// themselves (Nominatim). Fetchers that replay recordings ignore it.
+    fn get_as(
+        &self,
+        url: &str,
+        user_agent: &str,
+    ) -> impl Future<Output = Result<Response, String>> + Send {
+        let _ = user_agent;
+        self.get(url)
+    }
+
     /// POSTs `body` as JSON, waiting up to `timeout` for the answer (Workday's job search, Apify's runs). Fetchers
     /// that only replay GETs answer every POST with a network failure.
     fn post_json(
@@ -109,6 +120,15 @@ impl Fetcher for HttpFetcher {
             .get(url)
             .header(reqwest::header::ACCEPT, ACCEPT)
             .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.9");
+        send(req, TIMEOUT).await
+    }
+
+    async fn get_as(&self, url: &str, user_agent: &str) -> Result<Response, String> {
+        let req = self
+            .client
+            .get(url)
+            .header(reqwest::header::USER_AGENT, user_agent)
+            .header(reqwest::header::ACCEPT, "application/json");
         send(req, TIMEOUT).await
     }
 

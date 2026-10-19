@@ -55,6 +55,7 @@
     NavItem,
     PartRow,
     Popover,
+    PlaceMap,
     ScoreBar,
     ScoreHeader,
     SectionNav,
@@ -75,7 +76,7 @@
     type TableSort,
   } from "$lib/ui";
   import { SEARCH_SOURCES_NOTE, searchSources } from "$lib/feed";
-  import { FITS, LOGO, OVER, WIDE_LOGO } from "./sample";
+  import { FITS, LOGO, MCLEAN, OVER, PLANO, RIVERWOODS, WIDE_LOGO } from "./sample";
 
   // ── Company photo: the job header's mark opens the panel; Paste sets the square logo, Choose file the wide one ──
   let logoOpen = $state(false);
@@ -1448,10 +1449,21 @@
     <!-- ═══════════ Desk ═══════════ -->
     <section class="section">
       <h2 class="title">Desk</h2>
-      <div class="grid cols-2">
+      <p class="meta lede">
+        100% fits the page to the desk's width. With the job's map, the pane splits: the map fills its top, the desk
+        moves down under it, and the page shrinks so the two fill the pane exactly; the map takes the height the page
+        leaves, at least 160px. A remote job has no map.
+      </p>
+      <div class="grid cols-3">
         <div class="desk-frame">
           <Desk pages={FITS}>
             {#snippet status()}<Badge tone="gain" dot>Fits on 1 page</Badge>{/snippet}
+          </Desk>
+        </div>
+        <div class="desk-frame">
+          <Desk pages={FITS}>
+            {#snippet status()}<Badge tone="gain" dot>Fits on 1 page</Badge>{/snippet}
+            {#snippet above()}<PlaceMap places={[PLANO]} onopen={() => {}} />{/snippet}
           </Desk>
         </div>
         <div class="desk-frame">
@@ -1459,6 +1471,22 @@
             {#snippet status()}<Badge tone="warn" dot>2 pages: over by 1</Badge>{/snippet}
           </Desk>
         </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Place map ═══════════ -->
+    <section class="section">
+      <h2 class="title">Place map</h2>
+      <p class="meta lede">
+        Where the job is, as a maps search shows a town: the pin in accent with its name, the boundary dashed, the towns
+        and roads around it in graphite. Static; a click (or M on the job) opens it in Maps. Until the tiles arrive, and
+        when they can't, the name and region stand in.
+      </p>
+      <div class="grid cols-2">
+        <div class="map-frame"><PlaceMap places={[PLANO]} onopen={() => {}} /></div>
+        <div class="map-frame"><PlaceMap places={[MCLEAN]} /></div>
+        <div class="map-frame"><PlaceMap places={[RIVERWOODS, MCLEAN]} onopen={() => {}} /></div>
+        <div class="map-frame"><PlaceMap places={[PLANO]} unavailable /></div>
       </div>
     </section>
 
@@ -1784,6 +1812,13 @@
   .desk-frame {
     display: grid;
     height: 520px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    border: 1px solid transparent;
+    box-shadow: var(--shadow-border);
+  }
+  .map-frame {
+    height: 200px;
     overflow: hidden;
     border-radius: var(--radius-lg);
     border: 1px solid transparent;

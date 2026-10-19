@@ -31,6 +31,7 @@ import type { Library } from "./bindings/Library";
 import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
 import type { Mode } from "./bindings/Mode";
+import type { Place } from "./bindings/Place";
 import type { Progress } from "./bindings/Progress";
 import type { ReviewView } from "./bindings/ReviewView";
 import type { Rewritten } from "./bindings/Rewritten";
@@ -93,6 +94,7 @@ export type * from "./bindings/MasterRef";
 export type * from "./bindings/MasterRow";
 export type * from "./bindings/Mode";
 export type * from "./bindings/NoteLine";
+export type * from "./bindings/Place";
 export type * from "./bindings/Progress";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
@@ -164,6 +166,8 @@ export const openJob = (job: string) => invoke<JobView>("open_job", { job });
 export const deleteJob = (job: string) => invoke<JobRow[]>("delete_job", { job });
 /** Sets the posting's salary range as yours (`null`: removed); its row with the range it now shows. */
 export const setSalary = (job: string, salary: SalaryRange | null) => invoke<JobRow>("set_salary", { job, salary });
+/** The places a job's location names, geocoded and cached (empty: remote, a country, or nothing found). */
+export const places = (location: string) => invoke<Place[]>("places", { location });
 /**
  * Opens the review for `job`: Suggest (cached per posting × master × mode × model), then the fit check.
  * `master`/`mode` null: the job's last review's, else the best-ranked master and the default mode.

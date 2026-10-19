@@ -65,6 +65,7 @@ pub enum Backdrop {
     None,
     Meadow,
     Tokyo,
+    Sakura,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -513,6 +514,23 @@ pub struct MasterChoice {
     pub title: String,
     /// Its score now against this posting.
     pub score: f64,
+}
+
+/// One place a job is in, geocoded (OpenStreetMap's Nominatim), for the review's map.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Place {
+    /// Its own name: "Plano".
+    pub name: String,
+    /// Where it is: "Texas, United States" (state or nearest region, then country; either may be missing).
+    pub region: String,
+    pub lat: f64,
+    pub lon: f64,
+    /// [west, south, east, north], degrees.
+    pub bbox: [f64; 4],
+    /// Its boundary as GeoJSON geometry text (Polygon or MultiPolygon); None when Nominatim has only a point.
+    pub boundary: Option<String>,
 }
 
 // ── Review ──────────────────────────────────────────────────────────────────────────────────────────────────────

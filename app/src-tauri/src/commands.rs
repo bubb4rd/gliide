@@ -9,12 +9,13 @@ use crate::dto::{
     AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit, Decision,
     EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView,
     FolderPdf, FolderView, ImportChoices, ImportView, JobRow, JobView, Library, LogoRow,
-    LogoSource, Mode, ReviewView, Rewritten, SalaryRange, SearchCursor, SearchResults, Settings,
+    LogoSource, Mode, Place, ReviewView, Rewritten, SalaryRange, SearchCursor, SearchResults,
+    Settings,
 };
 use crate::state::{App, blocking};
 use crate::{
-    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, review,
-    settings,
+    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place,
+    review, settings,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -136,6 +137,11 @@ pub async fn delete_job(app: St<'_>, job: String) -> Res<Vec<JobRow>> {
 #[tauri::command]
 pub async fn set_salary(app: St<'_>, job: String, salary: Option<SalaryRange>) -> Res<JobRow> {
     blocking(&app, move |app| jobs::set_salary(app, &job, salary)).await
+}
+
+#[tauri::command]
+pub async fn places(app: St<'_>, location: String) -> Res<Vec<Place>> {
+    place::places(&app, &location).await
 }
 
 #[tauri::command]

@@ -10,6 +10,7 @@ pub mod fantastic;
 pub mod feed;
 mod fetch;
 pub mod freehire;
+pub mod geocode;
 mod link;
 pub mod linkedin;
 pub mod logos;

@@ -552,7 +552,7 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
+        "DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
          ALTER TABLE postings DROP COLUMN salary; PRAGMA user_version = 1;",
     )
     .unwrap();
@@ -600,7 +600,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -682,6 +682,22 @@ fn logo_lookups_keep_the_last() {
     assert!(last.tried_at > first.tried_at);
 }
 
+/// The last lookup per geocoding query, replaced by the next; nothing found stored as `None`.
+#[test]
+fn place_lookups_keep_the_last() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.place_lookup("plano, tx").unwrap(), None);
+    store.put_place_lookup("plano, tx", None).unwrap();
+    let first = store.place_lookup("plano, tx").unwrap().unwrap();
+    assert_eq!(first.json, None);
+    store
+        .put_place_lookup("plano, tx", Some(r#"{"name":"Plano"}"#))
+        .unwrap();
+    let last = store.place_lookup("plano, tx").unwrap().unwrap();
+    assert_eq!(last.json.as_deref(), Some(r#"{"name":"Plano"}"#));
+    assert!(last.tried_at > first.tried_at);
+}
+
 /// Logos set before fetched logos existed (schema version 5) stay yours.
 #[test]
 fn migrating_to_fetched_logos_keeps_yours() {
@@ -693,7 +709,7 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
+        "DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
     )
     .unwrap();
     drop(conn);

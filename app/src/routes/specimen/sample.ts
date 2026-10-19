@@ -2,6 +2,8 @@
 // Pages stand in for the renderer's SVG: an SVG sheet (US Letter, 612×792) whose text flows in a foreignObject so
 // the inserted keywords can carry the sheet's highlight. The specimen styles `.sheet`.
 
+import type { MapPlace } from "$lib/ui";
+
 const SHEET = (body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 792" width="612" height="792">` +
   `<foreignObject x="0" y="0" width="612" height="792">` +
@@ -66,3 +68,53 @@ export const WIDE_LOGO = `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect width="120" height="40" rx="6" fill="#c2410c"/>` +
     `<circle cx="20" cy="20" r="9" fill="#fff"/><rect x="36" y="15" width="70" height="10" rx="2" fill="#fff"/></svg>`,
 )}`;
+
+/** Places as `places` gives them (OpenStreetMap's Nominatim, boundaries simplified), for the map. */
+export const PLANO = {
+  name: "Plano",
+  region: "Texas, United States",
+  lat: 33.0137,
+  lon: -96.6925,
+  bbox: [-96.86, 32.9971, -96.6129, 33.1252],
+  boundary: JSON.stringify({
+    type: "Polygon",
+    coordinates: [
+      [
+        [-96.86, 33.042], [-96.8532, 33.042], [-96.8525, 33.0261], [-96.8353, 33.0274], [-96.8435, 33.0165],
+        [-96.7944, 33.0131], [-96.7689, 33.0001], [-96.7063, 33.004], [-96.6651, 32.9971], [-96.665, 33.0039],
+        [-96.613, 33.005], [-96.6129, 33.0095], [-96.631, 33.0104], [-96.6413, 33.019], [-96.6393, 33.0523],
+        [-96.6563, 33.053], [-96.6558, 33.0749], [-96.6853, 33.0709], [-96.7048, 33.0887], [-96.7367, 33.0861],
+        [-96.7328, 33.1252], [-96.8524, 33.0825], [-96.8572, 33.0607], [-96.8428, 33.0562], [-96.8584, 33.0531],
+        [-96.86, 33.042],
+      ],
+    ],
+  }),
+} satisfies MapPlace;
+
+export const RIVERWOODS = {
+  name: "Riverwoods",
+  region: "Illinois, United States",
+  lat: 42.1676,
+  lon: -87.8971,
+  bbox: [-87.9231, 42.1529, -87.8742, 42.1929],
+  boundary: JSON.stringify({
+    type: "Polygon",
+    coordinates: [
+      [
+        [-87.9231, 42.1712], [-87.9137, 42.1659], [-87.9191, 42.1606], [-87.8834, 42.1529], [-87.883, 42.1666],
+        [-87.8742, 42.1736], [-87.8866, 42.1929], [-87.9063, 42.1915], [-87.8991, 42.1857], [-87.9018, 42.175],
+        [-87.9231, 42.1712],
+      ],
+    ],
+  }),
+} satisfies MapPlace;
+
+/** A place Nominatim knows only as a point. */
+export const MCLEAN = {
+  name: "McLean",
+  region: "Virginia, United States",
+  lat: 38.9367,
+  lon: -77.1858,
+  bbox: [-77.2878, 38.8932, -77.1198, 38.9799],
+  boundary: null,
+} satisfies MapPlace;

@@ -51,6 +51,13 @@
   --backdrop-screen: 0.55;                 /* the backdrop's dot screen, in paper */
   --backdrop-card: 85%;                    /* a card's surface over a backdrop, so the picture shows through */
 
+  /* ── The job's map (PlaceMap): quiet graphite cartography, so the accent pin carries it ── */
+  --map-land: oklch(0.975 0.004 95);
+  --map-park: oklch(0.95 0.006 95);
+  --map-water: oklch(0.9 0.018 245);
+  --map-road: oklch(1 0 0);
+  --map-road-casing: oklch(0.89 0.006 85);
+
   /* ── Ink: one warm graphite family ── */
   --ink: oklch(0.22 0.008 85);             /* primary text  16.6:1 on paper */
   --ink-2: oklch(0.44 0.009 85);           /* secondary     7.4:1 */
@@ -179,6 +186,11 @@
   --desk: oklch(0.135 0.003 85);
   --backdrop-veil: 0.62;
   --backdrop-screen: 0.7;
+  --map-land: oklch(0.2 0.003 85);
+  --map-park: oklch(0.215 0.004 85);
+  --map-water: oklch(0.155 0.014 245);
+  --map-road: oklch(0.3 0.004 85);
+  --map-road-casing: oklch(0.17 0.003 85);
   --sidebar: oklch(0.18 0.003 85 / 0.82);
   --hover: oklch(1 0 0 / 0.05);
   --pressed: oklch(1 0 0 / 0.09);

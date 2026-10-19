@@ -25,11 +25,13 @@
   import {
     appError,
     editTargets,
+    places as findPlaces,
     setSalary,
     type ChangeView,
     type CustomEdit,
     type EditTargets,
     type LineView,
+    type Place,
     type SalaryRange,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
@@ -55,6 +57,7 @@
     Marked,
     Menu,
     PartRow,
+    PlaceMap,
     Popover,
     ScoreHeader,
     Segmented,
@@ -438,6 +441,30 @@
     }
   }
 
+  // ── Where it is: the map over the desk ──
+  const where = $derived(head?.location ?? "");
+  let places = $state<Place[]>([]);
+  $effect(() => {
+    const at = where;
+    places = [];
+    if (!at) return;
+    let live = true;
+    // Quiet when it fails (offline, Nominatim busy): the desk shows the page alone, as for a remote job.
+    findPlaces(at)
+      .then((found) => live && (places = found))
+      .catch((e) => console.warn("places: couldn't map", at, e));
+    return () => {
+      live = false;
+    };
+  });
+  /** Opens the first place in Maps (Apple Maps on the web where the Maps app isn't). */
+  function openMap() {
+    const place = places[0];
+    if (!place) return false;
+    const url = `https://maps.apple.com/?q=${encodeURIComponent(place.name)}&ll=${place.lat},${place.lon}`;
+    openUrl(url).catch((e) => toast(appError(e).message, { tone: "danger" }));
+  }
+
   const KEYS: KeyCommand[] = $derived([
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["Space"], label: "Toggle", run: () => selected && void s.toggle(selected.key), disabled: !ready || !selected },
@@ -466,6 +493,7 @@
     { keys: ["⌘Z"], label: "Undo", run: () => void s.undo(), disabled: !review?.canUndo },
     { keys: ["⇧⌘Z"], label: "Redo", run: () => void s.redo(), disabled: !review?.canRedo },
     { keys: ["$"], label: "Salary range", run: openSalary, disabled: !row },
+    { keys: ["M"], label: "Open in Maps", run: openMap, disabled: !places.length },
     { keys: ["⌘⌫"], label: "Delete posting", run: () => void removeJob(), disabled: !row },
     { keys: ["Tab"], label: "Cover letter", run: switchTab, disabled: !review },
   ]);
@@ -483,6 +511,7 @@
       run: () => void exportLetter(),
       disabled: !ready || !letter?.letter || s.drafting !== null,
     },
+    { keys: ["M"], label: "Open in Maps", run: openMap, disabled: !places.length },
     { keys: ["Tab"], label: "Resume", run: switchTab },
   ]);
 
@@ -515,6 +544,7 @@
       r: () => (onCover ? false : rerun()),
       w: () => (onCover ? writeLetter() : false),
       $: openSalary,
+      m: openMap,
       s: () => (onCover || !selected?.savable ? false : void keepWording(selected)),
       "mod+z": (e) => {
         if (interactive(e.target) || onCover) return false;
@@ -1053,7 +1083,11 @@
         />
       </div>
     {/if}
-    <Desk pages={onCover ? (letter?.pages ?? []) : (review?.pages ?? [])} bind:zoom>
+    <Desk
+      pages={onCover ? (letter?.pages ?? []) : (review?.pages ?? [])}
+      bind:zoom
+      above={places.length ? placeMap : undefined}
+    >
       {#snippet status()}
         {#if onCover}
           {#if !letter?.letter}
@@ -1075,6 +1109,10 @@
     </Desk>
   </div>
 </div>
+
+{#snippet placeMap()}
+  <PlaceMap {places} onopen={openMap} />
+{/snippet}
 
 <style>
   .split {

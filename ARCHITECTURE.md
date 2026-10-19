@@ -643,11 +643,32 @@ from, first that has one:
    "range"; the first such. Amounts that can't be a salary for their period (under $10,000 or over $2M a year,
    outside $7–$1,000 an hour, millions) are skipped, so a stipend or a funding round never reads as pay.
 
+### Where the job is (built)
+
+The review's preview pane opens with a map of the job's place (DESIGN.md `PlaceMap`), as a maps search shows a town.
+
+1. **Queries**: `resume_ingest::geocode::queries` turns the job's location (Extract's, else the posting's) into up to
+   4 queries, no model call: split on `;`, workplace words dropped (`Hybrid -`, `(onsite)`…), ATS codes rewritten
+   (`US-IA-CEDAR RAPIDS-105 ~ …` → `Cedar Rapids, IA`), the first of `A/B ST`; remote, a country alone or a bare
+   state code gives none, so a remote job has no map.
+2. **Geocoding**: OpenStreetMap's Nominatim (`/search`, one result, its boundary simplified), with gliide's own
+   User-Agent and at least 1 s between requests (its usage policy). A county or finer counts (`place_rank` ≥ 12), and
+   so does any town or city whatever its rank (New York City and Greater London rank 10, as regions): a state or a
+   country is too broad to map. A metro name that finds nothing (`Greater Chicago Area`) is tried once without its
+   metro words.
+3. **Cache**: `places` (store schema 7), keyed by the query: a place found is kept for good, nothing found is asked
+   again after 14 days, a failure is never stored. So each place goes to Nominatim once; the place names a job is in
+   are the only thing sent.
+4. **Map**: `PlaceMap` draws OpenFreeMap's vector tiles (OpenMapTiles schema, no key) with MapLibre GL JS in the
+   webview, its style built from the design tokens and its labels from Inter glyphs bundled in `app/static/glyphs/`
+   (so only tiles come from the network). Offline or refused, the place's name stands in, and with no answer from
+   Nominatim the desk shows alone. A click or `M` opens the place in Maps (`maps.apple.com`).
+
 ## 8. Storage
 
 | Where | What |
 |---|---|
-| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings` (with the salary range you set), `requirements`, `analyses`, `drafts`, `applications`, `covers`, `companies` (logos, yours or fetched, and where each came from; store schema 6), `logo_lookups` (each company's last logo fetch and what it found), `feed`, `settings` |
+| App data `gliide.sqlite` | `bank_revs`, `masters`, `master_revs`, `postings` (with the salary range you set), `requirements`, `analyses`, `drafts`, `applications`, `covers`, `companies` (logos, yours or fetched, and where each came from), `logo_lookups` (each company's last logo fetch and what it found), `places` (each place query's geocoding, or that it found nothing; store schema 7), `feed`, `settings` |
 | User-chosen folder (default `~/Documents/Resumes`) | Exported PDFs `<company>_<short_role>_<surname>_resume.pdf` (`-2`… when taken), `applications.csv`; Resumes lists and previews every PDF in it |
 | The agents' own config | Their sign-ins; the app stores none |
 

@@ -15,6 +15,7 @@ pub mod import;
 pub mod jobs;
 pub mod library;
 pub mod logo;
+pub mod place;
 pub mod review;
 pub mod settings;
 pub mod state;
@@ -82,6 +83,7 @@ pub fn run() {
             commands::open_job,
             commands::delete_job,
             commands::set_salary,
+            commands::places,
             commands::start_review,
             commands::cancel,
             commands::decide,

@@ -34,6 +34,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("salary.sql"),
     include_str!("feed.sql"),
     include_str!("logos.sql"),
+    include_str!("places.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -269,6 +270,15 @@ impl LogoFound {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogoLookup {
     pub found: LogoFound,
+    /// RFC 3339.
+    pub tried_at: String,
+}
+
+/// A geocoding query's last lookup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceLookup {
+    /// The place found, as JSON; `None` when nothing was.
+    pub json: Option<String>,
     /// RFC 3339.
     pub tried_at: String,
 }
@@ -951,6 +961,35 @@ impl Store {
             "INSERT INTO logo_lookups (key, found, tried_at) VALUES (?1, ?2, ?3)
              ON CONFLICT (key) DO UPDATE SET found = excluded.found, tried_at = excluded.tried_at",
             params![key, found.as_str(), now()],
+        )?;
+        Ok(())
+    }
+
+    // Geocoded places.
+
+    /// The geocoding query's last lookup, if any; `key` as [`put_place_lookup`](Self::put_place_lookup) stored it.
+    pub fn place_lookup(&self, key: &str) -> Result<Option<PlaceLookup>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT json, tried_at FROM places WHERE key = ?1",
+                [key],
+                |r| {
+                    Ok(PlaceLookup {
+                        json: r.get(0)?,
+                        tried_at: r.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Records a geocoding lookup (now): the place found as JSON, or `None`; replaces the last.
+    pub fn put_place_lookup(&self, key: &str, json: Option<&str>) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO places (key, json, tried_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (key) DO UPDATE SET json = excluded.json, tried_at = excluded.tried_at",
+            params![key, json, now()],
         )?;
         Ok(())
     }
