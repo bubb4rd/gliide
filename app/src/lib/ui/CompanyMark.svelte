@@ -6,8 +6,9 @@
   (the job header: from the company's cap height to the title's baseline). With children, the company's name follows
   the mark and truncates. With `label` (its accessible name) it's a button that sets the logo (`onclick`, or
   `popovertarget` for a panel): the blank tile shows an image icon on hover and focus, and `over` (files dragged over
-  it) rings it in the accent. `off` grays a brand gliide can't use yet (an agent it doesn't support): the one
-  sanctioned exception to showing a logo as published, so it reads as unavailable beside the ones that are.
+  it) rings it in the accent. `off` grays a brand gliide can't use yet (an agent it doesn't support), so it reads as
+  unavailable beside the ones that are; with `AgentMark`'s presence cut-out, the only exceptions to showing a logo as
+  published.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";

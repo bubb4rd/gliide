@@ -1,7 +1,8 @@
 <!--
   The key footer, collapsed: one button at the column's foot, Commands ⌘K, opens the screen's commands in a menu above
   it, each with its keys. A command with `run` is a menu item (click it, or ↑↓ and ⏎); one without (↑↓ Select) is
-  listed for its keys only. Esc, Tab or a click outside closes it.
+  listed for its keys only. Esc, Tab or a click outside closes it. `bare`: the button alone, without the sticky bar and
+  its hairline, to sit in another toolbar (the chat's composer).
 -->
 <script module lang="ts">
   export interface KeyCommand {
@@ -24,9 +25,11 @@
 
   interface Props {
     keys: KeyCommand[];
+    /** Only the Commands button: no sticky paper bar, no hairline. */
+    bare?: boolean;
   }
 
-  let { keys }: Props = $props();
+  let { keys, bare = false }: Props = $props();
 
   const id = $props.id();
   let open = $state(false);
@@ -83,7 +86,7 @@
   }
 </script>
 
-<footer class="foot">
+{#snippet commands()}
   <Button
     bind:element={button}
     variant="ghost"
@@ -96,7 +99,13 @@
   >
     Commands
   </Button>
-</footer>
+{/snippet}
+
+{#if bare}
+  {@render commands()}
+{:else}
+  <footer class="foot">{@render commands()}</footer>
+{/if}
 
 <Popover bind:open anchor={button} placement="top-start" id="{id}-menu">
   <div

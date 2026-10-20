@@ -50,7 +50,7 @@
     </div>
   {/each}
   <div class="now">
-    <span class="stage">{label}</span>
+    <span class="stage sweep">{label}</span>
     <span class="meta num">{seconds} s</span>
     {#if oncancel}<Button variant="ghost" size="sm" onclick={oncancel}>Cancel</Button>{/if}
   </div>
@@ -81,42 +81,7 @@
     margin-inline-end: auto;
   }
 
-  /* Reduced motion (and forced colors, where the text keeps its own color): the stage in the accent, fading. */
   .stage {
     font-weight: var(--weight-medium);
-    color: var(--accent-text);
-    animation: fade-breathe var(--dur-loop) var(--ease-out) infinite alternate;
-  }
-  @keyframes fade-breathe {
-    from {
-      opacity: 0.55;
-    }
-  }
-
-  /* Otherwise: ink, with a band of the accent sweeping through it left to right. */
-  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-    .stage {
-      background: linear-gradient(
-          90deg,
-          var(--ink-2) 0%,
-          var(--ink-2) 28%,
-          var(--accent-text) 50%,
-          var(--ink-2) 72%,
-          var(--ink-2) 100%
-        )
-        0 0 / 250% 100%;
-      background-clip: text;
-      -webkit-background-clip: text;
-      color: transparent;
-      animation: sweep var(--dur-loop) linear infinite;
-    }
-  }
-  @keyframes sweep {
-    from {
-      background-position: 100% 0;
-    }
-    to {
-      background-position: 0 0;
-    }
   }
 </style>

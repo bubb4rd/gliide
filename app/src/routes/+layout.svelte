@@ -17,17 +17,28 @@
   import Palette from "@lucide/svelte/icons/palette";
   import Rss from "@lucide/svelte/icons/rss";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
+  import type { Stage } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { shell } from "$lib/stores/shell.svelte";
   import { jobFit } from "$lib/fit";
   import { STATUS } from "$lib/status";
-  import { CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
+  import { AgentMark, CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
 
   let { children }: { children: Snippet } = $props();
 
   const RECENT = 8;
+  /** A job's model call in flight, as its row in Recent says it. */
+  const BUSY: Record<Stage, string> = {
+    extracting: "Reading…",
+    suggesting: "Suggesting…",
+    rewriting: "Rewriting…",
+    writing: "Writing…",
+    revising: "Rewriting…",
+    importing: "Importing…",
+    instructing: "Working…",
+  };
 
   /** Settings and the library are in: the first screen can draw. */
   let ready = $state(false);
@@ -38,8 +49,8 @@
       .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
       .finally(() => (ready = true));
     void feed.refresh();
-    const listening = feed.listen();
-    return () => void listening.then((stop) => stop());
+    const listening = Promise.all([feed.listen(), app.listen()]);
+    return () => void listening.then((stops) => stops.forEach((stop) => stop()));
   });
 
   // Leaving a screen closes the compact sheet.
@@ -69,13 +80,14 @@
     shell.bare = bare;
   });
 
+  /** Claude Code as the account you're signed in to: its icon with a presence dot, its state (and plan) under it. */
   const agentLine = $derived.by(() => {
     const a = app.agent;
-    if (!a) return { tone: "unknown", text: "Claude Code · not checked" };
-    if (!a.found) return { tone: "danger", text: "Claude Code · not found" };
-    if (a.signedIn === false) return { tone: "warn", text: "Claude Code · signed out" };
-    if (a.signedIn === null) return { tone: "unknown", text: "Claude Code · couldn't check sign-in" };
-    return { tone: "gain", text: "Claude Code · signed in" };
+    if (!a) return { tone: "neutral", sub: "Not checked" } as const;
+    if (!a.found) return { tone: "danger", sub: "Not installed" } as const;
+    if (a.signedIn === false) return { tone: "warn", sub: "Signed out" } as const;
+    if (a.signedIn === null) return { tone: "neutral", sub: "Couldn't check sign-in" } as const;
+    return { tone: "gain", sub: ["Signed in", a.plan].filter(Boolean).join(" · ") } as const;
   });
 </script>
 
@@ -111,13 +123,17 @@
             {#each app.jobs.slice(0, RECENT) as job (job.id)}
               {@const status = job.status ? STATUS[job.status] : null}
               {@const fit = jobFit(job, app.applications)}
+              {@const call = app.calls.find((c) => c.job === job.id)}
+              {@const busy = call ? BUSY[call.stage] : null}
+              {@const word = busy ?? status?.label}
               <NavItem
                 href="/jobs/{job.id}"
                 quiet
                 current={path === `/jobs/${job.id}`}
                 sub={job.role}
                 {status}
-                {@attach tip(`${job.company} · ${job.role}${status ? ` · ${status.label}` : ""}`)}
+                {busy}
+                {@attach tip(`${job.company} · ${job.role}${word ? ` · ${word}` : ""}`)}
               >
                 {#snippet lead()}<CompanyMark size={28} src={app.logos[job.companyKey]} />{/snippet}
                 {#snippet trailing()}
@@ -137,10 +153,10 @@
           {#if dev}<NavItem href="/specimen" icon={Palette} current={within("/specimen")}>Specimen</NavItem>{/if}
           <NavItem href="/settings" icon={SlidersHorizontal} current={within("/settings")}>Settings</NavItem>
         </Nav>
-        <a class="agent" href="/settings" {@attach tip(app.agent?.problem)}>
-          <span class="agent__dot agent__dot--{agentLine.tone}" aria-hidden="true"></span>
-          <span class="agent__text">{agentLine.text}</span>
-        </a>
+        <NavItem href="/settings" sub={agentLine.sub} {@attach tip(app.agent?.problem)}>
+          {#snippet lead()}<AgentMark src="/agents/claude.png" tone={agentLine.tone} />{/snippet}
+          Claude Code
+        </NavItem>
       </div>
     </aside>
   {/if}
@@ -214,42 +230,6 @@
     display: grid;
     gap: var(--space-1);
   }
-  .agent {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-    padding: var(--space-1-5) var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--ink-3);
-    text-decoration: none;
-    cursor: default;
-    -webkit-user-drag: none;
-    transition: background-color var(--dur-instant) var(--ease-out);
-  }
-  .agent__text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .agent__dot {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-full);
-    background: var(--ink-4);
-  }
-  .agent__dot--gain {
-    background: var(--gain);
-  }
-  .agent__dot--warn {
-    background: var(--warn);
-  }
-  .agent__dot--danger {
-    background: var(--danger);
-  }
 
   .main {
     position: relative;
@@ -259,10 +239,5 @@
     min-height: 0;
     overflow: hidden;
     background: var(--paper);
-  }
-  @media (hover: hover) {
-    .agent:hover {
-      background: var(--hover);
-    }
   }
 </style>

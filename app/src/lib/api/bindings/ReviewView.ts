@@ -21,7 +21,11 @@ id: string, job: JobRow, head: JobHead, verdict: Verdict,
 /**
  * Suggest's one line.
  */
-headline: string, master: MasterChoice, masters: Array<MasterChoice>, mode: Mode, now: ScoreView, projected: ScoreView, ceiling: ScoreView, skills: Array<SkillChip>, 
+headline: string, 
+/**
+ * The `claude --model` alias or name the suggestions were made with (`models` maps it to the id that served it).
+ */
+model: string, master: MasterChoice, masters: Array<MasterChoice>, mode: Mode, now: ScoreView, projected: ScoreView, ceiling: ScoreView, skills: Array<SkillChip>, 
 /**
  * In the resume's section order, then `bank` ("From your bank") last; empty groups omitted.
  */

@@ -5,8 +5,11 @@
 
 import type { Attachment } from "svelte/attachments";
 
-/** A legend key: the mark a row stands for in the chart it explains (the score bar's segments and ceiling tick). */
-export type TipKey = "base" | "gain" | "lost" | "tick";
+/**
+ * A legend key: the mark a row stands for in the chart it explains (the score bar's segments and ceiling tick; the
+ * keyword meter's cells: on the resume, added by an edit, missing).
+ */
+export type TipKey = "base" | "gain" | "lost" | "tick" | "have" | "add" | "missing";
 /** A number's meaning, in the system's colors: points gained, or lost. */
 export type TipTone = "gain" | "warn";
 
@@ -17,9 +20,17 @@ export interface TipRow {
   tone?: TipTone;
 }
 
+/** A named list: its legend key, label and count over its items, which wrap (`tone` colors them). */
+export interface TipGroup {
+  label: string;
+  key?: TipKey;
+  tone?: TipTone;
+  items: string[];
+}
+
 /**
  * A tooltip with data. Any part may be left out: a title with its value ("Fit 78"), the value alone, labeled rows
- * (with legend keys when they explain a chart), a note under them.
+ * (with legend keys when they explain a chart), named lists, a note under them.
  */
 export interface TipData {
   title?: string;
@@ -27,6 +38,7 @@ export interface TipData {
   value?: string | number;
   tone?: TipTone;
   rows?: TipRow[];
+  groups?: TipGroup[];
   /** A sentence under the rest, in ink 3. */
   note?: string;
 }

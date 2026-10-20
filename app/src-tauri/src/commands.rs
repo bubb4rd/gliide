@@ -1,16 +1,17 @@
 //! The Tauri commands: `app/src/lib/api/index.ts` names them and their arguments. Each is async and runs its work
 //! on the blocking pool or as a model-call task, so the UI thread never waits on SQLite, Typst or `claude`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::State;
 
 use crate::dto::{
-    AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit, Decision,
-    EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView,
-    FolderPdf, FolderView, ImportChoices, ImportView, JobRow, JobView, Library, LogoRow,
-    LogoSource, Mode, Place, ReviewView, Rewritten, SalaryRange, SearchCursor, SearchResults,
-    Settings,
+    Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
+    Decision, EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView,
+    FeedView, FolderPdf, FolderView, ImportChoices, ImportView, Instructed, JobRow, JobView,
+    KeyDecision, Library, LogoRow, LogoSource, Mode, Place, Progress, ReviewView, Rewritten,
+    SalaryRange, SearchCursor, SearchResults, Settings,
 };
 use crate::state::{App, blocking};
 use crate::{
@@ -36,6 +37,12 @@ pub async fn get_settings(app: St<'_>) -> Res<Settings> {
 #[tauri::command]
 pub async fn set_settings(app: St<'_>, settings: Settings) -> Res<Settings> {
     blocking(&app, move |app| settings::set_settings(app, settings)).await
+}
+
+/// Each asked `claude --model` alias or name → the model id that last served it.
+#[tauri::command]
+pub async fn models(app: St<'_>) -> Res<HashMap<String, String>> {
+    blocking(&app, |app| app.served_models()).await
 }
 
 // ── Bank and masters ──
@@ -156,9 +163,19 @@ pub async fn start_review(
 }
 
 #[tauri::command]
+pub async fn prepare_review(app: St<'_>, job: String) -> Res<()> {
+    review::prepare_review(&app, &job).await
+}
+
+#[tauri::command]
 pub async fn cancel(app: St<'_>, job: String) -> Res<()> {
     app.cancel(&job);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn running(app: St<'_>) -> Res<Vec<Progress>> {
+    Ok(app.running())
 }
 
 // ── Review ──
@@ -231,6 +248,42 @@ pub async fn rewrite_line(
 #[tauri::command]
 pub async fn save_variant(app: St<'_>, review: String, key: String) -> Res<ReviewView> {
     review::save_variant(&app, &review, key).await
+}
+
+#[tauri::command]
+pub async fn instruct(
+    app: St<'_>,
+    review: String,
+    instruction: String,
+    scope: Vec<String>,
+    confirmed: Vec<String>,
+) -> Res<Instructed> {
+    review::instruct(&app, &review, instruction, scope, confirmed).await
+}
+
+#[tauri::command]
+pub async fn accept(app: St<'_>, review: String, keys: Vec<String>) -> Res<Accepted> {
+    review::accept(&app, &review, keys).await
+}
+
+#[tauri::command]
+pub async fn reject(app: St<'_>, review: String, keys: Vec<String>) -> Res<ReviewView> {
+    review::reject(&app, &review, keys).await
+}
+
+#[tauri::command]
+pub async fn withdraw(
+    app: St<'_>,
+    review: String,
+    keys: Vec<String>,
+    restore: Vec<String>,
+) -> Res<ReviewView> {
+    review::withdraw(&app, &review, keys, restore).await
+}
+
+#[tauri::command]
+pub async fn settle(app: St<'_>, review: String, decisions: Vec<KeyDecision>) -> Res<ReviewView> {
+    review::settle(&app, &review, decisions).await
 }
 
 #[tauri::command]

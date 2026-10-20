@@ -14,7 +14,7 @@ use crate::dto::{
     ChipState, JobHead, JobRow, JobView, MasterChoice, SalaryPeriod, SalaryRange, SkillChip, Stage,
 };
 use crate::error::{AppError, Result};
-use crate::state::{App, Library, blocking, lock, model_call};
+use crate::state::{App, Library, blocking, lock, model_call, single_flight};
 
 /// Every posting, newest first, but the feed's that you haven't opened.
 pub fn jobs(app: &App) -> Result<Vec<JobRow>> {
@@ -130,28 +130,32 @@ pub fn posting(app: &App, job: &str) -> Result<PostingRow> {
 }
 
 /// The posting's requirements: from the store when this text, prompt and model were extracted before, else one
-/// Extract call (cancellable under the posting's id).
+/// Extract call (cancellable under the posting's id), joined by any asking for the same while it runs.
 pub async fn requirements(app: &Arc<App>, row: &PostingRow) -> Result<Requirements> {
     let model = app.settings().extract_model;
     let key = extract_key(&row.posting);
-    if let Some(req) = lock(&app.store).requirements(&key, &model)? {
-        return Ok(req);
-    }
-    let llm = app.claude().await?;
-    let posting = row.posting.clone();
-    let m = model.clone();
-    let (req, out) = model_call(app, &row.id, Stage::Extracting, async move {
-        extract::extract(&llm, &extract::schema(), &posting, &m).await
+    single_flight(app, &format!("extract {model} {key}"), async |_| {
+        if let Some(req) = lock(&app.store).requirements(&key, &model)? {
+            return Ok(req);
+        }
+        let llm = app.claude().await?;
+        let posting = row.posting.clone();
+        let m = model.clone();
+        let (req, out) = model_call(app, &row.id, Stage::Extracting, async move {
+            extract::extract(&llm, &extract::schema(), &posting, &m).await
+        })
+        .await?;
+        app.note_served(&model, &out);
+        lock(&app.store).put_requirements(
+            &row.id,
+            &key,
+            &model,
+            &req,
+            out.latency().as_millis() as u64,
+        )?;
+        Ok(req)
     })
-    .await?;
-    lock(&app.store).put_requirements(
-        &row.id,
-        &key,
-        &model,
-        &req,
-        out.latency().as_millis() as u64,
-    )?;
-    Ok(req)
+    .await
 }
 
 /// Every master's score now against `req`, best first.

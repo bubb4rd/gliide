@@ -8,6 +8,7 @@ mod claude;
 pub mod cover;
 pub mod extract;
 pub mod import;
+pub mod instruct;
 pub mod rewrite;
 pub mod suggest;
 
@@ -100,6 +101,18 @@ impl Structured {
             .iter()
             .map(|a| Duration::from_millis(a.latency_ms))
             .sum()
+    }
+
+    /// The model id that served the last turn for `asked` (a `--model` alias or full name): the one naming it, else
+    /// the first; `None` when the agent reported none.
+    pub fn served(&self, asked: &str) -> Option<&str> {
+        let models = &self.attempts.last()?.usage.models;
+        let asked = asked.to_lowercase();
+        models
+            .iter()
+            .find(|m| m.to_lowercase().contains(&asked))
+            .or_else(|| models.first())
+            .map(String::as_str)
     }
 }
 
@@ -221,4 +234,41 @@ pub(crate) fn repair_input(input: &str, rejected: &Rejected) -> String {
 /// First non-empty line of `s`, trimmed.
 pub(crate) fn first_line(s: &str) -> &str {
     s.trim().lines().next().unwrap_or("").trim()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn served_by(models: &[&str]) -> Structured {
+        Structured {
+            value: Value::Null,
+            attempts: vec![Attempt {
+                latency_ms: 0,
+                usage: Usage {
+                    models: models.iter().map(|m| (*m).to_owned()).collect(),
+                    ..Usage::default()
+                },
+                raw: String::new(),
+            }],
+        }
+    }
+
+    #[test]
+    fn served_prefers_the_model_naming_the_alias() {
+        let out = served_by(&["claude-haiku-4-5", "claude-sonnet-5-5-20261001"]);
+        assert_eq!(out.served("Sonnet"), Some("claude-sonnet-5-5-20261001"));
+        assert_eq!(out.served("claude-haiku-4-5"), Some("claude-haiku-4-5"));
+    }
+
+    #[test]
+    fn served_falls_back_to_the_first_model() {
+        let out = served_by(&["claude-opus-5-5", "claude-haiku-4-5"]);
+        assert_eq!(out.served("sonnet"), Some("claude-opus-5-5"));
+    }
+
+    #[test]
+    fn served_is_none_when_no_model_was_reported() {
+        assert_eq!(served_by(&[]).served("sonnet"), None);
+    }
 }

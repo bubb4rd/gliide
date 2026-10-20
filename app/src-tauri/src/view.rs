@@ -62,6 +62,7 @@ pub fn review(
             CoreVerdict::Skip => Verdict::Skip,
         },
         headline: r.suggestions.headline.clone(),
+        model: r.model.clone(),
         master,
         masters: r.masters.clone(),
         mode: r.mode.into(),
@@ -446,6 +447,7 @@ fn change_view(r: &Review, c: &Change, draft: &Draft, t: &Tailored) -> ChangeVie
     ChangeView {
         key: c.key.clone(),
         op: c.op.target().0.to_owned(),
+        target: scope_target(&c.op),
         meta: meta(r, c, t, is_in, &unmarked),
         text,
         marks,
@@ -523,6 +525,21 @@ pub fn target_line(op: &Op) -> Option<&str> {
         Op::Set { line, .. } | Op::Swap { line, .. } => Some(line),
         Op::NoteAdd { note, .. } => Some(note),
         _ => None,
+    }
+}
+
+/// The id `instruct` takes in its scope for `op`'s line: the bullet or note line, `summary`, the entry a bullet is
+/// added to, or the skills line; `None` for entry-level ops.
+pub fn scope_target(op: &Op) -> Option<String> {
+    match op {
+        Op::Summary { .. } => Some("summary".to_owned()),
+        Op::Add { entry, .. } => Some(entry.clone()),
+        Op::SkillAdd { group, .. }
+        | Op::SkillRemove { group, .. }
+        | Op::SkillRename { group, .. }
+        | Op::SkillMove { from: group, .. } => Some(group.clone()),
+        Op::Include { .. } | Op::Exclude { .. } | Op::SwapEntry { .. } | Op::Reorder { .. } => None,
+        op => target_line(op).map(str::to_owned),
     }
 }
 

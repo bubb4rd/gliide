@@ -2,10 +2,14 @@
 import type { Stage } from "./Stage";
 
 /**
- * Event `progress`: a model call started for a job. The UI shows it until the command returns.
+ * A model call running, in event `progress` (every call running, whenever one starts or ends) and `running`.
  */
 export type Progress = { 
 /**
  * The posting id the step runs for (what `cancel` takes).
  */
-job: string, stage: Stage, };
+job: string, stage: Stage, 
+/**
+ * When it started, ms since the Unix epoch.
+ */
+startedAt: number, };

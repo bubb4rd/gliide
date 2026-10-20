@@ -49,7 +49,8 @@ pub async fn read_import(app: &Arc<App>, path: String) -> Result<ImportView> {
             let llm = app.claude().await?;
             let model = app.settings().extract_model;
             let pages = f.pages;
-            let resume = model_call(app, JOB, Stage::Importing, async move {
+            let m = model.clone();
+            let (resume, out) = model_call(app, JOB, Stage::Importing, async move {
                 let links: Vec<Link<'_>> = f
                     .links
                     .iter()
@@ -58,11 +59,10 @@ pub async fn read_import(app: &Arc<App>, path: String) -> Result<ImportView> {
                         url: &l.url,
                     })
                     .collect();
-                let (r, _) =
-                    import::import(&llm, &import::schema(), &f.text, &links, &model).await?;
-                Ok(r)
+                import::import(&llm, &import::schema(), &f.text, &links, &m).await
             })
             .await?;
+            app.note_served(&model, &out);
             (resume, pages)
         }
     };

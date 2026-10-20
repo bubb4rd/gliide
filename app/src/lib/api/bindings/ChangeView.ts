@@ -11,6 +11,12 @@ export type ChangeView = { key: string,
  */
 op: string, 
 /**
+ * The id `instruct` takes in `scope` for this change's line: the bullet or note line for line edits
+ * (`rewrite`, `use_variant`, `set`, `swap`, `note_add`, `cut`), `summary` for the summary, the entry for `add`,
+ * the skills line for skill ops; `None` for entry-level ops (`include`, `exclude`, `swap_entry`, `reorder`).
+ */
+target: string | null, 
+/**
  * What the row reads: the line as it will read for line edits; a sentence otherwise
  * (`Add CI/CD to Tools & Technologies`, `Include Campus IT Help Desk, Arizona State University, 2023–2024`).
  */

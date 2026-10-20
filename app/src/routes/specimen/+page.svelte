@@ -30,6 +30,7 @@
   import { app } from "$lib/stores/app.svelte";
   import { theme } from "$lib/stores/theme.svelte";
   import {
+    AgentMark,
     Backdrop,
     Badge,
     Button,
@@ -229,7 +230,7 @@
     }),
   );
 
-  // Folded sections, as on the job screen (which remembers them in $lib/stores/folds; the specimen keeps its own).
+  // Folded sections, kept by the specimen itself.
   const folded = new SvelteSet<string>();
   const sections = $derived(["skills", ...groups.map((g) => g.label)]);
   const allFolded = $derived(sections.every((id) => folded.has(id)));
@@ -482,6 +483,18 @@
         note: "Read back from the exported PDF",
       },
     },
+    {
+      name: "Named lists (keyword meter)",
+      content: {
+        title: "Keywords",
+        value: "8 of 14",
+        groups: [
+          { label: "On your resume", key: "have", items: ["TypeScript", "React", "Node.js", "PostgreSQL", "Git", "REST APIs"] },
+          { label: "Added by your edits", key: "add", items: ["CI/CD", "SQL"] },
+          { label: "Missing", key: "missing", tone: "warn", items: ["Objective-C", "scripting language", "AWS", "GCP", "Bash", "Kubernetes"] },
+        ],
+      },
+    },
   ];
 
   const swatches = [
@@ -556,13 +569,27 @@
                 {#snippet trailing()}<ScoreBar bar={false} projected={59} />{/snippet}
                 Contoso
               </NavItem>
+              <NavItem
+                href="#review"
+                quiet
+                sub="Software Engineer, New Grads"
+                status={{ label: "Saved", tone: "neutral" }}
+                busy="Suggesting…"
+              >
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} projected={61} />{/snippet}
+                Litware
+              </NavItem>
             </Nav>
           </div>
           <div>
             <Nav label="App (specimen)">
               <NavItem href="#review" icon={SlidersHorizontal}>Settings</NavItem>
             </Nav>
-            <div class="agent"><i></i>Claude Code · signed in</div>
+            <NavItem href="#review" sub="Signed in · Max">
+              {#snippet lead()}<AgentMark src="/agents/claude.png" tone="gain" />{/snippet}
+              Claude Code
+            </NavItem>
           </div>
         </aside>
 
@@ -1138,6 +1165,26 @@
         </Card>
         <Card pad>
           <div class="tile">
+            <p class="label">Agent mark · the sidebar's foot · signed in · signed out · not installed · not checked or unknown</p>
+            <div class="row">
+              <AgentMark src="/agents/claude.png" tone="gain" />
+              <AgentMark src="/agents/claude.png" tone="warn" />
+              <AgentMark src="/agents/claude.png" tone="danger" />
+              <AgentMark src="/agents/claude.png" tone="neutral" />
+            </div>
+            <Nav label="Agent states (specimen)">
+              {#each [{ tone: "gain", sub: "Signed in · Max" }, { tone: "warn", sub: "Signed out" }, { tone: "danger", sub: "Not installed" }, { tone: "neutral", sub: "Couldn't check sign-in" }] as const as state (state.sub)}
+                <NavItem href="#review" sub={state.sub}>
+                  {#snippet lead()}<AgentMark src="/agents/claude.png" tone={state.tone} />{/snippet}
+                  Claude Code
+                </NavItem>
+              {/each}
+            </Nav>
+            <p class="meta">The agent as the account you’re signed in to: a presence dot cut into its icon’s corner, its state in words under its name.</p>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
             <p class="label">Company mark as a button · blank (hover or focus: the icon) · set · files over it</p>
             <div class="row">
               <CompanyMark
@@ -1516,9 +1563,25 @@
                 {#snippet trailing()}<ScoreBar bar={false} now={70} projected={76} />{/snippet}
                 A company with a long name that truncates
               </NavItem>
+              <NavItem
+                href="#review"
+                quiet
+                sub="Senior Front-End Engineer, Payments Platform"
+                status={{ label: "Applied", tone: "accent" }}
+                busy="Suggesting…"
+              >
+                {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                {#snippet trailing()}<ScoreBar bar={false} projected={61} />{/snippet}
+                Busy: a model call running for it
+              </NavItem>
             </Nav>
           </div>
           <KeyFooter keys={reviewKeys} />
+        </div>
+        <!-- `bare`: the Commands button alone, inside another toolbar (the chat's composer). -->
+        <div class="keys-bare">
+          <span class="meta">Bare, in the chat composer’s toolbar</span>
+          <KeyFooter bare keys={reviewKeys} />
         </div>
       </Card>
     </section>
@@ -1675,20 +1738,6 @@
   }
   .frame__recent .label {
     padding: var(--space-2) var(--space-2) 0;
-  }
-  .agent {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2);
-    font-size: var(--text-sm);
-    color: var(--ink-3);
-  }
-  .agent i {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-full);
-    background: var(--gain);
   }
   .frame__main {
     display: flex;
@@ -1942,6 +1991,14 @@
   }
   .nav-sample {
     padding: var(--space-3);
+  }
+  .keys-bare {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-1-5) var(--space-3);
+    box-shadow: inset 0 1px 0 var(--line);
   }
 
   /* ── The synthetic sheet (stands in for the renderer's SVG) ── */

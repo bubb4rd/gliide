@@ -289,8 +289,44 @@ Prompts and schemas are files in `prompts/`, built in and overridable from a dev
 | Extract | Posting text | `Requirements` |
 | Suggest (streamed) | Tagged master; bank candidates in bank-aware mode; `Requirements`; posting | `Suggestions` |
 | Rewrite one | Master, posting, the line, your note ("shorter", "mention Kafka") | One line |
+| Instruct | Tailored resume as it reads now (tagged, with budgets, variants and skills), requirement terms marked on or off the page, scope, your instruction | A reply, up to 6 edits, what it skipped |
 | Import | Resume text, links (`anchor text -> URL`) | The resume word for word, in ATS Fit's master shape (`prompts/import.md`); merged into the bank by code (below) |
 | Cover letter / one paragraph | Tailored resume, posting, letter, note | Letter / paragraph |
+
+**Running calls.** Each call runs as a task under its job (`model_call`; a newer call for the job supersedes it), and
+event `progress` carries every call running whenever one starts or ends (`running` reads it on launch): the job page
+shows its own, the sidebar's Recent a job's stage word. Extract and Suggest answers are stored by input and model, so
+they outlive the page: leaving a job leaves them running (a job left during Extract still gets its Suggest,
+`prepare_review`, which saves the review and its fit score without opening it), and several jobs' run side by side.
+One call per stored answer (`single_flight`): a caller asking for one already running waits for it and reads the
+answer from the store, or fails with its error, so a job you come back to joins its call rather than paying for a
+second. An ask (Instruct) goes on too: its job's session is kept until it's answered (the chat's thread lives there),
+and should another review be open by then, the edits land on the asking review's draft from the copy taken when it
+was asked; opening the job again while it runs shows the same thread and reopens the review behind the ask. Rewrite
+and the letter work on the open review: leaving the job cancels them. Only `start_review` takes the one open-review
+slot, and a newer one wins it.
+
+**Instruct** (`prompts/instruct.md`) takes one free-form instruction ("lean harder into backend and databases") and
+proposes a few edits within a scope (entries, bullets, skills lines, the summary; empty for anywhere). Each edit lands
+as your own edit turned off, all in one undo step, pending until you accept it; accepting turns off whatever else holds
+that line. An edit that names a line off the master, outside the scope, a note line or the line's current words is
+dropped into `skipped` beside the parts the model couldn't back. On a real bank (5.7k characters of input) sonnet
+answered in 14–16 s in one turn, every id a real tag, the scope kept.
+
+Its honesty rules add to Suggest's, because you are in the conversation. Three sources back a line: the resume, the
+skills you confirmed (the chat's "Do you have Bash experience?"), and your own word in the instruction ("I ran the
+weekly status meeting there", "add that I managed the status meetings"). Hard claims (tools, numbers, names, titles,
+dates, specific duties) need one of them and stay in the entry they happened in, or where you say they did; a tool
+you only name in a request ("add Bash") is asked about rather than added. The grounding validator takes the
+instruction and the confirmed skills as sources for that call's names and numbers. `cargo run -p resume-llm --example
+instruct` runs a list of asks against a bank and master through `claude -p` to see what the prompt does.
+
+Suggest and Instruct share two rules. Soft skills (time management, communication, documentation…) are how the work
+was done, not claims of their own: backed wherever a line's work plainly exercises them, written into that work as a
+person would write it, never bolted on and never with invented specifics. And rewording never raises a claim
+(suggested is not delivered). On a real bank and an Acme Pharma posting asking for time management, Suggest marked it
+"no" (a gap) in 3 of 3 runs before; "add", on the testing bullet, in 3 of 3 after (projected 77–82% before, 80–85%
+after); a Chase posting's plan was unchanged.
 
 Extract defaults to **sonnet**. In the M0 spike (`claude -p`, 11 postings each) sonnet was the fastest (p50 6.3 s, p90
 6.9 s) and ranked priorities best; haiku runs with extended thinking under Claude Code (p50 14.8 s, 10.9 s with
@@ -722,7 +758,7 @@ gliide/
     src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen)
   templates/                 *.typ + manifests (classic-serif, cover-letter); fonts/
   design/                    DESIGN.md, tokens.css, lint.mjs, UI fonts
-  prompts/                   extract, suggest, rewrite, import, cover (.md + .schema.json)
+  prompts/                   extract, suggest, rewrite, instruct, import, cover (.md + .schema.json)
   data/aliases.json          skill alias dictionary
   fixtures/                  banks, masters, postings, recorded model outputs
 ```

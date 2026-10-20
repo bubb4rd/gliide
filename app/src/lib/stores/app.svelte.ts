@@ -1,6 +1,7 @@
 // What the shell and every screen share: jobs (the sidebar's counts and Recent), applications, company logos, the
-// library (bank and masters counts), settings and the agent's status. Each refresh keeps the last good value when a
-// command fails (lists start empty, the agent unknown), so the window always draws; the failure goes to the console.
+// library (bank and masters counts), settings, the agent's status, the models its aliases last ran and the model
+// calls running. Each refresh keeps the last good value when a command fails (lists start empty, the agent unknown),
+// so the window always draws; the failure goes to the console.
 
 import {
   agentStatus,
@@ -12,16 +13,21 @@ import {
   library,
   logos,
   logoUrl,
+  models as servedModels,
+  onProgress,
+  running,
   setSettings,
   setStatus as saveStatus,
   type AgentStatus,
   type AppStatus,
   type ApplicationRow,
   type JobRow,
+  type Progress,
   type Library,
   type LogoRow,
   type Settings,
 } from "$lib/api";
+import { modelName } from "$lib/models";
 import { LIFETIME_WITH_ACTION_MS, toast } from "$lib/ui/toast.svelte";
 import { theme } from "./theme.svelte";
 
@@ -49,6 +55,10 @@ class AppStore {
   settings = $state<Settings | null>(null);
   /** Null while unknown (not checked yet, or the check failed). */
   agent = $state<AgentStatus | null>(null);
+  /** Each `claude --model` alias or name asked for → the model id that last answered it; empty until one has. */
+  models = $state<Record<string, string>>({});
+  /** The model calls running, oldest first (`listen` keeps it current). */
+  calls = $state<Progress[]>([]);
   /** Postings deleted while their Undo is still offered: out of every list, still in the store. */
   #deleting = new Set<string>();
 
@@ -139,6 +149,31 @@ class AppStore {
     if (status) this.agent = status;
   }
 
+  /** After a model call: what each alias ran, for the names the chat shows. */
+  async refreshModels() {
+    const served = await attempt("models", servedModels);
+    if (served) this.models = served;
+  }
+
+  /** The model `asked` (an alias or name) runs, by name: "Sonnet 5.5" once a call said which, "Sonnet" before. */
+  modelName(asked: string) {
+    return modelName(this.models[asked] ?? asked);
+  }
+
+  /** Keeps `calls` current until the returned function runs. */
+  async listen(): Promise<() => void> {
+    let stop: () => void;
+    try {
+      stop = await onProgress((calls) => (this.calls = calls));
+    } catch (e) {
+      console.error(`progress events: ${appError(e).message}`);
+      return () => {};
+    }
+    const now = await attempt("running", running);
+    if (now) this.calls = now;
+    return stop;
+  }
+
   async loadSettings() {
     const settings = await attempt("settings", getSettings);
     if (!settings) return;
@@ -175,7 +210,13 @@ class AppStore {
    * needs to pick its first screen; the rest goes on loading.
    */
   async load() {
-    void Promise.all([this.refreshJobs(), this.refreshApplications(), this.refreshLogos(), this.refreshAgent()]);
+    void Promise.all([
+      this.refreshJobs(),
+      this.refreshApplications(),
+      this.refreshLogos(),
+      this.refreshAgent(),
+      this.refreshModels(),
+    ]);
     await Promise.all([this.loadSettings(), this.refreshLibrary()]);
   }
 }

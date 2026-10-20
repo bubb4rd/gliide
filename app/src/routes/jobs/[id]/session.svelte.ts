@@ -3,6 +3,7 @@
 // queued edit reads the review as it stands when its turn comes (two quick clicks on a row toggle it twice).
 
 import {
+  accept,
   addEdit,
   appError,
   cancel,
@@ -10,40 +11,55 @@ import {
   decide,
   exportCover,
   exportPdf,
+  instruct,
   onProgress,
   openJob,
+  prepareReview,
   redo,
-  removeEdit,
-  rewrite,
-  rewriteLine,
-  saveVariant,
+  reject,
   rewriteCoverParagraph,
   setCoverPart,
   setWording,
+  settle,
+  startedAt,
   startReview,
-  toggleSkill,
   undo,
+  withdraw,
   writeCover,
   type AppError,
   type ChangeState,
   type ChangeView,
   type CoverPart,
   type CoverView,
-  type CustomEdit,
   type Decision,
   type Exported,
   type JobView,
+  type KeyDecision,
   type Mode,
   type ReviewView,
-  type Rewritten,
   type Stage,
 } from "$lib/api";
+import { app } from "$lib/stores/app.svelte";
+import { loadThread, saveThread, type Mention, type ProposalState, type Turn, type TurnProposal } from "./thread";
 
 export type Phase = "opening" | "suggesting" | "ready" | "stopped" | "failed";
 
+/** The calls that go on when you leave the job: their answers are stored, so its review is ready when you're back. */
+const KEEPS: Stage[] = ["extracting", "suggesting"];
+
+/** Sessions whose page closed while your ask ran there, by job: kept until it's answered or the page opens again. */
+const kept = new Map<string, Session>();
+
+/** The session for `job`'s page: the kept one, while your ask there still runs, else a new one. */
+export function sessionFor(job: string): Session {
+  const s = kept.get(job);
+  kept.delete(job);
+  return s ?? new Session(job);
+}
+
 export interface Running {
   stage: Stage;
-  /** `performance.now()` when the event arrived. */
+  /** When it started, on the `performance.now()` clock. */
   startedAt: number;
 }
 
@@ -75,12 +91,10 @@ export class Session {
   phase = $state<Phase>("opening");
   /** Why the review couldn't open (phase `failed`). */
   error = $state<AppError | null>(null);
-  /** The model call running for this job, from its `progress` event; null when none (or a cached answer). */
+  /** The model call running for this job (from `progress`, or left running when this opened); null when none. */
   running = $state<Running | null>(null);
   /** The model calls of this run already done (Extract while Suggest runs), for the status's trail. */
   steps = $state<Step[]>([]);
-  /** The row being rewritten from a note: a change's key, or an Other line's (`lineKey`). */
-  rewriting = $state<string | null>(null);
   /** What the toolbar shows: the review's master and mode, or the ones just asked for. */
   master = $state<string | null>(null);
   mode = $state<Mode | null>(null);
@@ -92,53 +106,91 @@ export class Session {
   cover = $state<CoverView | null>(null);
   /** A model call on the letter: the whole letter, or paragraph `n` (from 0). */
   drafting = $state<"letter" | number | null>(null);
+  /** What you asked the agent on this review, oldest first: the chat's turns. */
+  turns = $state<Turn[]>([]);
 
   /** Reports a command's failure (the screen toasts it). */
   onerror: (e: AppError) => void = () => {};
 
   #chain: Promise<unknown> = Promise.resolve();
   #alive = true;
+  #started = false;
+  /** Its page closed while your ask ran: in `kept` until the ask is answered or the page opens again. */
+  #kept = false;
   #unlisten: (() => void) | null = null;
+  /** The review whose thread `turns` holds. */
+  #thread: string | null = null;
 
   constructor(job: string) {
     this.job = job;
   }
 
-  /** Listens for progress, then opens the posting and starts its review. */
+  /**
+   * Listens for progress, then opens the posting and starts its review (joining a call left running for it). A kept
+   * session, its page open again, opens the review again behind your ask (it may not be the open one any more); the
+   * thread stays as it is.
+   */
   async start() {
-    const unlisten = await onProgress((p) => {
-      if (p.job === this.job && this.#alive)
-        this.running = { stage: p.stage, startedAt: performance.now() };
+    if (this.#started) {
+      this.#kept = false;
+      return this.suggest(this.master, this.mode);
+    }
+    this.#started = true;
+    const unlisten = await onProgress((calls) => {
+      const call = calls.find((c) => c.job === this.job);
+      if (call && this.#alive) this.running = { stage: call.stage, startedAt: startedAt(call) };
     });
     if (!this.#alive) return unlisten();
     this.#unlisten = unlisten;
+    const call = app.calls.find((c) => c.job === this.job);
+    if (call) this.running = { stage: call.stage, startedAt: startedAt(call) };
     await this.open();
   }
 
-  /** Stops listening; a model call still running for this job is cancelled. */
-  dispose() {
-    this.#alive = false;
-    this.#unlisten?.();
-    if (this.running) void cancel(this.job).catch(() => {});
+  /**
+   * Its page closed. With your ask still running, the session is kept (`sessionFor` gives it back) until it's
+   * answered; otherwise it's closed.
+   */
+  leave() {
+    this.onerror = () => {};
+    if (this.instructing) {
+      this.#kept = true;
+      kept.set(this.job, this);
+    } else this.#close();
   }
 
-  /** Extract (cached per posting), then Suggest with the job's last master and mode. */
+  /** Stops listening. Extract and Suggest go on (`KEEPS`); any other call for this job is cancelled. */
+  #close() {
+    this.#alive = false;
+    this.#unlisten?.();
+    if (this.running && !KEEPS.includes(this.running.stage)) void cancel(this.job).catch(() => {});
+  }
+
+  /** Extract (cached per posting), then Suggest with the job's last master and mode: both, even if you leave. */
   async open() {
     this.phase = "opening";
     this.error = null;
     this.steps = [];
     try {
       const view = await openJob(this.job);
-      if (!this.#alive) return;
+      if (!this.#alive) {
+        void prepareReview(this.job)
+          .catch((e) => console.error(`prepare review: ${appError(e).message}`))
+          .finally(() => app.refreshJobs());
+        return;
+      }
       this.view = view;
       this.master ??= view.masters[0]?.id ?? null;
     } catch (e) {
       this.running = null;
       return this.#stop(appError(e));
     }
+    // Extract done joins the status's trail; a Suggest already running (left running for this job) stays the status.
     const done = this.running;
-    if (done) this.steps = [{ stage: done.stage, ms: performance.now() - done.startedAt }];
-    this.running = null;
+    if (done?.stage === "extracting") {
+      this.steps = [{ stage: done.stage, ms: performance.now() - done.startedAt }];
+      this.running = null;
+    }
     await this.suggest(null, null);
   }
 
@@ -155,11 +207,15 @@ export class Session {
         if (!this.#alive) return;
         this.#show(review);
         this.arrival++;
+        // Suggest ran (not a cached answer): its alias may name a newer model now.
+        if (this.running) void app.refreshModels();
         this.phase = "ready";
       } catch (e) {
         if (this.#alive) this.#stop(appError(e));
       } finally {
         this.running = null;
+        // Left while it ran: the review was saved all the same, with the fit score Recent shows.
+        if (!this.#alive) void app.refreshJobs();
       }
     });
   }
@@ -180,24 +236,6 @@ export class Session {
     return this.#edit((id) => setWording(id, key, text));
   }
 
-  /** Your own edit removed, or a suggestion back to its suggested wording. */
-  remove(change: ChangeView) {
-    return this.#edit((id) => (change.custom ? removeEdit(id, change.key) : setWording(id, change.key, null)));
-  }
-
-  /** The change's line saved to the bank as a variant of its bullet; true when it was. */
-  saveVariant(key: string) {
-    return this.#edit((id, review) => (find(review, key)?.savable ? saveVariant(id, key) : null));
-  }
-
-  skill(term: string) {
-    return this.#edit((id) => toggleSkill(id, term));
-  }
-
-  add(edit: CustomEdit) {
-    return this.#edit((id) => addEdit(id, edit));
-  }
-
   undo() {
     return this.#edit((id, review) => (review.canUndo ? undo(id) : null));
   }
@@ -206,33 +244,206 @@ export class Session {
     return this.#edit((id, review) => (review.canRedo ? redo(id) : null));
   }
 
-  /** One model call on a change's line; resolves with the validator's flags (null when it didn't run). */
-  rewrite(key: string, note: string): Promise<Rewritten | null> {
-    return this.#rewrite(key, (id) => rewrite(id, key, note));
+  /** The instruction the agent is carrying out, if any. */
+  get instructing(): Turn | null {
+    return this.turns.find((t) => t.status === "running") ?? null;
   }
 
-  /** One model call on a line no change touches (null: the summary); it comes back as your edit. */
-  rewriteLine(line: string | null, key: string, note: string): Promise<Rewritten | null> {
-    return this.#rewrite(key, (id) => rewriteLine(id, line, note));
-  }
-
-  #rewrite(key: string, call: (review: string) => Promise<Rewritten>): Promise<Rewritten | null> {
+  /**
+   * One model call: `ask` carried out over the page (or within `scope`), its edits added as yours and off, pending,
+   * in a new turn; `confirmed` names skills you said you have though the resume doesn't show them. Resolves with the
+   * turn (null when it couldn't start).
+   */
+  instruct(ask: string, scope: Mention[], confirmed: string[] = []): Promise<Turn | null> {
     return this.#queue(async () => {
       const review = this.review;
-      if (!review || !this.#alive) return null;
-      this.rewriting = key;
+      if (!review || !this.#alive || this.phase !== "ready") return null;
+      const thread = review.id;
+      const list = this.turns;
+      list.push({
+        id: crypto.randomUUID(),
+        at: Date.now(),
+        ask,
+        scope,
+        ...(confirmed.length ? { confirmed } : {}),
+        status: "running",
+        reply: "",
+        proposals: [],
+        skipped: [],
+        ms: 0,
+        error: null,
+      });
+      const turn = list[list.length - 1];
+      saveThread(this.job, thread, $state.snapshot(list));
+      const started = performance.now();
       try {
-        const done = await call(review.id);
+        const done = await instruct(
+          review.id,
+          ask,
+          scope.map((m) => m.id),
+          confirmed,
+        );
+        turn.reply = done.reply;
+        turn.model = done.model;
+        void app.refreshModels();
+        turn.proposals = done.proposals.map((p) => ({
+          ...p,
+          displaced: [],
+          rejected: false,
+        }));
+        turn.skipped = done.skipped;
+        turn.status = "done";
         if (this.#alive) this.#show(done.review);
-        return done;
+      } catch (e) {
+        const error = appError(e);
+        turn.status = error.kind === "cancelled" ? "stopped" : "failed";
+        turn.error = error.kind === "cancelled" ? null : error.message;
+        if (this.#alive) this.#report(error);
+      } finally {
+        turn.ms = performance.now() - started;
+        this.running = null;
+        // The review may have changed under the call (another master): the turn stays with the one it was asked on.
+        saveThread(this.job, thread, $state.snapshot(list));
+        // Answered with its page closed: the session is done.
+        if (this.#kept) {
+          if (kept.get(this.job) === this) kept.delete(this.job);
+          this.#kept = false;
+          this.#close();
+        }
+      }
+      return turn;
+    });
+  }
+
+  /**
+   * Your answer to whether you have a skill the agent left out (`turn.skipped[index].term`): yes asks the same again,
+   * with that skill confirmed (resolves with the new turn); no leaves it out. Either way the question is answered.
+   */
+  answer(turn: Turn, index: number, yes: boolean): Promise<Turn | null> {
+    const skip = turn.skipped[index];
+    if (!skip?.term || skip.answer) return Promise.resolve(null);
+    skip.answer = yes ? "yes" : "no";
+    this.#saveThread();
+    if (!yes) return Promise.resolve(null);
+    const confirmed = [...(turn.confirmed ?? []), skip.term];
+    return this.instruct(turn.ask, turn.scope, [...new Map(confirmed.map((t) => [t.toLowerCase(), t])).values()]);
+  }
+
+  /** What asking again from `from` takes back: the asks after it, and its and their edits accepted onto the page. */
+  rewinding(from: Turn): { later: number; accepted: number } {
+    const at = this.turns.findIndex((t) => t.id === from.id);
+    const review = this.review;
+    if (at < 0 || !review) return { later: 0, accepted: 0 };
+    const gone = this.turns.slice(at);
+    return {
+      later: gone.length - 1,
+      accepted: gone.flatMap((t) => t.proposals).filter((p) => proposalState(review, p) === "accepted").length,
+    };
+  }
+
+  /**
+   * Asks again from where `from` was, as `ask` within `scope` (its confirmed skills kept): `from` and every turn after
+   * it leave the thread, and their edits leave the page in one undo step (the changes accepting them turned off back
+   * on); then the ask goes out as a new turn. Resolves with it (null when it couldn't start).
+   */
+  async resend(from: Turn, ask: string, scope: Mention[]): Promise<Turn | null> {
+    const at = () => this.turns.findIndex((t) => t.id === from.id);
+    if (at() < 0 || this.instructing) return null;
+    const gone = this.turns.slice(at()).flatMap((t) => t.proposals);
+    const confirmed = from.confirmed ?? [];
+    if (gone.length) {
+      const done = await this.#edit((id, review) => {
+        const keys = gone.map((p) => p.key).filter((k) => find(review, k));
+        const restore = gone.flatMap((p) => p.displaced).filter((k) => find(review, k));
+        return keys.length || restore.length ? withdraw(id, keys, restore) : null;
+      });
+      // Nothing of theirs on the page is fine; a failed withdraw keeps the thread as it was.
+      if (!done && gone.some((p) => this.review && find(this.review, p.key))) return null;
+    }
+    const i = at();
+    if (i < 0) return null;
+    this.turns.splice(i);
+    this.#saveThread();
+    return this.instruct(ask, scope, confirmed);
+  }
+
+  /** Turns changes on (proposals or suggestions); one that takes another change's line turns that one off. */
+  accept(keys: string[]) {
+    return this.#queue(async () => {
+      const review = this.review;
+      if (!review || !this.#alive || this.phase !== "ready" || !keys.length) return false;
+      try {
+        const done = await accept(review.id, keys);
+        if (!this.#alive) return false;
+        this.#show(done.review);
+        for (const p of this.#proposals(keys))
+          p.displaced = done.displaced.filter((d) => d.by === p.key).map((d) => d.key);
+        this.#saveThread();
+        return true;
       } catch (e) {
         if (this.#alive) this.#report(appError(e));
-        return null;
-      } finally {
-        this.rewriting = null;
-        this.running = null;
+        return false;
       }
     });
+  }
+
+  /** Your own edits among `keys` removed, suggestions turned off: one undo step. */
+  async reject(keys: string[]) {
+    if (!keys.length) return false;
+    const done = await this.#edit((id) => reject(id, keys));
+    if (done) {
+      for (const p of this.#proposals(keys)) p.rejected = true;
+      this.#saveThread();
+    }
+    return done;
+  }
+
+  /** An accepted proposal back to pending, and the changes it turned off back on. */
+  async takeBack(p: TurnProposal) {
+    const decisions: KeyDecision[] = [
+      { key: p.key, decision: "off" },
+      ...p.displaced.map((key) => ({ key, decision: null })),
+    ];
+    const done = await this.#edit((id) => settle(id, decisions));
+    if (done) {
+      p.displaced = [];
+      this.#saveThread();
+    }
+    return done;
+  }
+
+  /** A rejected proposal added again, pending (two undo steps: the edit, then setting it aside). */
+  restore(p: TurnProposal) {
+    return this.#queue(async () => {
+      const review = this.review;
+      if (!review || !this.#alive || this.phase !== "ready") return false;
+      try {
+        const before = new Set(review.groups.flatMap((g) => g.changes.map((c) => c.key)));
+        let next = await addEdit(review.id, p.edit);
+        const added = next.groups.flatMap((g) => g.changes).find((c) => c.custom && !before.has(c.key));
+        if (added) next = await settle(next.id, [{ key: added.key, decision: "off" }]);
+        if (!this.#alive) return false;
+        this.#show(next);
+        if (added) {
+          p.key = added.key;
+          p.rejected = false;
+          this.#saveThread();
+        }
+        return true;
+      } catch (e) {
+        if (this.#alive) this.#report(appError(e));
+        return false;
+      }
+    });
+  }
+
+  /** The turns' proposals among `keys`. */
+  #proposals(keys: string[]): TurnProposal[] {
+    return this.turns.flatMap((t) => t.proposals).filter((p) => keys.includes(p.key));
+  }
+
+  #saveThread() {
+    if (this.#thread) saveThread(this.job, this.#thread, $state.snapshot(this.turns));
   }
 
   export(): Promise<Exported | null> {
@@ -337,6 +548,13 @@ export class Session {
     this.review = review;
     this.master = review.master.id;
     this.mode = review.mode;
+    // Another review (master, mode, a re-run) has a thread of its own.
+    if (review.id !== this.#thread) {
+      this.#thread = review.id;
+      this.turns = loadThread(this.job, review.id, (key) => find(review, key) !== undefined);
+      // A thread carried over from the review this one replaced is this one's from now on.
+      this.#saveThread();
+    }
   }
 
   /** A failed open or Suggest: cancelling goes back quietly to what was there; anything else says why. */
@@ -362,4 +580,11 @@ export function find(review: ReviewView, key: string): ChangeView | undefined {
     const change = group.changes.find((c) => c.key === key);
     if (change) return change;
   }
+}
+
+/** Where a proposal stands in the review as it is now: undo can take it away, and the plan can turn it on or off. */
+export function proposalState(review: ReviewView, p: TurnProposal): ProposalState {
+  const change = find(review, p.key);
+  if (!change) return p.rejected ? "rejected" : "gone";
+  return change.state === "off" ? "pending" : "accepted";
 }

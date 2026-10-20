@@ -547,6 +547,8 @@ pub struct ReviewView {
     pub verdict: Verdict,
     /// Suggest's one line.
     pub headline: String,
+    /// The `claude --model` alias or name the suggestions were made with (`models` maps it to the id that served it).
+    pub model: String,
     pub master: MasterChoice,
     pub masters: Vec<MasterChoice>,
     pub mode: Mode,
@@ -669,6 +671,10 @@ pub struct ChangeView {
     /// The op: `rewrite`, `use_variant`, `cut`, `add`, `skill_add`, `skill_remove`, `skill_rename`, `skill_move`,
     /// `note_add`, `swap`, `set`, `include`, `exclude`, `swap_entry`, `reorder`, `summary`.
     pub op: String,
+    /// The id `instruct` takes in `scope` for this change's line: the bullet or note line for line edits
+    /// (`rewrite`, `use_variant`, `set`, `swap`, `note_add`, `cut`), `summary` for the summary, the entry for `add`,
+    /// the skills line for skill ops; `None` for entry-level ops (`include`, `exclude`, `swap_entry`, `reorder`).
+    pub target: Option<String>,
     /// What the row reads: the line as it will read for line edits; a sentence otherwise
     /// (`Add CI/CD to Tools & Technologies`, `Include Campus IT Help Desk, Arizona State University, 2023–2024`).
     pub text: String,
@@ -774,6 +780,77 @@ pub struct LineView {
 pub struct Rewritten {
     pub review: ReviewView,
     pub flags: Vec<String>,
+}
+
+/// What `instruct` did: the review with every proposal in it, pending (off the page until you accept it), the
+/// model's reply, and what it left undone.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Instructed {
+    pub review: ReviewView,
+    /// 1–2 sentences on what it did.
+    pub reply: String,
+    /// The model id that served this call, else the `claude --model` alias or name it asked for.
+    pub model: String,
+    pub proposals: Vec<Proposal>,
+    /// Parts of the instruction it couldn't do honestly, and edits that couldn't be placed.
+    pub skipped: Vec<Skipped>,
+}
+
+/// One proposed edit, landed as your own edit turned off.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Proposal {
+    /// The change's key (`accept`, `reject`).
+    pub key: String,
+    pub edit: CustomEdit,
+    /// What it does for the instruction.
+    pub why: String,
+    /// The line as it read on the page before; `None` for a new bullet or skill.
+    pub was: Option<String>,
+    /// The grounding validator's findings.
+    pub flags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Skipped {
+    pub what: String,
+    pub why: String,
+    /// The skill or tool the resume doesn't show that blocked this part, as it would be written ("Bash"); `None`
+    /// when it was skipped for another reason.
+    pub term: Option<String>,
+}
+
+/// What `accept` did: the review with the accepted changes on, and the changes turned off to make room.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Accepted {
+    pub review: ReviewView,
+    pub displaced: Vec<Displaced>,
+}
+
+/// A change turned off so an accepted one could take its line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Displaced {
+    pub key: String,
+    /// The accepted change that took the line.
+    pub by: String,
+}
+
+/// One decision in a `settle`: `None` goes back to the change's default.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct KeyDecision {
+    pub key: String,
+    pub decision: Option<Decision>,
 }
 
 // ── Export and applications ─────────────────────────────────────────────────────────────────────────────────────
@@ -1135,7 +1212,7 @@ pub struct FeedAuto {
 
 // ── Events ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// Event `progress`: a model call started for a job. The UI shows it until the command returns.
+/// A model call running, in event `progress` (every call running, whenever one starts or ends) and `running`.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -1143,6 +1220,8 @@ pub struct Progress {
     /// The posting id the step runs for (what `cancel` takes).
     pub job: String,
     pub stage: Stage,
+    /// When it started, ms since the Unix epoch.
+    pub started_at: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -1158,6 +1237,8 @@ pub enum Stage {
     Revising,
     /// A resume file copied for import.
     Importing,
+    /// A free-form instruction turned into proposed edits.
+    Instructing,
 }
 
 #[cfg(test)]

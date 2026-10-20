@@ -2,24 +2,27 @@
 //! calls running and the feed's run.
 //!
 //! Locks are `std::sync::Mutex`, never held across an `await`. Order, when one is taken under another: `review`, then
-//! `renderers`, then `pages`; `store` is always taken last and released before any other lock; `feed` is taken alone.
-//! `feed_lane` is the exception: a `tokio` mutex held across a feed check's awaits, so checks run one at a time.
+//! `renderers`, then `pages`; `store` is always taken last and released before any other lock; `feed` and `calls` are
+//! taken alone. The exceptions are `tokio` mutexes held across awaits: `feed_lane` (feed checks run one at a time) and
+//! each of `flights` (one call per stored answer, [`single_flight`]).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use resume_core::{Bank, Master, PageFacts, Resume, resolve};
 use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
 use resume_llm::suggest::DEFAULT_SUGGEST_MODEL;
-use resume_llm::{ClaudeCli, LlmError};
+use resume_llm::{ClaudeCli, LlmError, Structured};
 use resume_render::{FontOptions, Renderer};
 use resume_store::{Rev, Store};
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
 
 use crate::dto::{Backdrop, FeedStatus, Mode, Progress, Settings, Stage, Theme};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::export;
 use crate::feed::FeedRun;
 use crate::import::Pending;
@@ -29,13 +32,15 @@ use crate::review::Review;
 pub const STORE_FILE: &str = "gliide.sqlite";
 /// The settings' key in the store.
 const SETTINGS: &str = "settings";
+/// The key of each asked `--model` alias or name → the model id that last served it.
+const SERVED_MODELS: &str = "served_models";
 /// The template every master gets unless it names another (the only one so far).
 pub const DEFAULT_TEMPLATE: &str = "classic-serif";
 
 /// What the app tells the UI: Tauri's events, by name.
 pub enum Event<'a> {
-    /// `progress`: a model call started for a job.
-    Progress(&'a Progress),
+    /// `progress`: the model calls running, whenever one starts or ends.
+    Progress(&'a [Progress]),
     /// `feed`: a feed row or the feed's status changed.
     Feed(&'a FeedStatus),
 }
@@ -55,7 +60,10 @@ pub struct App {
     /// Each master as rendered, by bank and master revision: its resolved resume and page facts for the score now.
     pub pages: Mutex<HashMap<(Rev, Rev), MasterPage>>,
     /// Model calls running, by job (posting id): `cancel` aborts them.
-    pub calls: Mutex<HashMap<String, AbortHandle>>,
+    pub calls: Mutex<HashMap<String, Call>>,
+    /// Calls whose answer the store keeps, by their store key and model: each holds the error of the last run that
+    /// failed, for the callers that waited on it ([`single_flight`]).
+    pub flights: Mutex<HashMap<String, Arc<AsyncMutex<Option<AppError>>>>>,
     /// Counts `start_review` calls: only the newest may put its review in the slot.
     pub review_generation: AtomicU64,
     /// The feed's pull and checks (feed.rs).
@@ -63,6 +71,12 @@ pub struct App {
     /// Held while a feed job is checked: one at a time.
     pub feed_lane: tokio::sync::Mutex<()>,
     pub emit: Emit,
+}
+
+/// A model call running.
+pub struct Call {
+    handle: AbortHandle,
+    progress: Progress,
 }
 
 /// A master as rendered: what the score needs.
@@ -97,6 +111,7 @@ impl App {
             renderers: Mutex::new(HashMap::new()),
             pages: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
+            flights: Mutex::new(HashMap::new()),
             review_generation: AtomicU64::new(0),
             feed: Mutex::new(FeedRun::default()),
             feed_lane: tokio::sync::Mutex::new(()),
@@ -115,6 +130,34 @@ impl App {
         lock(&self.store).put_setting(SETTINGS, s)?;
         *lock(&self.settings) = s.clone();
         Ok(())
+    }
+
+    /// Remembers which model id served `out`, asked for as `asked`; a store error is logged, never fails the call.
+    pub fn note_served(&self, asked: &str, out: &Structured) {
+        let Some(served) = out.served(asked) else {
+            return;
+        };
+        let store = lock(&self.store);
+        let noted = store
+            .setting::<HashMap<String, String>>(SERVED_MODELS)
+            .and_then(|map| {
+                let mut map = map.unwrap_or_default();
+                if map.get(asked).is_some_and(|m| m == served) {
+                    return Ok(());
+                }
+                map.insert(asked.to_owned(), served.to_owned());
+                store.put_setting(SERVED_MODELS, &map)
+            });
+        if let Err(e) = noted {
+            eprintln!("gliide: could not note the model serving `{asked}`: {e}");
+        }
+    }
+
+    /// Each asked `--model` alias or name → the model id that last served it.
+    pub fn served_models(&self) -> Result<HashMap<String, String>> {
+        Ok(lock(&self.store)
+            .setting(SERVED_MODELS)?
+            .unwrap_or_default())
     }
 
     /// Runs `f` with the warm renderer of `master`'s template, making it on first use.
@@ -209,9 +252,21 @@ impl App {
 
     /// Stops the model call running for `job`, if any.
     pub fn cancel(&self, job: &str) {
-        if let Some(h) = lock(&self.calls).remove(job) {
-            h.abort();
+        let mut calls = lock(&self.calls);
+        if let Some(c) = calls.remove(job) {
+            c.handle.abort();
+            self.emit_calls(&calls);
         }
+    }
+
+    /// The model calls running, oldest first.
+    pub fn running(&self) -> Vec<Progress> {
+        running(&lock(&self.calls))
+    }
+
+    /// Tells the UI which calls run now. Under the `calls` lock, so the UI never gets an older list after a newer one.
+    fn emit_calls(&self, calls: &HashMap<String, Call>) {
+        (self.emit)(Event::Progress(&running(calls)));
     }
 
     /// A ticket for a `start_review` call: newer calls get higher ones.
@@ -231,31 +286,80 @@ pub struct Library {
     pub masters: Vec<(Rev, Master, MasterPage)>,
 }
 
-/// Runs `call` (a model call) as a task registered under `job`, after telling the UI it started: `cancel(job)` aborts
-/// it, which drops the `claude` child and kills it. A newer call for the same job supersedes a running one.
+fn running(calls: &HashMap<String, Call>) -> Vec<Progress> {
+    let mut list: Vec<Progress> = calls.values().map(|c| c.progress.clone()).collect();
+    list.sort_by(|a, b| a.started_at.total_cmp(&b.started_at));
+    list
+}
+
+/// Runs `call` (a model call) as a task registered under `job`, telling the UI when it starts and ends: `cancel(job)`
+/// aborts it, which drops the `claude` child and kills it. A newer call for the same job supersedes a running one.
 pub async fn model_call<T: Send + 'static>(
     app: &Arc<App>,
     job: &str,
     stage: Stage,
     call: impl Future<Output = std::result::Result<T, LlmError>> + Send + 'static,
 ) -> Result<T> {
-    (app.emit)(Event::Progress(&Progress {
-        job: job.to_owned(),
-        stage,
-    }));
     let task = tokio::spawn(call);
     let handle = task.abort_handle();
-    if let Some(old) = lock(&app.calls).insert(job.to_owned(), handle.clone()) {
-        old.abort();
+    {
+        let mut calls = lock(&app.calls);
+        let progress = Progress {
+            job: job.to_owned(),
+            stage,
+            started_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0.0, |d| d.as_secs_f64() * 1000.0),
+        };
+        let call = Call {
+            handle: handle.clone(),
+            progress,
+        };
+        if let Some(old) = calls.insert(job.to_owned(), call) {
+            old.handle.abort();
+        }
+        app.emit_calls(&calls);
     }
     let result = task.await;
     {
         let mut calls = lock(&app.calls);
-        if calls.get(job).is_some_and(|h| h.id() == handle.id()) {
+        if calls.get(job).is_some_and(|c| c.handle.id() == handle.id()) {
             calls.remove(job);
+            app.emit_calls(&calls);
         }
     }
     Ok(result??)
+}
+
+/// Runs `call` as the one call for `key`, an answer the store keeps (its store key and model). A caller arriving while
+/// another runs waits for it, then fails with its error (a cancel included), else runs `call` with `joined` set, which
+/// finds the answer in the store. So a job you come back to joins the call still making its answer.
+pub async fn single_flight<T>(
+    app: &App,
+    key: &str,
+    call: impl AsyncFnOnce(bool) -> Result<T>,
+) -> Result<T> {
+    let flight = Arc::clone(lock(&app.flights).entry(key.to_owned()).or_default());
+    let (mut failed, joined) = match Arc::clone(&flight).try_lock_owned() {
+        Ok(guard) => (guard, false),
+        Err(_) => (Arc::clone(&flight).lock_owned().await, true),
+    };
+    let result = match failed.as_ref().filter(|_| joined) {
+        Some(e) => Err(e.clone()),
+        None => {
+            let result = call(joined).await;
+            *failed = result.as_ref().err().cloned();
+            result
+        }
+    };
+    drop(failed);
+    let mut flights = lock(&app.flights);
+    // Nobody else waits on it (the map's and this one's are the only references): it goes.
+    if Arc::strong_count(&flight) == 2 && flights.get(key).is_some_and(|f| Arc::ptr_eq(f, &flight))
+    {
+        flights.remove(key);
+    }
+    result
 }
 
 /// Runs `f` on the blocking pool: compiles and the store's heavier reads never hold up the async runtime.
@@ -296,5 +400,68 @@ impl From<resume_core::change::Mode> for Mode {
             resume_core::change::Mode::MasterOnly => Self::MasterOnly,
             resume_core::change::Mode::BankAware => Self::BankAware,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+    use crate::dto::ErrorKind;
+
+    /// An app over a fresh store in the temp folder (the last run's removed first).
+    fn app(name: &str) -> App {
+        let dir = std::env::temp_dir().join(format!("gliide-state-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        App::open(&dir, Box::new(|_| {})).unwrap()
+    }
+
+    /// Each caller's run: whether it had joined another, and what it returned.
+    async fn run(app: &App, calls: &Cell<u32>, fail: bool) -> (bool, Result<u32>) {
+        let mut seen = false;
+        let result = single_flight(app, "suggest k", async |joined| {
+            seen = joined;
+            if joined {
+                // Reads what the call it waited for stored.
+                return Ok(calls.get());
+            }
+            tokio::task::yield_now().await;
+            calls.set(calls.get() + 1);
+            if fail {
+                Err(AppError::cancelled())
+            } else {
+                Ok(calls.get())
+            }
+        })
+        .await;
+        (seen, result)
+    }
+
+    #[tokio::test]
+    async fn a_second_caller_joins_the_running_call_instead_of_calling_again() {
+        let app = app("join");
+        let calls = Cell::new(0);
+        let ((first, a), (second, b)) =
+            tokio::join!(run(&app, &calls, false), run(&app, &calls, false));
+        assert_eq!((first, second), (false, true));
+        assert_eq!((a.unwrap(), b.unwrap()), (1, 1));
+        assert_eq!(calls.get(), 1);
+        assert!(lock(&app.flights).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_caller_that_joined_a_failed_call_fails_with_its_error() {
+        let app = app("fail");
+        let calls = Cell::new(0);
+        let ((_, a), (_, b)) = tokio::join!(run(&app, &calls, true), run(&app, &calls, true));
+        assert!(matches!(a.unwrap_err().kind, ErrorKind::Cancelled));
+        assert!(matches!(b.unwrap_err().kind, ErrorKind::Cancelled));
+        assert_eq!(calls.get(), 1);
+        // The failure isn't kept for a caller that comes later: it calls again.
+        let (joined, c) = run(&app, &calls, false).await;
+        assert!(!joined);
+        assert_eq!(c.unwrap(), 2);
     }
 }

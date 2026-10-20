@@ -1,6 +1,7 @@
 // The UI kit (DESIGN.md Components). Screens compose only these; a new primitive goes here and into the /specimen
 // route, in every state, before a screen uses it.
 
+export { default as AgentMark } from "./AgentMark.svelte";
 export { default as Backdrop, BACKDROPS, type BackdropName } from "./Backdrop.svelte";
 export { default as Badge } from "./Badge.svelte";
 export { default as Button } from "./Button.svelte";
@@ -39,6 +40,14 @@ export { default as Toaster } from "./Toaster.svelte";
 export { default as Toolbar } from "./Toolbar.svelte";
 export { default as Tooltip } from "./Tooltip.svelte";
 export { default as Tooltips } from "./Tooltips.svelte";
-export { tip, type TipContent, type TipData, type TipKey, type TipRow, type TipTone } from "./tip.svelte";
+export {
+  tip,
+  type TipContent,
+  type TipData,
+  type TipGroup,
+  type TipKey,
+  type TipRow,
+  type TipTone,
+} from "./tip.svelte";
 export { dismiss, LIFETIME_WITH_ACTION_MS, toast, type ToastAction, type ToastTone } from "./toast.svelte";
 export { exit } from "./motion";

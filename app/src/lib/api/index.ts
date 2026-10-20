@@ -5,6 +5,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import type { Accepted } from "./bindings/Accepted";
 import type { AgentStatus } from "./bindings/AgentStatus";
 import type { AppError } from "./bindings/AppError";
 import type { ApplicationRow } from "./bindings/ApplicationRow";
@@ -25,8 +26,10 @@ import type { FolderPdf } from "./bindings/FolderPdf";
 import type { FolderView } from "./bindings/FolderView";
 import type { ImportChoices } from "./bindings/ImportChoices";
 import type { ImportView } from "./bindings/ImportView";
+import type { Instructed } from "./bindings/Instructed";
 import type { JobRow } from "./bindings/JobRow";
 import type { JobView } from "./bindings/JobView";
+import type { KeyDecision } from "./bindings/KeyDecision";
 import type { Library } from "./bindings/Library";
 import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
@@ -40,6 +43,7 @@ import type { SearchCursor } from "./bindings/SearchCursor";
 import type { SearchResults } from "./bindings/SearchResults";
 import type { Settings } from "./bindings/Settings";
 
+export type * from "./bindings/Accepted";
 export type * from "./bindings/AgentStatus";
 export type * from "./bindings/AppError";
 export type * from "./bindings/ApplicationRow";
@@ -56,6 +60,7 @@ export type * from "./bindings/CoverPart";
 export type * from "./bindings/CoverView";
 export type * from "./bindings/CustomEdit";
 export type * from "./bindings/Decision";
+export type * from "./bindings/Displaced";
 export type * from "./bindings/EditTargets";
 export type * from "./bindings/EntryEdit";
 export type * from "./bindings/EntryFacts";
@@ -81,9 +86,11 @@ export type * from "./bindings/ImportEntry";
 export type * from "./bindings/ImportGroup";
 export type * from "./bindings/ImportSection";
 export type * from "./bindings/ImportView";
+export type * from "./bindings/Instructed";
 export type * from "./bindings/JobHead";
 export type * from "./bindings/JobRow";
 export type * from "./bindings/JobView";
+export type * from "./bindings/KeyDecision";
 export type * from "./bindings/Letter";
 export type * from "./bindings/Library";
 export type * from "./bindings/LineView";
@@ -95,6 +102,7 @@ export type * from "./bindings/MasterRow";
 export type * from "./bindings/Mode";
 export type * from "./bindings/NoteLine";
 export type * from "./bindings/Place";
+export type * from "./bindings/Proposal";
 export type * from "./bindings/Progress";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
@@ -107,6 +115,7 @@ export type * from "./bindings/SearchResults";
 export type * from "./bindings/SectionRow";
 export type * from "./bindings/Settings";
 export type * from "./bindings/SkillChip";
+export type * from "./bindings/Skipped";
 export type * from "./bindings/Stage";
 export type * from "./bindings/Target";
 export type * from "./bindings/TemplateRow";
@@ -125,6 +134,8 @@ export function appError(e: unknown): AppError {
 export const agentStatus = () => invoke<AgentStatus>("agent_status");
 export const getSettings = () => invoke<Settings>("get_settings");
 export const setSettings = (settings: Settings) => invoke<Settings>("set_settings", { settings });
+/** Each asked `claude --model` alias or name → the model id that last served it (what names a chat's model). */
+export const models = () => invoke<Record<string, string>>("models");
 
 // ── Bank and masters ──
 export const library = () => invoke<Library>("library");
@@ -169,14 +180,20 @@ export const setSalary = (job: string, salary: SalaryRange | null) => invoke<Job
 /** The places a job's location names, geocoded and cached (empty: remote, a country, or nothing found). */
 export const places = (location: string) => invoke<Place[]>("places", { location });
 /**
- * Opens the review for `job`: Suggest (cached per posting × master × mode × model), then the fit check.
- * `master`/`mode` null: the job's last review's, else the best-ranked master and the default mode.
- * `fresh` calls Suggest again (`r`). Emits `progress`.
+ * Opens the review for `job`: Suggest (cached per posting × master × mode × model; a call already running for the
+ * same joins it), then the fit check. `master`/`mode` null: the job's last review's, else the best-ranked master and
+ * the default mode. `fresh` calls Suggest again (`r`). Emits `progress`.
  */
 export const startReview = (job: string, master: string | null, mode: Mode | null, fresh = false) =>
   invoke<ReviewView>("start_review", { job, master, mode, fresh });
+/** As `startReview` with the job's last master and mode, saved (with its fit score) without opening it. */
+export const prepareReview = (job: string) => invoke<void>("prepare_review", { job });
 /** Stops the model call running for `job`; its command rejects with kind `cancelled`. */
 export const cancel = (job: string) => invoke<void>("cancel", { job });
+/** The model calls running, oldest first. */
+export const running = () => invoke<Progress[]>("running");
+/** When a running call started, on the `performance.now()` clock. */
+export const startedAt = (p: Progress) => performance.now() - (Date.now() - p.startedAt);
 
 // ── Review (each returns the whole review, rebuilt) ──
 export const decide = (review: string, key: string, decision: Decision | null) =>
@@ -201,6 +218,25 @@ export const rewriteLine = (review: string, line: string | null, note: string) =
   invoke<Rewritten>("rewrite_line", { review, line, note });
 /** Saves the change's line to the bank as a variant of its bullet (`ChangeView.savable`); the review goes on as it is. */
 export const saveVariant = (review: string, key: string) => invoke<ReviewView>("save_variant", { review, key });
+/**
+ * One model call: `instruction` carried out over the page (or only `scope`: entry, bullet or skills-line ids, or
+ * `"summary"`), each edit added as your own and off: pending until `accept`. One undo step. Emits `progress`.
+ * `confirmed` names skills you say you have though the resume doesn't show them (a skipped part's `term`).
+ */
+export const instruct = (review: string, instruction: string, scope: string[], confirmed: string[] = []) =>
+  invoke<Instructed>("instruct", { review, instruction, scope, confirmed });
+/** Turns these changes on, one undo step; any other change in on the same line goes off (`displaced`). */
+export const accept = (review: string, keys: string[]) => invoke<Accepted>("accept", { review, keys });
+/** One undo step: your own edits among `keys` removed, suggestions turned off. */
+export const reject = (review: string, keys: string[]) => invoke<ReviewView>("reject", { review, keys });
+/**
+ * A rewind of the chat, one undo step: `keys` off the page (your own edits removed, suggestions turned off), `restore`
+ * (changes accepting them turned off) back to their default.
+ */
+export const withdraw = (review: string, keys: string[], restore: string[]) =>
+  invoke<ReviewView>("withdraw", { review, keys, restore });
+/** Several decisions as one undo step (`decision` null: back to the change's default). */
+export const settle = (review: string, decisions: KeyDecision[]) => invoke<ReviewView>("settle", { review, decisions });
 /** The PDF (no highlights) into the export folder, its application row, and the score read back from it. */
 export const exportPdf = (review: string) => invoke<Exported>("export_pdf", { review });
 
@@ -252,8 +288,9 @@ export const removeLogo = (company: string) => invoke<void>("remove_logo", { com
 export const logoUrl = (logo: LogoRow) => `${convertFileSrc(logo.key, "logo")}?v=${encodeURIComponent(logo.version)}`;
 
 // ── Events ──
-export const onProgress = (handler: (p: Progress) => void): Promise<UnlistenFn> =>
-  listen<Progress>("progress", (e) => handler(e.payload));
+/** Event `progress`: the model calls running (as `running`), whenever one starts or ends. */
+export const onProgress = (handler: (calls: Progress[]) => void): Promise<UnlistenFn> =>
+  listen<Progress[]>("progress", (e) => handler(e.payload));
 /** Event `feed`: a row or the feed's status changed. */
 export const onFeed = (handler: (s: FeedStatus) => void): Promise<UnlistenFn> =>
   listen<FeedStatus>("feed", (e) => handler(e.payload));

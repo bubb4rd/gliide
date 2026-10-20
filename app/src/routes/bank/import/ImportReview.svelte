@@ -19,6 +19,7 @@
     importView,
     onProgress,
     readImport,
+    startedAt,
     type ImportChoices,
     type ImportView,
     type SameEntry,
@@ -90,8 +91,9 @@
     }
     let unlisten: (() => void) | undefined;
     void (async () => {
-      unlisten = await onProgress((p) => {
-        if (p.job === IMPORT_JOB && alive) running = { startedAt: performance.now() };
+      unlisten = await onProgress((calls) => {
+        const call = calls.find((c) => c.job === IMPORT_JOB);
+        if (call && alive) running = { startedAt: startedAt(call) };
       });
       if (!alive) return unlisten();
       await Promise.all([app.library ? null : app.refreshLibrary(), read()]);

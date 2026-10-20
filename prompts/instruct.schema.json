@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reply", "edits", "skipped"],
+  "properties": {
+    "reply": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "edits": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "text", "why"],
+        "properties": {
+          "kind": { "enum": ["line", "summary", "bullet", "skill"] },
+          "id": { "type": "string", "maxLength": 60 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 320 },
+          "why": { "type": "string", "maxLength": 100 }
+        }
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["what", "why", "term"],
+        "properties": {
+          "what": { "type": "string", "minLength": 1, "maxLength": 60 },
+          "why": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "term": { "type": "string", "maxLength": 40 }
+        }
+      }
+    }
+  }
+}

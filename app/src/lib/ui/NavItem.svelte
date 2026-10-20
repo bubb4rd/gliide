@@ -1,8 +1,9 @@
 <!--
   A sidebar link: icon (or a `lead` such as a company mark), label (truncates), count. `quiet` for list entries such
   as Recent jobs (regular weight). With `sub`, a second, meta-sized line under the label (a job's role), ending in an
-  optional `status` (a dot in its tone, then its word); the lead centers on both lines and each line truncates on its
-  own, the status never. `trailing` draws a mark at the first line's end instead of `meta` (a job's fit `ScoreBar`).
+  optional `status` (a dot in its tone, then its word), or `busy` in its place while a model call runs for it (its
+  stage word, swept as `Thinking`'s); the lead centers on both lines and each line truncates on its own, the status
+  never. `trailing` draws a mark at the first line's end instead of `meta` (a job's fit `ScoreBar`).
   States: hover wash, current (pressed wash, ink icon).
 -->
 <script lang="ts">
@@ -28,6 +29,8 @@
     sub?: string;
     /** At the end of the second line: `Applied` with an accent dot. Tones as `Badge`'s. */
     status?: { label: string; tone: "neutral" | "accent" | "gain" | "danger" } | null;
+    /** A model call running for it, by its stage word ("Suggesting…"): shown in place of `status`. */
+    busy?: string | null;
     quiet?: boolean;
     children: Snippet;
   }
@@ -42,6 +45,7 @@
     trailing,
     sub,
     status,
+    busy,
     quiet = false,
     children,
     class: className,
@@ -66,7 +70,9 @@
   {#if sub != null}
     <span class="sub meta">
       <span class="text">{sub}</span>
-      {#if status}
+      {#if busy}
+        <span class="status sweep">{busy}</span>
+      {:else if status}
         <span class="status"><span class="dot dot--{status.tone}" aria-hidden="true"></span>{status.label}</span>
       {/if}
     </span>

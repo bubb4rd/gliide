@@ -176,11 +176,13 @@ pub async fn write_cover(app: &Arc<App>, review: &str) -> Result<CoverView> {
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
     let posting_id = job.posting_id.clone();
-    let (letter, job) = model_call(app, &posting_id, Stage::Writing, async move {
-        let letter = cover::write(&llm, &cover::schema(), &job.input(), &model).await?;
-        Ok((letter.0, job))
+    let m = model.clone();
+    let (letter, out, job) = model_call(app, &posting_id, Stage::Writing, async move {
+        let (letter, out) = cover::write(&llm, &cover::schema(), &job.input(), &m).await?;
+        Ok((letter, out, job))
     })
     .await?;
+    app.note_served(&model, &out);
     blocking(app, move |app| {
         save_and_view(
             app,
@@ -244,25 +246,27 @@ pub async fn rewrite_cover_paragraph(
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
     let posting_id = job.posting_id.clone();
-    let (text, job) = model_call(app, &posting_id, Stage::Revising, async move {
+    let m = model.clone();
+    let (text, out, job) = model_call(app, &posting_id, Stage::Revising, async move {
         let letter = cover::Letter {
             greeting: before.greeting,
             paragraphs: before.paragraphs,
             closing: before.closing,
         };
-        let (text, _) = cover::rewrite_paragraph(
+        let (text, out) = cover::rewrite_paragraph(
             &llm,
             &cover::paragraph_schema(),
             &job.input(),
             &letter,
             index as usize,
             &note,
-            &model,
+            &m,
         )
         .await?;
-        Ok((text, job))
+        Ok((text, out, job))
     })
     .await?;
+    app.note_served(&model, &out);
     blocking(app, move |app| {
         let mut letter = lock(&app.store)
             .cover(&job.analysis_id)?

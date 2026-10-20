@@ -72,6 +72,14 @@ pub fn tagged_text(resume: &Resume) -> String {
     s
 }
 
+/// `resume` tagged as Suggest's `<resume>` reads it: [`tagged_text`] with each bullet's line budget, then its other
+/// variants and its skills from `bank`.
+pub fn tagged_with_bank(resume: &Resume, bank: &Bank) -> String {
+    let mut s = String::new();
+    write_resume(&mut s, resume, Some(bank));
+    s
+}
+
 /// Runs Suggest with `model` ([`DEFAULT_SUGGEST_MODEL`] unless the user picked another).
 pub async fn suggest(
     llm: &impl Llm,

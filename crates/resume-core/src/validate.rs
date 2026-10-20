@@ -8,7 +8,8 @@
 //!   resume). A skills line backs a tool, not where it was used, so it is a source only for a requirement skill whose
 //!   evidence is `yes` or `add`.
 //! - Proper nouns and tool names (forms in the alias dictionary, and capitalized words that don't start a sentence) must
-//!   appear somewhere in the bank, or be (part of) a requirement skill whose evidence is `yes` or `add`. A degree
+//!   appear somewhere in the bank, or be (part of) a requirement skill whose evidence is `yes` or `add`, or something
+//!   you vouched for in a chat ask ([`Grounding::confirmed`]: a skill you confirmed, your own words). A degree
 //!   abbreviation (`B.S.`, `MBA`, `Ph.D.`) counts as in the bank when an education entry states that level.
 //! - `before` must be the line's current text; every id must exist; a swap's `from` must be in its line.
 //! - A swap that trades a past-tense verb for another form ("Collaborated" → "collaboration") may not read right.
@@ -32,6 +33,9 @@ pub struct Grounding<'a> {
     backed: Vec<String>,
     /// Degree levels the bank's education entries state.
     degrees: Vec<DegreeLevel>,
+    /// What you vouched for though the bank doesn't show it (skills you confirmed, your own words in a chat ask), one
+    /// block each: its names count as in the bank.
+    confirmed: Page,
 }
 
 impl<'a> Grounding<'a> {
@@ -69,7 +73,15 @@ impl<'a> Grounding<'a> {
             bank_text,
             backed,
             degrees,
+            confirmed: Page::new(std::iter::empty()),
         }
+    }
+
+    /// Treats the names in `vouched` (skills you confirmed, your own words) as in the bank for the name checks; numbers
+    /// still need sources.
+    pub fn confirmed(mut self, vouched: &[String]) -> Self {
+        self.confirmed = Page::new(vouched.iter().map(|n| (None, n.as_str())));
+        self
     }
 
     /// Why a line written for `line` (a bullet, or the entry a new bullet goes under) may not draw on bank line
@@ -165,7 +177,9 @@ impl<'a> Grounding<'a> {
             let Some(hit) = group.iter().find_map(|(_, form)| page.find(form)) else {
                 continue;
             };
-            if group.iter().any(|(_, form)| self.bank.find(form).is_some())
+            if group
+                .iter()
+                .any(|(_, form)| self.bank.find(form).is_some() || self.confirmed.find(form).is_some())
                 || self.backed_in(&page, &hit.text)
             {
                 grounded.push(hit.text);
@@ -175,6 +189,7 @@ impl<'a> Grounding<'a> {
         }
         let known = |word: &str| {
             self.bank.find(word).is_some()
+                || self.confirmed.find(word).is_some()
                 || self.backed_in(&page, word)
                 || grounded
                     .iter()
@@ -467,5 +482,51 @@ mod tests {
         assert!(swap_warning("Collaborated", "Partnered").is_none());
         assert!(swap_warning("automated tests", "automated testing").is_none());
         assert!(swap_warning("Collaborated", "").is_none());
+    }
+
+    #[test]
+    fn confirmed_names_pass_the_name_checks_only() {
+        use crate::requirements::{Requirements, Seniority};
+        use crate::suggestions::{Suggestions, Verdict};
+        let bank: Bank = serde_json::from_value(serde_json::json!({
+            "schema": 2, "name": "Jane Doe", "contact": [], "sections": []
+        }))
+        .unwrap();
+        let s = Suggestions {
+            verdict: Verdict::Tailor,
+            headline: String::new(),
+            evidence: vec![],
+            keywords: vec![],
+            bullets: vec![],
+            skills: vec![],
+            bank: vec![],
+            order: vec![],
+            summary: None,
+            gaps: vec![],
+        };
+        let req = Requirements {
+            role: String::new(),
+            company: String::new(),
+            short_role: String::new(),
+            location: String::new(),
+            seniority: Seniority::Entry,
+            skills: vec![],
+            title_terms: vec![],
+            years_min: None,
+            degree: None,
+            certifications: vec![],
+            knockouts: vec![],
+        };
+        let plain = Grounding::new(&bank, &s, &req);
+        assert!(!plain.check_item("Bash").is_empty());
+        let g = Grounding::new(&bank, &s, &req).confirmed(&["bash".to_owned()]);
+        assert_eq!(g.check_item("Bash"), Vec::<String>::new());
+        assert_eq!(g.check("Wrote Bash scripts", &[]), Vec::<String>::new());
+        assert_eq!(g.check_item("Kafka"), ["“Kafka” is not in your bank"]);
+        assert_eq!(
+            g.check("Wrote 40 Bash scripts", &[]).len(),
+            1,
+            "the number still needs a source"
+        );
     }
 }

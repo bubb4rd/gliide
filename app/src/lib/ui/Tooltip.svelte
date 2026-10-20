@@ -1,7 +1,7 @@
 <!--
-  A tooltip's panel (DESIGN.md Tooltip): a label, or data (a title with its value, labeled rows with legend keys, a
-  note). Screens don't place it: `tip()` gives an element one and the layout's <Tooltips /> shows it. The specimen
-  renders it in place.
+  A tooltip's panel (DESIGN.md Tooltip): a label, or data (a title with its value, labeled rows with legend keys, named
+  lists, a note). Screens don't place it: `tip()` gives an element one and the layout's <Tooltips /> shows it. The
+  specimen renders it in place.
 -->
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
@@ -39,6 +39,20 @@
           </div>
         {/each}
       </dl>
+    {/if}
+    {#if data.groups?.length}
+      <div class="groups">
+        {#each data.groups as group, i (i)}
+          <div class="group">
+            <p class="group__head">
+              {#if group.key}<span class="key key--{group.key}" aria-hidden="true"></span>{/if}
+              <span class="group__label">{group.label}</span>
+              <span class="num group__count">{group.items.length}</span>
+            </p>
+            <p class={["group__items", group.tone && `tone--${group.tone}`]}>{group.items.join(", ")}</p>
+          </div>
+        {/each}
+      </div>
     {/if}
     {#if data.note}<p class="note">{data.note}</p>{/if}
   {/if}
@@ -132,18 +146,63 @@
     margin-inline: 5px;
     background: var(--ink-2);
   }
+  /* The keyword meter's cells, as it draws them: filled gain, gain's wash in a gain edge, an empty well. */
+  .key--have,
+  .key--add,
+  .key--missing {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .key--have {
+    background: var(--gain);
+  }
+  .key--add {
+    background: var(--gain-soft);
+    box-shadow: inset 0 0 0 1px var(--gain);
+  }
+  .key--missing {
+    background: var(--sunken);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+  }
+
+  /* Named lists: a head (key, label in ink 2, the count in ink 3), the items wrapping under it. */
+  .groups {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .group__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    color: var(--ink-2);
+  }
+  .group__count {
+    margin-inline-start: auto;
+    color: var(--ink-3);
+  }
+  .group__items {
+    margin-top: var(--space-0-5);
+    text-wrap: pretty;
+  }
 
   @media (forced-colors: active) {
     .key {
       forced-color-adjust: none;
       background: CanvasText;
     }
-    .key--gain {
+    .key--gain,
+    .key--have {
       background: Highlight;
     }
-    .key--lost {
+    .key--lost,
+    .key--add,
+    .key--missing {
       background: Canvas;
       border: 1px solid CanvasText;
+    }
+    .key--add {
+      border-color: Highlight;
     }
   }
 </style>
