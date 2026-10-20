@@ -1,0 +1,11 @@
+{
+  "input": "https://www.linkedin.com/jobs/search-results/?currentJobId=4000000202&eBP=NOT_ELIGIBLE_FOR_CHARGING&refId=x&trackingId=y",
+  "request": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4000000202",
+  "url": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4000000202",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like LinkedIn's guest job page for a search link's currentJobId; content invented."
+}

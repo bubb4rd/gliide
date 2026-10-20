@@ -30,7 +30,7 @@ fn assert_clean(field: &str) {
 }
 
 #[tokio::test]
-async fn cards_of_a_real_search_page() {
+async fn cards_of_a_search_page() {
     let jobs = search(&replay("linkedin-guest-search"), &recorded_search(), 0, NOW)
         .await
         .unwrap();
@@ -39,14 +39,14 @@ async fn cards_of_a_real_search_page() {
         jobs[0],
         FeedJob {
             origin: Origin::Linkedin,
-            slug: "linkedin:4478772592".to_owned(),
-            title: "Java Software Engineer III - Debit Technology".to_owned(),
-            company: "JPMorganChase".to_owned(),
+            slug: "linkedin:4400000001".to_owned(),
+            title: "Java Software Engineer III - Card Platform".to_owned(),
+            company: "Globex Bank".to_owned(),
             company_slug: None,
             location: Some("Atlanta, GA".to_owned()),
-            url: "https://www.linkedin.com/jobs/view/4478772592/".to_owned(),
+            url: "https://www.linkedin.com/jobs/view/4400000001/".to_owned(),
             source: "linkedin".to_owned(),
-            external_id: Some("4478772592".to_owned()),
+            external_id: Some("4400000001".to_owned()),
             skills: Vec::new(),
             posted_at: Some("2026-10-13T00:00:00Z".to_owned()),
             found_at: NOW.to_owned(),

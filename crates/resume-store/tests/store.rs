@@ -14,7 +14,7 @@ use resume_store::{
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
 const REQ: &str = include_str!("../../../fixtures/score/jane-doe-swe.requirements.json");
 const SUGGESTIONS: &str =
-    include_str!("../../../fixtures/suggestions/jane-doe/waymark-jr-swe.json");
+    include_str!("../../../fixtures/suggestions/jane-doe/northwind-jr-swe.json");
 
 fn jane() -> (Bank, Master) {
     let v1: Resume = serde_json::from_str(V1).unwrap();
@@ -411,7 +411,7 @@ fn applications_upsert_by_id_and_change_status() {
     ));
 }
 
-/// Synthetic ATS Fit rows, oldest first: quoted commas, an escaped quote, empty scores and files.
+/// Synthetic legacy applications.csv rows, oldest first: quoted commas, an escaped quote, empty scores and files.
 const ATS_FIT: &str = "\
 date,company,role,fit_planned,fit_on_page,resume,cover_letter,posting
 2026-09-30,Acme,Software Engineer,82,74,/Users/jane/Resumes/acme_swe_doe_resume.pdf,,https://example.com/jobs/1
@@ -445,7 +445,7 @@ fn ats_fit_csv_round_trips() {
             .all(|a| a.status == AppStatus::Applied && a.posting_id.is_none())
     );
 
-    // ATS Fit's columns come back exactly, with the app's two after them.
+    // The legacy eight columns come back exactly, with the app's two after them.
     let mut expected = ATS_FIT.replacen("posting\n", "posting,status,fit_now\n", 1);
     expected = expected
         .lines()

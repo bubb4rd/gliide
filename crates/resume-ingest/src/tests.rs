@@ -45,20 +45,20 @@ fn has_line(text: &str, line: &str) -> bool {
 
 #[tokio::test]
 async fn greenhouse_api() {
-    let p = ok_case("greenhouse-perfectserve").await;
+    let p = ok_case("greenhouse-fabrikam").await;
     assert_eq!(p.method, Method::Greenhouse);
     assert_eq!(
         p.source.as_deref(),
-        Some("https://job-boards.greenhouse.io/perfectserve/jobs/6188374004")
+        Some("https://job-boards.greenhouse.io/fabrikam/jobs/4000000001")
     );
     assert_eq!(
         p.url.as_deref(),
-        Some("https://job-boards.greenhouse.io/perfectserve/jobs/6188374004")
+        Some("https://job-boards.greenhouse.io/fabrikam/jobs/4000000001")
     );
     assert_eq!(p.title.as_deref(), Some("Mobile Developer I - US Remote"));
-    assert_eq!(p.company.as_deref(), Some("PerfectServe"));
+    assert_eq!(p.company.as_deref(), Some("Fabrikam Health"));
     assert_eq!(p.location.as_deref(), Some("Remote"));
-    assert!(p.text.starts_with("What is PerfectServe?\n"));
+    assert!(p.text.starts_with("What is Fabrikam?\n"));
     assert!(p.text.contains(
         "\n\nResponsibilities\n- Develop and maintain cross-platform mobile applications using React Native"
     ));
@@ -71,10 +71,10 @@ async fn greenhouse_api() {
 
 #[tokio::test]
 async fn ashby_job_page_names_the_company() {
-    let p = ok_case("ashby-pariveda").await;
+    let p = ok_case("ashby-initech").await;
     assert_eq!(p.method, Method::Ashby);
     assert_eq!(p.title.as_deref(), Some("Entry-Level Software Engineer"));
-    assert_eq!(p.company.as_deref(), Some("Pariveda"));
+    assert_eq!(p.company.as_deref(), Some("Initech"));
     // From the page's JSON-LD: the text names only the entry-level figure.
     assert_eq!(p.salary, year(79_800, 91_800));
     assert!(
@@ -86,11 +86,11 @@ async fn ashby_job_page_names_the_company() {
     assert!(p.location.as_deref().unwrap().ends_with("(hybrid)"));
     assert_eq!(
         p.url.as_deref(),
-        Some("https://jobs.ashbyhq.com/pariveda/cc4fc0be-c414-4aba-a15d-64daa03476a0")
+        Some("https://jobs.ashbyhq.com/initech/5b1e2c3d-0000-4a00-8000-00000000a001")
     );
     assert!(
         p.text
-            .starts_with("Pariveda is a North American-based, employee-owned")
+            .starts_with("Initech is a North American-based, employee-owned")
     );
     assert!(p.text.contains("\n\nYou Can Expect To:\n"));
     assert!(
@@ -101,23 +101,23 @@ async fn ashby_job_page_names_the_company() {
 
 #[tokio::test]
 async fn ashby_link_with_tracking_query() {
-    let p = ok_case("ashby-spoton").await;
+    let p = ok_case("ashby-piedpiper").await;
     assert_eq!(p.method, Method::Ashby);
     assert_eq!(p.title.as_deref(), Some("Associate Salesforce Engineer"));
-    assert_eq!(p.company.as_deref(), Some("SpotOn"));
+    assert_eq!(p.company.as_deref(), Some("Pied Piper"));
     assert_eq!(p.location.as_deref(), Some("Remote, United States"));
     assert_eq!(
         p.url.as_deref(),
-        Some("https://jobs.ashbyhq.com/spoton/cdd0a5c0-4e1f-462d-b92c-ab9e3fe1208d")
+        Some("https://jobs.ashbyhq.com/piedpiper/5b1e2c3d-0000-4a00-8000-00000000a002")
     );
-    assert!(p.text.starts_with("About SpotOn\n"));
+    assert!(p.text.starts_with("About Pied Piper\n"));
     assert!(has_line(&p.text, "Summary"));
 }
 
 #[tokio::test]
 async fn ashby_closed_job_is_not_a_posting() {
     let err = case("ashby-closed").await.unwrap_err();
-    let gone = "https://jobs.ashbyhq.com/pariveda/00000000-0000-4000-8000-000000000000";
+    let gone = "https://jobs.ashbyhq.com/initech/00000000-0000-4000-8000-000000000000";
     assert!(
         matches!(&err, IngestError::NotAPosting { url, reason } if url == gone && reason.contains("may have closed")),
         "{err:?}"
@@ -132,42 +132,42 @@ fn ashby_page_without_app_data_is_read_as_a_page() {
 
 #[tokio::test]
 async fn lever_api() {
-    let p = ok_case("lever-spotify").await;
+    let p = ok_case("lever-umbrella").await;
     assert_eq!(p.method, Method::Lever);
     assert_eq!(p.title.as_deref(), Some("Android Engineer - Experience"));
     assert_eq!(p.company, None);
     assert_eq!(p.location.as_deref(), Some("London; Stockholm (hybrid)"));
     assert_eq!(
         p.url.as_deref(),
-        Some("https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1")
+        Some("https://jobs.lever.co/umbrella/7c2d1e00-0000-4b00-8000-00000000b001")
     );
     assert!(
         p.text
-            .starts_with("We design Spotify’s consumer experience")
+            .starts_with("We design Umbrella Audio’s listening experience")
     );
     assert!(p.text.contains(
         "\n\nWhat You'll Do\n- Develop and maintain mobile client components that capture and report listening"
     ));
-    assert!(p.text.contains("Spotify is an equal opportunity employer."));
+    assert!(p.text.contains("Umbrella Audio is an equal opportunity employer."));
 }
 
 #[tokio::test]
 async fn workday_api() {
-    let p = ok_case("workday-nvidia").await;
+    let p = ok_case("workday-cyberdyne").await;
     assert_eq!(p.method, Method::Workday);
-    assert_eq!(p.title.as_deref(), Some("Software Engineer, OpenShell"));
-    // The hiring organization without its internal number (`2100 NVIDIA USA`).
-    assert_eq!(p.company.as_deref(), Some("NVIDIA USA"));
+    assert_eq!(p.title.as_deref(), Some("Software Engineer, Agent Runtime"));
+    // The hiring organization without its internal number (`2100 Cyberdyne USA`).
+    assert_eq!(p.company.as_deref(), Some("Cyberdyne USA"));
     assert_eq!(p.location.as_deref(), Some("US, Remote"));
     assert_eq!(
         p.url.as_deref(),
         Some(
-            "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-Remote/Software-Engineer--OpenShell_JR2020825"
+            "https://cyberdyne.wd5.myworkdayjobs.com/CyberdyneCareers/job/US-Remote/Software-Engineer--Agent-Runtime_JR1000001"
         )
     );
     assert!(
         p.text
-            .starts_with("Are you ready to translate groundbreaking AI research")
+            .starts_with("Are you ready to turn agent research into dependable")
     );
     assert!(
         p.text
@@ -177,13 +177,13 @@ async fn workday_api() {
 
 #[tokio::test]
 async fn smartrecruiters_api() {
-    let p = ok_case("smartrecruiters-experian").await;
+    let p = ok_case("smartrecruiters-tyrell").await;
     assert_eq!(p.method, Method::SmartRecruiters);
     assert_eq!(
         p.title.as_deref(),
-        Some("Senior Endpoint Systems Engineer, Microsoft - (Hybrid Allen, TX)")
+        Some("Senior Endpoint Systems Engineer - (Hybrid Allen, TX)")
     );
-    assert_eq!(p.company.as_deref(), Some("Experian"));
+    assert_eq!(p.company.as_deref(), Some("Tyrell Data"));
     assert_eq!(
         p.location.as_deref(),
         Some("Allen, TX, United States (hybrid)")
@@ -191,7 +191,7 @@ async fn smartrecruiters_api() {
     assert_eq!(p.salary, year(80_237, 139_077));
     assert!(
         p.text
-            .starts_with("Company Description\nExperian is a global data")
+            .starts_with("Company Description\nTyrell Data is a global data")
     );
     assert!(
         p.text
@@ -203,7 +203,7 @@ async fn smartrecruiters_api() {
 
 #[tokio::test]
 async fn workable_api() {
-    let p = ok_case("workable-huggingface").await;
+    let p = ok_case("workable-soylent").await;
     assert_eq!(p.method, Method::Workable);
     assert_eq!(
         p.title.as_deref(),
@@ -216,11 +216,11 @@ async fn workable_api() {
     );
     assert_eq!(
         p.url.as_deref(),
-        Some("https://apply.workable.com/huggingface/j/19A136F8E2/")
+        Some("https://apply.workable.com/soylent/j/1A2B3C4D5E/")
     );
     assert!(
         p.text
-            .starts_with("At Hugging Face, we're on a journey to democratize good AI.")
+            .starts_with("At Soylent AI, we're on a mission to make open models easy to use.")
     );
     assert!(
         p.text
@@ -230,10 +230,10 @@ async fn workable_api() {
 
 #[tokio::test]
 async fn recruitee_api() {
-    let p = ok_case("recruitee-mowery").await;
+    let p = ok_case("recruitee-dunmore").await;
     assert_eq!(p.method, Method::Recruitee);
     assert_eq!(p.title.as_deref(), Some("Marketing Operations Specialist"));
-    assert_eq!(p.company.as_deref(), Some("Mowery & Schoenfeld LLC"));
+    assert_eq!(p.company.as_deref(), Some("Dunmore & Lowe LLC"));
     assert_eq!(
         p.location.as_deref(),
         Some("Lincolnshire, Illinois, United States (hybrid)")
@@ -242,7 +242,7 @@ async fn recruitee_api() {
     assert_eq!(p.salary, year(80_000, 100_000));
     assert!(
         p.text
-            .starts_with("Mowery & Schoenfeld is a Top 150 accounting and advisory firm")
+            .starts_with("Dunmore & Lowe is a Top 150 accounting and advisory firm")
     );
     assert!(p.text.contains(
         "\n\nRequirements\n- Bachelor's degree in Marketing, Business, Communications, or a related field."
@@ -251,28 +251,28 @@ async fn recruitee_api() {
 
 #[tokio::test]
 async fn linkedin_guest_page() {
-    let p = ok_case("linkedin-vilo").await;
+    let p = ok_case("linkedin-aperture").await;
     assert_eq!(p.method, Method::Linkedin);
     assert_eq!(
         p.source.as_deref(),
-        Some("https://www.linkedin.com/jobs/view/4446030579/")
+        Some("https://www.linkedin.com/jobs/view/4000000101/")
     );
     assert_eq!(
         p.url.as_deref(),
-        Some("https://www.linkedin.com/jobs/view/4446030579/")
+        Some("https://www.linkedin.com/jobs/view/4000000101/")
     );
     assert_eq!(
         p.title.as_deref(),
         Some("Software Engineer (AI Wearable Tech)")
     );
-    assert_eq!(p.company.as_deref(), Some("Vilo"));
+    assert_eq!(p.company.as_deref(), Some("Aperture Wearables"));
     assert_eq!(p.location.as_deref(), Some("United States"));
     assert!(
         p.text
-            .starts_with("We are looking for a Software Engineer to build fast, reliable")
+            .starts_with("Aperture Wearables is hiring a Software Engineer to build quick, dependable")
     );
     assert!(p.text.contains(
-        "\n\nWhat You’ll Work On\n- Build and maintain responsive web applications using React, Next.js"
+        "\n\nWhat You’ll Work On\n- Ship responsive web apps in React, Next.js and TypeScript"
     ));
     assert!(p.text.ends_with(
         "\n\nSeniority level: Entry level\nEmployment type: Full-time\nIndustries: Computers and Electronics Manufacturing"
@@ -287,36 +287,36 @@ async fn linkedin_search_link_reads_the_job() {
         p.source
             .as_deref()
             .unwrap()
-            .contains("currentJobId=4475737628")
+            .contains("currentJobId=4000000202")
     );
     assert_eq!(
         p.url.as_deref(),
-        Some("https://www.linkedin.com/jobs/view/4475737628/")
+        Some("https://www.linkedin.com/jobs/view/4000000202/")
     );
     assert_eq!(p.title.as_deref(), Some("Analyst, Business Systems"));
-    assert_eq!(p.company.as_deref(), Some("BioSpace"));
-    assert_eq!(p.location.as_deref(), Some("North Chicago, IL"));
+    assert_eq!(p.company.as_deref(), Some("Oscorp Biosciences"));
+    assert_eq!(p.location.as_deref(), Some("Springfield, IL"));
     assert!(p.text.chars().count() > 3000);
 }
 
 #[tokio::test]
 async fn json_ld_job_posting() {
-    let p = ok_case("jsonld-gcrealty").await;
+    let p = ok_case("jsonld-vandelay").await;
     assert_eq!(p.method, Method::JsonLd);
     assert_eq!(p.title.as_deref(), Some("Systems & Automation Engineer"));
-    assert_eq!(p.company.as_deref(), Some("GC Realty & Development, LLC"));
+    assert_eq!(p.company.as_deref(), Some("Vandelay Realty & Development, LLC"));
     // `minValue` and `maxValue` written as strings.
     assert_eq!(p.salary, year(80_000, 105_000));
-    assert_eq!(p.location.as_deref(), Some("Roselle, IL"));
+    assert_eq!(p.location.as_deref(), Some("Oak Ridge, IL"));
     // The page's own canonical link, not the link pasted.
     assert_eq!(
         p.url.as_deref(),
         Some(
-            "https://www.applicantpro.com/openings/gcrealtyinc/jobs/4234604/IL-Illinois/Roselle/Systems-Automation-Engineer"
+            "https://www.vandelay.example/openings/jobs/5000001/IL-Illinois/Oak-Ridge/Systems-Automation-Engineer"
         )
     );
     assert!(p.text.starts_with(
-        "Systems & Automation Engineer\n- Can you write code that solves real business problems?\n"
+        "Systems & Automation Engineer\n- Do you like writing code that removes busywork for real people?\n"
     ));
     assert!(p.text.contains("\n\nRole Overview\n"));
     assert!(has_line(
@@ -327,14 +327,14 @@ async fn json_ld_job_posting() {
 
 #[tokio::test]
 async fn html_main_text_without_chrome() {
-    let p = ok_case("html-mantech").await;
+    let p = ok_case("html-massive-dynamic").await;
     assert_eq!(p.method, Method::Html);
     assert_eq!(p.title.as_deref(), Some("Software Engineer"));
-    assert_eq!(p.company.as_deref(), Some("MANTECH"));
+    assert_eq!(p.company.as_deref(), Some("MASSIVE DYNAMIC"));
     assert_eq!(p.location, None);
     assert_eq!(
         p.url.as_deref(),
-        Some("https://careers.mantech.com/en_US/careers/JobDetail/Software-Engineer/66000")
+        Some("https://careers.massivedynamic.example/en_US/careers/JobDetail/Software-Engineer/66000")
     );
     assert!(
         p.text
@@ -430,7 +430,7 @@ impl Fetcher for Offline {
 }
 
 const SEARCH: &str =
-    "https://www.linkedin.com/jobs/search-results/?currentJobId=4475737628&keywords=engineer";
+    "https://www.linkedin.com/jobs/search-results/?currentJobId=4000000202&keywords=engineer";
 
 #[tokio::test]
 async fn blocked_sites_say_to_paste() {
@@ -611,41 +611,41 @@ async fn freehire_search_lists_jobs() {
     let ashby = &page.jobs[0];
     assert_eq!(
         ashby.slug,
-        "member-of-technical-staff-enterprise-engineering-i-bay-area-ntt-data-aivista-topc5b5u"
+        "member-of-technical-staff-enterprise-engineering-i-bay-area-planet-express-k3x9q2ab"
     );
     assert_eq!(
         ashby.external_id.as_deref(),
-        Some("ntt-data-aivista:eef8b2f4-c13e-4e28-80c0-3008d3937991")
+        Some("planet-express:0b6c1f9e-2d47-4a8b-9c13-5e7f20a4d681")
     );
     assert_eq!(ashby.found_at, "2026-10-13T19:29:18Z");
     assert_eq!(ashby.posted_at.as_deref(), Some("2026-10-13T17:31:45Z"));
-    assert_eq!(ashby.company_slug.as_deref(), Some("ntt-data-aivista"));
+    assert_eq!(ashby.company_slug.as_deref(), Some("planet-express"));
     assert!(ashby.skills.iter().any(|s| s == "typescript"));
     assert_eq!(
         ashby.url,
-        "https://jobs.ashbyhq.com/ntt-data-aivista/eef8b2f4-c13e-4e28-80c0-3008d3937991"
+        "https://jobs.ashbyhq.com/planet-express/0b6c1f9e-2d47-4a8b-9c13-5e7f20a4d681"
     );
-    let cutter = &page.jobs[1];
-    // Only freehire's tracking parameter goes; the employer's own stay.
+    let dunder = &page.jobs[1];
+    // Only freehire's tracking parameters go; the employer's own stay.
     assert_eq!(
-        cutter.url,
-        "https://cutterassociates.hrmdirect.com/employment/job-opening.php?req=3840158&req_loc=1511121"
+        dunder.url,
+        "https://dundermifflin.hrmdirect.example/employment/job-opening.php?req=3840158&req_loc=1511121"
     );
-    assert_eq!(cutter.salary, year(90_000, 120_000));
-    assert_eq!(cutter.years_min, Some(3));
-    assert_eq!(cutter.seniority.as_deref(), Some("junior"));
-    assert_eq!(cutter.employment_type.as_deref(), Some("full_time"));
-    assert_eq!(cutter.work_mode.as_deref(), Some("remote"));
+    assert_eq!(dunder.salary, year(90_000, 120_000));
+    assert_eq!(dunder.years_min, Some(3));
+    assert_eq!(dunder.seniority.as_deref(), Some("junior"));
+    assert_eq!(dunder.employment_type.as_deref(), Some("full_time"));
+    assert_eq!(dunder.work_mode.as_deref(), Some("remote"));
     assert!(page.jobs.iter().all(|j| !j.url.contains("utm_")));
 }
 
 #[tokio::test]
 async fn freehire_greenhouse_job_reads_the_board() {
     let job = feed_job(
-        "motion-planning-software-engineering-intern-summer-2027-wing-3rxo4u4f",
+        "motion-planning-software-engineering-intern-summer-2027-spacely-sprockets-3rxo4u4f",
         "greenhouse",
-        "wing:8872472002",
-        "https://wing.com/careers/8872472002?gh_jid=8872472002",
+        "spacely:7000000001",
+        "https://spacely.example/careers/7000000001?gh_jid=7000000001",
     );
     // Replay answers only the board API's URL for this job.
     let p = freehire::read_job(&replay("freehire-greenhouse"), &job)
@@ -658,13 +658,13 @@ async fn freehire_greenhouse_job_reads_the_board() {
     );
     assert_eq!(p.source.as_deref(), Some(job.page_url().as_str()));
     assert_eq!(p.url.as_deref(), Some(job.url.as_str()));
-    assert!(p.text.starts_with("About Wing:\n"));
+    assert!(p.text.starts_with("About Spacely Sprockets:\n"));
     assert_clean("freehire-greenhouse", &p.text);
 
     // The same text, so the same hash, as pasting the board link.
     let pasted = read_with(
         &replay("freehire-greenhouse"),
-        "https://job-boards.greenhouse.io/wing/jobs/8872472002",
+        "https://job-boards.greenhouse.io/spacely/jobs/7000000001",
     )
     .await
     .unwrap();
@@ -674,18 +674,18 @@ async fn freehire_greenhouse_job_reads_the_board() {
 #[tokio::test]
 async fn freehire_workday_job_reads_the_board() {
     let job = feed_job(
-        "software-engineer-openshell-nvidia",
+        "software-engineer-agent-runtime-cyberdyne",
         "workday",
-        "nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite:/job/US-Remote/Software-Engineer--OpenShell_JR2020825",
-        "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-Remote/Software-Engineer--OpenShell_JR2020825",
+        "cyberdyne.wd5.myworkdayjobs.com/CyberdyneCareers:/job/US-Remote/Software-Engineer--Agent-Runtime_JR1000001",
+        "https://cyberdyne.wd5.myworkdayjobs.com/CyberdyneCareers/job/US-Remote/Software-Engineer--Agent-Runtime_JR1000001",
     );
     // Replay answers only Workday's job URL.
-    let p = freehire::read_job(&replay("workday-nvidia"), &job)
+    let p = freehire::read_job(&replay("workday-cyberdyne"), &job)
         .await
         .unwrap();
     assert_eq!(p.method, Method::Workday);
-    assert_eq!(p.title.as_deref(), Some("Software Engineer, OpenShell"));
-    let pasted = ok_case("workday-nvidia").await;
+    assert_eq!(p.title.as_deref(), Some("Software Engineer, Agent Runtime"));
+    let pasted = ok_case("workday-cyberdyne").await;
     assert_eq!(p.hash, pasted.hash);
 }
 
@@ -693,13 +693,13 @@ async fn freehire_workday_job_reads_the_board() {
 async fn freehire_other_sources_read_freehires_copy() {
     let job = resume_core::feed::FeedJob {
         title: "Software Engineer".into(),
-        company: "Docusign".into(),
+        company: "Cogswell Cogs".into(),
         location: Some("Seattle, Washington, United States".into()),
         ..feed_job(
-            "software-engineer-docusign-nw3mel5f",
+            "software-engineer-cogswell-cogs-nw3mel5f",
             "icims",
-            "careers.docusign.com:30535",
-            "https://careers.docusign.com/jobs/30535?lang=en-us",
+            "careers.cogswell.example:30535",
+            "https://careers.cogswell.example/jobs/30535?lang=en-us",
         )
     };
     let p = freehire::read_job(&replay("freehire-icims"), &job)
@@ -707,7 +707,7 @@ async fn freehire_other_sources_read_freehires_copy() {
         .unwrap();
     assert_eq!(p.method, Method::Freehire);
     assert_eq!(p.title.as_deref(), Some("Software Engineer"));
-    assert_eq!(p.company.as_deref(), Some("Docusign"));
+    assert_eq!(p.company.as_deref(), Some("Cogswell Cogs"));
     assert_eq!(
         p.location.as_deref(),
         Some("Seattle, Washington, United States")
@@ -715,7 +715,7 @@ async fn freehire_other_sources_read_freehires_copy() {
     assert_eq!(p.url.as_deref(), Some(job.url.as_str()));
     assert!(
         p.text
-            .starts_with("Company Overview\nDocusign brings agreements to life.")
+            .starts_with("Company Overview\nCogswell Cogs builds the parts that keep machines turning.")
     );
     assert_clean("freehire-icims", &p.text);
     assert_eq!(p.hash, resume_core::posting::text_hash(&p.text));
@@ -725,10 +725,10 @@ async fn freehire_other_sources_read_freehires_copy() {
 async fn freehire_board_ids_that_dont_parse_read_freehires_copy() {
     // A Greenhouse job whose id isn't digits: not guessed into a board request.
     let job = feed_job(
-        "software-engineer-intern-ai-kla-7iwfqjh3",
+        "software-engineer-intern-ai-sirius-cybernetics-7iwfqjh3",
         "greenhouse",
-        "wing:not-an-id",
-        "https://wing.com/careers/x",
+        "spacely:not-an-id",
+        "https://spacely.example/careers/x",
     );
     let p = freehire::read_job(&replay("freehire-detail"), &job)
         .await
@@ -739,12 +739,12 @@ async fn freehire_board_ids_that_dont_parse_read_freehires_copy() {
 #[test]
 fn freehire_logo_urls_encode_the_name() {
     assert_eq!(
-        logos::freehire_logo_url("Gen II Fund Services"),
-        "https://logo.freehire.me/Gen%20II%20Fund%20Services"
+        logos::freehire_logo_url("Vehement Capital Partners"),
+        "https://logo.freehire.me/Vehement%20Capital%20Partners"
     );
     assert_eq!(
-        logos::freehire_logo_url(" KLA "),
-        "https://logo.freehire.me/KLA"
+        logos::freehire_logo_url(" Sirius "),
+        "https://logo.freehire.me/Sirius"
     );
     assert_eq!(
         logos::freehire_logo_url("Acme/Labs?"),
@@ -754,30 +754,30 @@ fn freehire_logo_urls_encode_the_name() {
 
 #[tokio::test]
 async fn freehire_company_gives_its_website() {
-    // Replay answers only `/companies/kla`.
-    let site = logos::company_website(&replay("freehire-company"), "kla")
+    // Replay answers only `/companies/sirius`.
+    let site = logos::company_website(&replay("freehire-company"), "sirius")
         .await
         .unwrap();
-    assert_eq!(site.as_deref(), Some("https://www.kla.com/"));
+    assert_eq!(site.as_deref(), Some("https://www.sirius.example/"));
     // A company freehire doesn't know has none; a failure is an error.
     let none = logos::company_website(&Stub::status(404), "nobody").await;
     assert_eq!(none, Ok(None));
-    let err = logos::company_website(&Offline, "kla").await.unwrap_err();
+    let err = logos::company_website(&Offline, "sirius").await.unwrap_err();
     assert!(matches!(err, IngestError::Network { .. }), "{err:?}");
 }
 
 #[test]
-fn icon_links_of_a_real_homepage() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/ingest/homepage-kla");
-    let r = replay("homepage-kla").recording;
+fn icon_links_of_a_recorded_homepage() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/ingest/homepage-sirius");
+    let r = replay("homepage-sirius").recording;
     let html = std::fs::read_to_string(dir.join(&r.body)).unwrap();
     // The touch icon first, then the icons largest first; the relative `/favicon.ico` is the fallback already.
     assert_eq!(
         logos::icon_links(&html, &r.url),
         [
-            "https://www.kla.com/wp-content/uploads/android-chrome-256x256-250x250.png",
-            "https://www.kla.com/wp-content/uploads/android-chrome-256x256-100x100.png",
-            "https://www.kla.com/favicon.ico",
+            "https://www.sirius.example/wp-content/uploads/android-chrome-256x256-250x250.png",
+            "https://www.sirius.example/wp-content/uploads/android-chrome-256x256-100x100.png",
+            "https://www.sirius.example/favicon.ico",
         ]
     );
 }

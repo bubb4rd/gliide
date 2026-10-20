@@ -1,4 +1,4 @@
-// Toasts: short confirmations and errors, said once ("Saved globex_jr_sde_doe_resume.pdf"). The layout renders
+// Toasts: short confirmations and errors, said once ("Saved acme_swe_doe_resume.pdf"). The layout renders
 // them with <Toaster />; anything can call `toast()`.
 
 export type ToastTone = "neutral" | "gain" | "warn" | "danger";

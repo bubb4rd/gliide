@@ -502,7 +502,7 @@ pub struct JobHead {
     pub location: String,
     pub seniority: String,
     pub url: Option<String>,
-    /// `"read from globex.com"`, `"from Greenhouse"`, `"pasted"`.
+    /// `"read from acme.com"`, `"from Greenhouse"`, `"pasted"`.
     pub source: String,
 }
 
@@ -861,7 +861,7 @@ pub struct KeyDecision {
 pub struct Exported {
     /// Absolute path of the PDF.
     pub path: String,
-    /// `globex_jr_sde_doe_resume.pdf`.
+    /// `acme_swe_doe_resume.pdf`.
     pub file_name: String,
     /// The score from the PDF's own text ("on file"); `None` when the text couldn't be read back.
     pub on_file: Option<f64>,
@@ -884,7 +884,7 @@ pub enum AppStatus {
 #[ts(export)]
 pub struct ApplicationRow {
     pub id: String,
-    /// The posting, when the application came from one in the app (not from an imported ATS Fit CSV row).
+    /// The posting, when the application came from one in the app (not from a row imported from `applications.csv`).
     pub job: Option<String>,
     /// `YYYY-MM-DD`.
     pub date: String,
@@ -918,7 +918,7 @@ pub struct FolderView {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct FolderFile {
-    /// `globex_jr_sde_doe_resume.pdf`: what `folder_pdf` takes.
+    /// `acme_swe_doe_resume.pdf`: what `folder_pdf` takes.
     pub name: String,
     /// Absolute path.
     pub path: String,

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Apple Silicon: the platform the app is built and tested on.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # pnpm's version comes from `packageManager` in app/package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Install front-end dependencies
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check the front end
+        working-directory: app
+        run: pnpm check
+
+      # The Tauri crate embeds `app/build` (frontendDist) at compile time.
+      - name: Build the front end
+        working-directory: app
+        run: pnpm build
+
+      - name: Rust tests
+        run: cargo test --workspace --locked
+
+      - name: Design lint
+        run: node design/lint.mjs

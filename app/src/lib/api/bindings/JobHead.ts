@@ -9,6 +9,6 @@ export type JobHead = { role: string, company: string,
  */
 companyKey: string, location: string, seniority: string, url: string | null, 
 /**
- * `"read from globex.com"`, `"from Greenhouse"`, `"pasted"`.
+ * `"read from acme.com"`, `"from Greenhouse"`, `"pasted"`.
  */
 source: string, };

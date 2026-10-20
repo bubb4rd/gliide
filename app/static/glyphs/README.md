@@ -47,5 +47,5 @@ EOF
 rm -rf /tmp/glyphs
 ```
 
-License: SIL Open Font License 1.1, as Inter itself (`design/fonts/Inter-OFL.txt`). These are glyph bitmaps derived
+License: SIL Open Font License 1.1, as Inter itself ([`design/fonts/Inter-OFL.txt`](../../../design/fonts/Inter-OFL.txt)). These are glyph bitmaps derived
 from the font, distributed with the app under the same license.

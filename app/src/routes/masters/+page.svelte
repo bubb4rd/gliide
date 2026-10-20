@@ -204,7 +204,7 @@
   <div class="center">
     <Empty
       title="No resumes yet"
-      body="Import your ATS Fit resume in Experience; it becomes your first master."
+      body="Import your resume in Experience; it becomes your first master."
     >
       {#snippet action()}<Button variant="primary" size="lg" kbd="E" onclick={() => goto("/bank")}>Go to Experience</Button>{/snippet}
     </Empty>

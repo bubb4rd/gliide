@@ -1,0 +1,11 @@
+{
+  "input": "https://gringotts.recruitee.com",
+  "request": "https://gringotts.recruitee.com/api/offers/",
+  "url": "https://gringotts.recruitee.com/api/offers/",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a Recruitee offers API response; content invented. Only the fields the watchlist reads are kept."
+}

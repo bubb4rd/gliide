@@ -58,7 +58,7 @@
 
   $effect(() => bindKeys({ v: paste.run, "mod+v": paste.run, i: () => void importResume() }));
 
-  /** "Jane (JJ) Doe" → "Bo"; else the first name. */
+  /** "Jane (JJ) Doe" → "JJ"; else the first name. */
   function firstName(full: string): string {
     const nick = full.match(/\(([^)]+)\)/)?.[1]?.trim();
     return nick || full.trim().split(/\s+/)[0] || "";

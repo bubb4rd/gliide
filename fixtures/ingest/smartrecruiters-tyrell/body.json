@@ -1,0 +1,43 @@
+{
+  "id": "700000000000001",
+  "name": "Senior Endpoint Systems Engineer - (Hybrid Allen, TX)",
+  "company": {
+    "name": "Tyrell Data",
+    "identifier": "TyrellData"
+  },
+  "location": {
+    "city": "Allen",
+    "region": "TX",
+    "country": "us",
+    "remote": false,
+    "hybrid": true,
+    "fullLocation": "Allen, TX, United States"
+  },
+  "postingUrl": "https://jobs.smartrecruiters.com/TyrellData/700000000000001-senior-endpoint-systems-engineer-hybrid-allen-tx-",
+  "compensation": {
+    "min": 80237,
+    "max": 139077,
+    "currency": "USD",
+    "period": "YEARLY"
+  },
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>Tyrell Data is a global data company that keeps records tidy for people &amp; businesses.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>We are seeking a proficient M365 Engineer to manage laptops and phones across our offices.</p><ul><li>Enroll and patch devices.</li><li>Write endpoint compliance policies.</li></ul>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>7+ years of experience in endpoint management.</li><li>PowerShell scripting.</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>Pay depends on location and experience. The base range is listed above.</p><p>Tyrell Data is an Equal Opportunity employer.</p>"
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
-//! Import (ATS Fit's `import.md`): a resume file's text and links turned into a resume, word for word, in the shape
-//! ATS Fit's master had (`resume_core::Resume`); `resume_core::import` merges it into the bank. Nothing checks the
+//! Import (`prompts/import.md`): a resume file's text and links turned into a resume, word for word, in the v1 master
+//! JSON shape (`resume_core::Resume`); `resume_core::import` merges it into the bank. Nothing checks the
 //! copy against the file: the import review shows it before anything is saved.
 
 use std::fmt::Write as _;
@@ -11,7 +11,7 @@ use crate::{Call, Llm, LlmError, Schema, Structured};
 
 /// The import instructions (`prompts/import.md`).
 pub const PROMPT: &str = include_str!("../../../prompts/import.md");
-/// The reply's schema (`prompts/import.schema.json`): ATS Fit's `master.schema.json`.
+/// The reply's schema (`prompts/import.schema.json`): the v1 master JSON shape.
 pub const SCHEMA: &str = include_str!("../../../prompts/import.schema.json");
 /// The model Import runs on unless the user picks another.
 pub const DEFAULT_IMPORT_MODEL: &str = "sonnet";

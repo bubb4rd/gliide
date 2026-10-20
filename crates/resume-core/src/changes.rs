@@ -1,4 +1,4 @@
-//! Suggestions into changes (ARCHITECTURE.md §5), as ATS Fit's `changes_of` and `draft_changes`.
+//! Suggestions into changes (ARCHITECTURE.md §5).
 //!
 //! | Suggestion | Change |
 //! |---|---|

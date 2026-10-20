@@ -1,0 +1,11 @@
+{
+  "input": "https://freehire.me/jobs/software-engineer-cogswell-cogs-nw3mel5f",
+  "request": "https://freehire.me/api/v1/jobs/software-engineer-cogswell-cogs-nw3mel5f",
+  "url": "https://freehire.me/api/v1/jobs/software-engineer-cogswell-cogs-nw3mel5f",
+  "status": 200,
+  "content_type": "application/json",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-14",
+  "note": "Synthetic: shaped like a freehire job detail response for an iCIMS job; content invented."
+}

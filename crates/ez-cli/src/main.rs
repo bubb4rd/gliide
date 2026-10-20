@@ -13,7 +13,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Turn an ATS Fit master.json (v1) into a bank and an `swe` master.
+    /// Turn a legacy v1 master.json into a bank and an `swe` master.
     Migrate(cmd::migrate::Args),
     /// Import a resume (.pdf, .docx, .md, .txt) into a bank, with a master that shows it as the file does.
     Import(cmd::import::Args),

@@ -1,0 +1,218 @@
+{
+  "certifications": [],
+  "company": "Vandelay Realty & Development, LLC",
+  "degree": {
+    "equivalent": true,
+    "fields": [
+      "Computer Science",
+      "Information Systems"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [
+    {
+      "kind": "onsite",
+      "text": "Fully onsite in Elmhurst, IL, five days a week"
+    },
+    {
+      "kind": "other",
+      "text": "Able to pass a background check"
+    },
+    {
+      "kind": "other",
+      "text": "Able to lift up to 50 lbs"
+    }
+  ],
+  "location": "Elmhurst, IL (onsite)",
+  "role": "Systems & Automation Engineer",
+  "seniority": "mid",
+  "short_role": "systems_automation",
+  "skills": [
+    {
+      "aliases": [],
+      "group": "scripting_language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Python"
+    },
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": "scripting_language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "SQL"
+    },
+    {
+      "aliases": [
+        "REST API"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "REST APIs"
+    },
+    {
+      "aliases": [],
+      "group": "low_code",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Podio"
+    },
+    {
+      "aliases": [],
+      "group": "low_code",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "n8n"
+    },
+    {
+      "aliases": [],
+      "group": "low_code",
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Zapier"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "MySQL"
+    },
+    {
+      "aliases": [
+        "PostgreSQL"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Postgres"
+    },
+    {
+      "aliases": [
+        "webhook"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "webhooks"
+    },
+    {
+      "aliases": [
+        "web application",
+        "web development"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "web applications"
+    },
+    {
+      "aliases": [
+        "multi-factor authentication"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "MFA"
+    },
+    {
+      "aliases": [
+        "single sign-on"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "SSO"
+    },
+    {
+      "aliases": [
+        "systems administrator"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "systems administration"
+    },
+    {
+      "aliases": [],
+      "group": "web_framework",
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "React"
+    },
+    {
+      "aliases": [
+        "NextJS"
+      ],
+      "group": "web_framework",
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "Next.js"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Supabase"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "AppFolio"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Google Workspace"
+    },
+    {
+      "aliases": [
+        "communication skills"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "communication"
+    }
+  ],
+  "title_terms": [
+    "Systems Engineer",
+    "Automation Engineer"
+  ],
+  "years_min": 2
+}

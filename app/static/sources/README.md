@@ -14,3 +14,6 @@ logos).
 | `ashby.png` | https://www.ashbyhq.com/icon.png (ashbyhq.com's `apple-touch-icon`) |
 | `workday.png` | Workday, Inc.'s app icon on the App Store (https://apps.apple.com/us/app/workday/id316800034, linked from workday.com; the site itself serves only a 32px favicon) |
 | `smartrecruiters.png` | https://www.smartrecruiters.com/wp-content/uploads/cropped-web-app-manifest-192x192-1-180x180.png (smartrecruiters.com's `apple-touch-icon`) |
+
+These icons are trademarks of their owners, used only to identify each source; they are not covered by gliide's
+license, and gliide is not affiliated with, sponsored or endorsed by any of them.

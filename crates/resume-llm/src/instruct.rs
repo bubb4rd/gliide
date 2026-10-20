@@ -197,7 +197,7 @@ mod tests {
     fn requirements() -> Requirements {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../fixtures/requirements/sonnet/waymark-jr-swe.json"
+            "/../../fixtures/requirements/sonnet/northwind-jr-swe.json"
         );
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
     }

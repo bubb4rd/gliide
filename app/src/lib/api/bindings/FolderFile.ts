@@ -3,7 +3,7 @@ import type { FileKind } from "./FileKind";
 
 export type FolderFile = { 
 /**
- * `globex_jr_sde_doe_resume.pdf`: what `folder_pdf` takes.
+ * `acme_swe_doe_resume.pdf`: what `folder_pdf` takes.
  */
 name: string, 
 /**

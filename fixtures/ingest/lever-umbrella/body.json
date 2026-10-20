@@ -1,0 +1,29 @@
+{
+  "categories": {
+    "commitment": "Permanent",
+    "department": "Engineering",
+    "location": "London",
+    "team": "Experience",
+    "allLocations": [
+      "London",
+      "Stockholm"
+    ]
+  },
+  "id": "7c2d1e00-0000-4b00-8000-00000000b001",
+  "text": "Android Engineer - Experience",
+  "workplaceType": "hybrid",
+  "hostedUrl": "https://jobs.lever.co/umbrella/7c2d1e00-0000-4b00-8000-00000000b001",
+  "applyUrl": "https://jobs.lever.co/umbrella/7c2d1e00-0000-4b00-8000-00000000b001/apply",
+  "description": "<div>\n<p>We design Umbrella Audio’s listening experience across phones, cars and speakers. The aim: playback that feels instant and calm.</p>\n</div>",
+  "lists": [
+    {
+      "text": "What You'll Do",
+      "content": "<div>\n\n<li>\n<p>Develop and maintain mobile client components that capture and report listening events reliably.</p>\n</li>\n<li>\n<p>Write well-tested Kotlin.</p>\n</li>\n</div>"
+    },
+    {
+      "text": "Who You Are",
+      "content": "<li>You have shipped Android apps.</li><li>You enjoy debugging flaky networks.</li>"
+    }
+  ],
+  "additional": "<div><span style=\"font-size: 11pt;\">Umbrella Audio is an equal opportunity employer.&nbsp;We welcome you as you are.</span></div>"
+}

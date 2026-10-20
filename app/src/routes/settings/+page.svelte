@@ -378,7 +378,7 @@
       return null;
     });
     if (!dir || dir === s?.exportDir) return;
-    // A folder holding ATS Fit's applications.csv has it imported, so the list may grow.
+    // A folder holding an existing applications.csv has it imported, so the list may grow.
     if (await save({ exportDir: dir })) app.refreshApplications();
   }
 
@@ -694,7 +694,8 @@
                       <dd class="detail">
                         <p class="hint">
                           Searches LinkedIn for your masters’ titles on each pull. Its jobs link to LinkedIn, not to the
-                          employer.
+                          employer. Off by default: LinkedIn’s User Agreement doesn’t allow automated access. gliide reads
+                          its public guest job search only while this is on, and that use is your responsibility.
                         </p>
                       </dd>
                     </div>

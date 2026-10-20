@@ -1,4 +1,4 @@
-// A cover letter (ATS Fit's `cover.typ`; JSON in `sys.inputs.data`: the resume's `name` and `contact`, then `date`,
+// A cover letter (JSON in `sys.inputs.data`: the resume's `name` and `contact`, then `date`,
 // `company`, `role`, `greeting`, `paragraphs` and `closing`) under the resume's letterhead: the same name, contact line
 // and rule, Times New Roman, one page. Liberation Serif, metric-compatible with Times New Roman, stands in where it
 // isn't installed. Records the page count (`<pages>`).

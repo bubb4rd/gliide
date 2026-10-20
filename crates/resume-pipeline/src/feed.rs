@@ -47,7 +47,8 @@ pub struct FeedSettings {
     /// The best master's score (percent) that makes a fit.
     pub threshold: f64,
     pub every_hours: u32,
-    /// Search LinkedIn's guest job search on each pull.
+    /// Search LinkedIn's guest job search on each pull. Opt-in (off by default): LinkedIn's terms don't allow
+    /// automated access, so it runs only when the user turns it on.
     pub linkedin: bool,
     /// Company boards polled on each pull, as their careers links (`resume_ingest::watch::Board::url`).
     pub watchlist: Vec<String>,
@@ -70,7 +71,7 @@ impl Default for FeedSettings {
             daily_checks: 20,
             threshold: 40.0,
             every_hours: 3,
-            linkedin: true,
+            linkedin: false,
             watchlist: vec![],
             apify_token: None,
         }

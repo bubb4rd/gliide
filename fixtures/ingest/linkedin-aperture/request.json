@@ -1,0 +1,11 @@
+{
+  "input": "https://www.linkedin.com/jobs/view/4000000101/",
+  "request": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4000000101",
+  "url": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4000000101",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like LinkedIn's guest job page (top card, description markup, criteria list); content invented."
+}

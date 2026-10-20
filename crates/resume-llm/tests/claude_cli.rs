@@ -130,7 +130,7 @@ async fn valid_output_passes_in_one_call() {
     assert_eq!((usage.api_ms, usage.turns), (Some(812), Some(2)));
     assert_eq!(usage.models, ["claude-haiku-test"]);
 
-    // ATS Fit's call: input on stdin, schema and prompt as flags, no tools, settings, MCP or session.
+    // The call: input on stdin, schema and prompt as flags, no tools, settings, MCP or session.
     assert_eq!(fake.read("stdin.1"), CALL.input);
     let args: Vec<String> = fake.read("args.1").lines().map(str::to_owned).collect();
     let schema_text = SCHEMA.lines().collect::<Vec<_>>();

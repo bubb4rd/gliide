@@ -1351,19 +1351,13 @@ mod tests {
         };
         assert!(!linkedin_due(&backed_off, now));
         assert!(linkedin_due(&backed_off, at("2026-10-14T05:30:00Z")));
-        assert!(linkedin_paused(&FeedSettings::default(), &backed_off, now).is_some());
-        assert!(
-            linkedin_paused(
-                &FeedSettings::default(),
-                &backed_off,
-                at("2026-10-14T06:00:00Z")
-            )
-            .is_none()
-        );
-        let off = FeedSettings {
-            linkedin: false,
+        let on = FeedSettings {
+            linkedin: true,
             ..FeedSettings::default()
         };
+        assert!(linkedin_paused(&on, &backed_off, now).is_some());
+        assert!(linkedin_paused(&on, &backed_off, at("2026-10-14T06:00:00Z")).is_none());
+        let off = FeedSettings::default();
         assert!(linkedin_paused(&off, &backed_off, now).is_none());
 
         // At most hourly: a launch soon after the last search leaves LinkedIn alone.

@@ -1,0 +1,204 @@
+{
+  "certifications": [],
+  "company": "Aperture Wearables",
+  "degree": null,
+  "knockouts": [],
+  "location": "United States",
+  "role": "Software Engineer (AI Wearable Tech)",
+  "seniority": "mid",
+  "short_role": "swe",
+  "skills": [
+    {
+      "aliases": [
+        "React.js"
+      ],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "React"
+    },
+    {
+      "aliases": [],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Angular"
+    },
+    {
+      "aliases": [
+        "Vue.js"
+      ],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Vue"
+    },
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [
+        "TS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [
+        "Node",
+        "NodeJS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Node.js"
+    },
+    {
+      "aliases": [
+        "REST API",
+        "RESTful APIs"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "REST APIs"
+    },
+    {
+      "aliases": [
+        "NextJS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "Next.js"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Git"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "authentication"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "web performance"
+    },
+    {
+      "aliases": [
+        "NoSQL"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "NoSQL databases"
+    },
+    {
+      "aliases": [
+        "SSR"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "server-side rendering"
+    },
+    {
+      "aliases": [
+        "ecommerce"
+      ],
+      "group": null,
+      "kind": "domain",
+      "priority": 3,
+      "required": false,
+      "term": "e-commerce"
+    },
+    {
+      "aliases": [],
+      "group": "payment_platform",
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Stripe"
+    },
+    {
+      "aliases": [],
+      "group": "payment_platform",
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Shopify"
+    },
+    {
+      "aliases": [
+        "search engine optimization"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "SEO"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "GraphQL"
+    },
+    {
+      "aliases": [
+        "continuous integration"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "CI/CD"
+    },
+    {
+      "aliases": [
+        "problem solving"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "problem-solving"
+    }
+  ],
+  "title_terms": [
+    "Software Engineer"
+  ],
+  "years_min": 3
+}

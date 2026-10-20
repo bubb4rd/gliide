@@ -1,7 +1,7 @@
 //! What to change for one posting: the Suggest call's output (ARCHITECTURE.md §3). Master-dependent.
 //!
-//! Every id names a line of the tagged resume the model saw: an entry (`nhs`), a bullet (`nhs.2`), a note line
-//! (`asu#2`, 1-based), a skills line (`tools`), a section (`work`), or a bank entry outside the master (bank-aware
+//! Every id names a line of the tagged resume the model saw: an entry (`acme`), a bullet (`acme.2`), a note line
+//! (`state-u#2`, 1-based), a skills line (`tools`), a section (`work`), or a bank entry outside the master (bank-aware
 //! mode). `prompts/suggest.schema.json` must accept exactly this shape; every key is present, `""`/`null` when unused.
 
 use schemars::JsonSchema;

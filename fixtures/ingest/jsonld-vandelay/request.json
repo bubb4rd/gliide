@@ -1,0 +1,11 @@
+{
+  "input": "https://careers.vandelay.example/jobs/5000001-100001.html",
+  "request": "https://careers.vandelay.example/jobs/5000001-100001.html",
+  "url": "https://careers.vandelay.example/jobs/5000001-100001.html",
+  "status": 200,
+  "content_type": "text/html; charset=UTF-8",
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like an ApplicantPro job page (JSON-LD JobPosting with string minValue/maxValue, its own canonical link); content invented."
+}

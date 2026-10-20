@@ -1,0 +1,11 @@
+{
+  "input": "https://bluth.wd1.myworkdayjobs.com/en-US/bluth",
+  "request": "https://bluth.wd1.myworkdayjobs.com/wday/cxs/bluth/bluth/jobs",
+  "url": "https://bluth.wd1.myworkdayjobs.com/wday/cxs/bluth/bluth/jobs",
+  "status": 200,
+  "content_type": "application/json",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "POST {\"limit\":20,\"offset\":40,\"appliedFacets\":{},\"searchText\":\"\"}. Synthetic: shaped like a Workday jobs search response; content invented. Only the fields the watchlist reads are kept."
+}

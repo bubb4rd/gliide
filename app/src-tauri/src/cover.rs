@@ -1,4 +1,4 @@
-//! The open review's cover letter (ATS Fit's, now in the app): written by the model from the tailored resume as the
+//! The open review's cover letter: written by the model from the tailored resume as the
 //! draft has it now (your toggles and edits included) and the posting; each part yours to edit; one paragraph
 //! rewritten with a note; rendered under the resume's letterhead by one warm renderer. Stored per analysis.
 

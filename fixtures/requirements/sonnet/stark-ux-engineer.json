@@ -1,0 +1,215 @@
+{
+  "certifications": [],
+  "company": "Stark Medical Society",
+  "degree": {
+    "equivalent": true,
+    "fields": [
+      "computer science",
+      "web development",
+      "human-computer interaction",
+      "graphic design",
+      "digital media"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [
+    {
+      "kind": "onsite",
+      "text": "Hybrid in Oak Brook, IL; in office at least twice per week"
+    },
+    {
+      "kind": "authorization",
+      "text": "Authorized to work in the US without sponsorship"
+    }
+  ],
+  "location": "Hybrid - Oak Brook, IL",
+  "role": "UX Engineer",
+  "seniority": "mid",
+  "short_role": "ux_eng",
+  "skills": [
+    {
+      "aliases": [
+        "HTML"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "HTML5"
+    },
+    {
+      "aliases": [
+        "CSS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "CSS3"
+    },
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [
+        "responsive design"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "responsive development"
+    },
+    {
+      "aliases": [
+        "WCAG"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "accessibility"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [
+        "WCAG 2.2"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "WCAG 2.2 AA"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "information architecture"
+    },
+    {
+      "aliases": [
+        "wireframing"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "wireframes"
+    },
+    {
+      "aliases": [
+        "reusable UI components"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "component libraries"
+    },
+    {
+      "aliases": [
+        "Episerver"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": false,
+      "term": "Optimizely"
+    },
+    {
+      "aliases": [],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "Angular"
+    },
+    {
+      "aliases": [],
+      "group": "frontend_framework",
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "React"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "ASP.NET Core"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "C#"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "Razor"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "Core Web Vitals"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "Section 508"
+    },
+    {
+      "aliases": [
+        "communicate"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "communication"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "problem-solving"
+    }
+  ],
+  "title_terms": [
+    "UX Engineer"
+  ],
+  "years_min": 3
+}

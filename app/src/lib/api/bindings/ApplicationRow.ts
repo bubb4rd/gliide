@@ -3,7 +3,7 @@ import type { AppStatus } from "./AppStatus";
 
 export type ApplicationRow = { id: string, 
 /**
- * The posting, when the application came from one in the app (not from an imported ATS Fit CSV row).
+ * The posting, when the application came from one in the app (not from a row imported from `applications.csv`).
  */
 job: string | null, 
 /**

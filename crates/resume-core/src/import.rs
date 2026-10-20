@@ -1,4 +1,4 @@
-//! Import: a resume read from a file, in the shape the import prompt writes (ATS Fit's v1, [`Resume`]), merged into
+//! Import: a resume read from a file, in the shape the import prompt writes (the v1 format, [`Resume`]), merged into
 //! the bank, and the master that shows it as the file did (ARCHITECTURE.md §3, Import).
 //!
 //! [`plan`] reads the file's resume as a bank ([`migrate_v1`]: section kinds, months) and matches it against yours.

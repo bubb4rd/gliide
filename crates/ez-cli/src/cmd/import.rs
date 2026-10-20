@@ -12,7 +12,7 @@ use super::job::runtime;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// The resume: .pdf, .docx, .md, .txt, or a v1 resume JSON (ATS Fit's master.json, or an earlier run's
+    /// The resume: .pdf, .docx, .md, .txt, or a v1 resume JSON (a legacy v1 master.json, or an earlier run's
     /// imported.json, which skips the model call).
     file: PathBuf,
     /// The bank to merge into; without one, the file becomes the bank.

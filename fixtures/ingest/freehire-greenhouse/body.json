@@ -1,0 +1,45 @@
+{
+  "absolute_url": "https://spacely.example/careers/7000000001?gh_jid=7000000001",
+  "data_compliance": [
+    {
+      "type": "gdpr",
+      "requires_consent": false,
+      "requires_processing_consent": false,
+      "requires_retention_consent": false,
+      "retention_period": null,
+      "demographic_data_consent_applies": false
+    }
+  ],
+  "education": "education_required",
+  "internal_job_id": 7000000000,
+  "location": {
+    "name": "Palo Alto, California"
+  },
+  "metadata": null,
+  "id": 7000000001,
+  "updated_at": "2026-10-13T18:00:01-04:00",
+  "requisition_id": "1513",
+  "title": "Motion Planning Software Engineering Intern, Summer 2027",
+  "company_name": "Spacely Sprockets",
+  "first_published": "2026-10-13T18:00:01-04:00",
+  "language": "en",
+  "application_deadline": null,
+  "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;strong&gt;About Spacely Sprockets:&amp;nbsp;&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Spacely Sprockets designs the motion systems inside autonomous delivery carts. Our carts share sidewalks with people, so every plan they make has to be safe, smooth and quick to compute.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;\n&lt;p&gt;&lt;strong&gt;About the role:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;As a Motion Planning intern you will spend the summer on the planner that turns a map and a goal into a path. You will pair with a mentor, own a project end to end and present it to the team.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;What you&amp;rsquo;ll do:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Prototype planning and trajectory-optimization ideas in C++ and Python&lt;/span&gt;&lt;/li&gt;\n&lt;li&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Evaluate them in simulation &amp;amp; on logged drives&lt;/span&gt;&lt;/li&gt;\n&lt;li&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Write up results so others can build on them&lt;/span&gt;&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;What you&amp;rsquo;ll bring:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Pursuing a BS, MS or PhD in computer science, robotics or a related field&lt;/span&gt;&lt;/li&gt;\n&lt;li&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Coursework in planning, controls or optimization&lt;/span&gt;&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div class=&quot;content-conclusion&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;Spacely Sprockets is an equal opportunity employer.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;",
+  "departments": [
+    {
+      "id": 1,
+      "name": "Engineering",
+      "child_ids": [],
+      "parent_id": null
+    }
+  ],
+  "offices": [
+    {
+      "id": 2,
+      "name": "Palo Alto",
+      "location": "Palo Alto, California",
+      "child_ids": [],
+      "parent_id": null
+    }
+  ]
+}

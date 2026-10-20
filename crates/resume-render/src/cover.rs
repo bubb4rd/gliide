@@ -1,4 +1,4 @@
-//! The cover letter's template (`templates/cover-letter`, ATS Fit's `cover.typ`) and the data it reads. It renders
+//! The cover letter's template (`templates/cover-letter`) and the data it reads. It renders
 //! through a [`Renderer`](crate::Renderer) like a resume: `render(json, false)`, then `metrics.pages`, SVG pages and
 //! the PDF.
 

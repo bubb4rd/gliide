@@ -1,5 +1,5 @@
 //! Importing a resume into the bank (ARCHITECTURE.md §3, Import): a PDF, DOCX, Markdown or text file copied by the
-//! model (ATS Fit's `master.json` read as is), matched against the bank (`resume_core::import`), shown for review with
+//! model (a v1 master JSON read as is), matched against the bank (`resume_core::import`), shown for review with
 //! the master it makes on the desk, then merged. Nothing existing changes: new entries, bullets and skills are added,
 //! and the master shows the file. The import waits in [`App::import`] until you add or discard it; each step plans it
 //! against the bank as it is then.
@@ -35,7 +35,7 @@ pub struct Pending {
     pub pages: Option<usize>,
 }
 
-/// Reads the file at `path` (one model call unless it's ATS Fit's `master.json`) and holds it for review: the view
+/// Reads the file at `path` (one model call unless it's a v1 master JSON) and holds it for review: the view
 /// with nothing kept separate, no contact item added, and a new master.
 pub async fn read_import(app: &Arc<App>, path: String) -> Result<ImportView> {
     let source = blocking(app, {

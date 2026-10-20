@@ -1,5 +1,5 @@
-//! `claude -p`: the unmodified Claude Code binary, signed in to the user's own subscription. Same call as ATS Fit's
-//! `run_claude`: schema-enforced JSON output, a replaced system prompt, no tools, no settings, no MCP, no session.
+//! `claude -p`: the unmodified Claude Code binary, signed in to the user's own subscription. Schema-enforced JSON
+//! output, a replaced system prompt, no tools, no settings, no MCP, no session.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

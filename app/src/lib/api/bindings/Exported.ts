@@ -7,7 +7,7 @@ export type Exported = {
  */
 path: string, 
 /**
- * `globex_jr_sde_doe_resume.pdf`.
+ * `acme_swe_doe_resume.pdf`.
  */
 fileName: string, 
 /**

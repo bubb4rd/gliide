@@ -1,0 +1,187 @@
+{
+  "certifications": [],
+  "company": "Contoso Learning",
+  "degree": {
+    "equivalent": true,
+    "fields": [
+      "Computer Science",
+      "Information Systems"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [],
+  "location": "Remote",
+  "role": "Developer - Integrations & AI",
+  "seniority": "entry",
+  "short_role": "integrations_dev",
+  "skills": [
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Python"
+    },
+    {
+      "aliases": [
+        "REST API",
+        "RESTful APIs"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "REST APIs"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "PHP"
+    },
+    {
+      "aliases": [
+        "LLMs",
+        "large language models"
+      ],
+      "group": null,
+      "kind": "domain",
+      "priority": 2,
+      "required": true,
+      "term": "LLM"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Git"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "version control"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "HTML"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "CSS"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "JSON"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "client/server architecture"
+    },
+    {
+      "aliases": [
+        "third-party services"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "third-party APIs"
+    },
+    {
+      "aliases": [
+        "prompt engineering"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": true,
+      "term": "prompts"
+    },
+    {
+      "aliases": [
+        "NetSuite"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Oracle NetSuite"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "SQL"
+    },
+    {
+      "aliases": [
+        "problem solving"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "problem-solving"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "soft",
+      "priority": 3,
+      "required": true,
+      "term": "attention to detail"
+    },
+    {
+      "aliases": [
+        "communication"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "communicate"
+    }
+  ],
+  "title_terms": [
+    "Developer",
+    "Integrations",
+    "AI"
+  ],
+  "years_min": null
+}

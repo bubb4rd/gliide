@@ -1,0 +1,21 @@
+{
+  "offer": {
+    "id": 1000001,
+    "slug": "marketing-operations-specialist",
+    "title": "Marketing Operations Specialist",
+    "company_name": "Dunmore & Lowe LLC",
+    "location": "Lincolnshire, Illinois, United States",
+    "remote": false,
+    "hybrid": true,
+    "on_site": false,
+    "careers_url": "https://dunmorelowe.recruitee.com/o/marketing-operations-specialist",
+    "salary": {
+      "max": "100000",
+      "min": "80000",
+      "period": "year",
+      "currency": "USD"
+    },
+    "description": "<p class=\"MsoNormal\">Dunmore &amp; Lowe is a Top 150 accounting and advisory firm with a habit of growing steadily.</p><p class=\"MsoNormal\">We need someone to run our campaigns and keep the CRM clean.</p>",
+    "requirements": "<p>·&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Bachelor's degree in Marketing, Business, Communications, or a related field.</p><p class=\"MsoListParagraphCxSpMiddle\">·&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3+ years of experience in marketing operations or CRM administration.</p>"
+  }
+}

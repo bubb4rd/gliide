@@ -1,0 +1,52 @@
+{
+  "data": {
+    "public_slug": "software-engineer-intern-ai-sirius-cybernetics-7iwfqjh3",
+    "source": "workday",
+    "manually_added": false,
+    "external_id": "sirius.wd1.myworkdayjobs.com/Search:/job/Ann-Arbor-MI/Software-Engineer-Intern---AI_2641817",
+    "url": "https://sirius.wd1.myworkdayjobs.com/Search/job/Ann-Arbor-MI/Software-Engineer-Intern---AI_2641817?utm_source=freehire.me",
+    "title": "Software Engineer Intern - AI",
+    "company": "Sirius Cybernetics",
+    "company_slug": "sirius",
+    "location": "Ann Arbor, MI",
+    "description": "<p>Sirius Cybernetics builds cheerful machines. That&#39;s where you come in: spend the summer teaching our models to inspect circuit boards.</p><p><b>What you&#39;ll do</b></p><ul><li>Train and evaluate vision models</li><li>Ship one tool our engineers use</li></ul>",
+    "countries": [
+      "us"
+    ],
+    "regions": [
+      "north_america"
+    ],
+    "work_mode": "onsite",
+    "skills": [
+      "python"
+    ],
+    "cities": [],
+    "collections": [],
+    "is_tech": "tech",
+    "posted_at": "2026-10-13T17:00:00Z",
+    "created_at": "2026-10-13T18:00:00Z",
+    "updated_at": "2026-10-13T18:00:00Z",
+    "last_seen_at": "2026-10-13T18:00:00Z",
+    "closed_at": null,
+    "enrichment": {
+      "employment_type": "internship",
+      "seniority": "intern",
+      "category": "software_engineering",
+      "posting_language": "en"
+    },
+    "enriched_at": null,
+    "enrichment_version": 0,
+    "view_count": 0,
+    "applied_count": 0,
+    "upvote_count": 0,
+    "downvote_count": 0,
+    "my_vote": 0,
+    "reality": {
+      "class": "fresh",
+      "age_days": 0,
+      "repost_count": 1,
+      "mass_posting_count": 1,
+      "fake_freshness": false
+    }
+  }
+}

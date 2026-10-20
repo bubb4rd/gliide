@@ -1,4 +1,4 @@
-//! v1 → v2: ATS Fit's `master.json` into a bank and an `swe` master that selects all of it.
+//! v1 → v2: a legacy v1 master JSON into a bank and an `swe` master that selects all of it.
 
 use crate::bank::{
     BANK_SCHEMA, Bank, BankBullet, BankEntry, BankGroup, BankSection, Note, SectionKind,
@@ -16,7 +16,7 @@ pub struct Migrated {
     pub warnings: Vec<String>,
 }
 
-/// The bank holding everything in `v1` (ATS Fit's master, whose shape [`Resume`] is), and the `swe` master selecting
+/// The bank holding everything in `v1` (a legacy v1 master, whose shape [`Resume`] is), and the `swe` master selecting
 /// every section, entry, bullet and skill in their original order, so `resolve(bank, master)` gives `v1` back. Build-only
 /// fields (`orig`, `changed`, `added`, `new`) are dropped.
 pub fn migrate_v1(v1: &Resume) -> Migrated {

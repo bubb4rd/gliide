@@ -1,0 +1,10 @@
+{
+  "absolute_url": "https://job-boards.greenhouse.io/fabrikam/jobs/4000000001",
+  "id": 4000000001,
+  "title": "Mobile Developer I - US Remote",
+  "company_name": "Fabrikam Health",
+  "location": {
+    "name": "Remote"
+  },
+  "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;h4&gt;&lt;strong&gt;What is Fabrikam?&amp;nbsp;&lt;/strong&gt;&lt;/h4&gt;\n&lt;div&gt;Fabrikam Health builds scheduling and messaging tools for clinics and care teams.&amp;nbsp;We are a small, steady company that ships every two weeks.&lt;br&gt;&lt;br&gt;Our goal is simple: get the right message to the right clinician without the noise.&lt;/div&gt;\n&lt;ol&gt;\n&lt;li&gt;Our apps run in hundreds of fictional clinics.&lt;/li&gt;\n&lt;li&gt;We were voted “most likely to answer a page” by our own staff.&lt;/li&gt;\n&lt;/ol&gt;&lt;/div&gt;\n&lt;p&gt;As a Mobile Developer I, you will build features for iOS and Android from one shared codebase &amp;amp; help debug integrations when priorities shift.&lt;/p&gt;\n&lt;h4&gt;Responsibilities&lt;/h4&gt;\n&lt;ul&gt;\n&lt;li&gt;Develop and maintain cross-platform mobile applications using React Native alongside senior mobile engineers.&lt;/li&gt;\n&lt;li&gt;Turn design mockups into accessible, well-tested screens.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h4&gt;Qualifications&lt;/h4&gt;\n&lt;ul&gt;\n&lt;li&gt;One or more years building mobile apps for iOS and Android.&lt;/li&gt;\n&lt;li&gt;Comfort with Git and consuming REST APIs.&lt;/li&gt;\n&lt;li&gt;Health IT experience (a plus)&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h4&gt;About Fabrikam&lt;/h4&gt;\n&lt;p&gt;We offer a salary range of &lt;strong&gt;$75,000–$100,000 USD&lt;/strong&gt; per year, adjusted for skills and experience.&lt;/p&gt;"
+}

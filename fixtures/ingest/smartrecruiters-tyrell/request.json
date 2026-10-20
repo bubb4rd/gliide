@@ -1,0 +1,11 @@
+{
+  "input": "https://jobs.smartrecruiters.com/TyrellData/700000000000001-senior-endpoint-systems-engineer-hybrid-allen-tx-",
+  "request": "https://api.smartrecruiters.com/v1/companies/TyrellData/postings/700000000000001",
+  "url": "https://api.smartrecruiters.com/v1/companies/TyrellData/postings/700000000000001",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a SmartRecruiters postings API response; content invented."
+}

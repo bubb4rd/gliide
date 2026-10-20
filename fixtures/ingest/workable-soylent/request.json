@@ -1,0 +1,11 @@
+{
+  "input": "https://apply.workable.com/soylent/j/1A2B3C4D5E/",
+  "request": "https://apply.workable.com/api/v2/accounts/soylent/jobs/1A2B3C4D5E",
+  "url": "https://apply.workable.com/api/v2/accounts/soylent/jobs/1A2B3C4D5E",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a Workable jobs API response; content invented."
+}

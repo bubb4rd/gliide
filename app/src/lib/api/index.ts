@@ -142,8 +142,8 @@ export const library = () => invoke<Library>("library");
 /** `cancel` and `progress` name the import's model call with this job key. */
 export const IMPORT_JOB = "import";
 /**
- * Reads a resume file (.pdf, .docx, .md, .txt: one model call, emits `progress` for `IMPORT_JOB`; ATS Fit's
- * master.json: none) and holds it for review: where each part goes, and the new master it makes, rendered.
+ * Reads a resume file (.pdf, .docx, .md, .txt: one model call, emits `progress` for `IMPORT_JOB`; a v1 resume
+ * JSON: none) and holds it for review: where each part goes, and the new master it makes, rendered.
  */
 export const readImport = (path: string) => invoke<ImportView>("read_import", { path });
 /** The waiting import as `choices` would add it. */

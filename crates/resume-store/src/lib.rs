@@ -183,7 +183,7 @@ impl AppStatus {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Application {
     pub id: String,
-    /// `None` for rows imported from ATS Fit, or once the posting is deleted.
+    /// `None` for rows imported from an existing `applications.csv`, or once the posting is deleted.
     pub posting_id: Option<String>,
     pub analysis_id: Option<String>,
     /// `YYYY-MM-DD`.

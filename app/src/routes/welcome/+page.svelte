@@ -167,7 +167,7 @@
   // ── Experience ──
   const bank = $derived(app.library?.bank ?? null);
   const masters = $derived(app.library?.masters ?? []);
-  /** "Jane (JJ) Doe" → "Bo"; else the first name (as the Overview greets you). */
+  /** "Jane (JJ) Doe" → "JJ"; else the first name (as the Overview greets you). */
   const firstName = $derived(
     bank ? bank.name.match(/\(([^)]+)\)/)?.[1]?.trim() || bank.name.trim().split(/\s+/)[0] || "" : "",
   );

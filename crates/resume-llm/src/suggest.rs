@@ -20,7 +20,7 @@ pub const PROMPT: &str = include_str!("../../../prompts/suggest.md");
 pub const SCHEMA: &str = include_str!("../../../prompts/suggest.schema.json");
 /// The model Suggest runs on unless the user picks another.
 pub const DEFAULT_SUGGEST_MODEL: &str = "sonnet";
-/// Characters per printed line the line budget assumes (ATS Fit's one-page layout).
+/// Characters per printed line the line budget assumes (the one-page layout).
 pub const LINE_CHARS: usize = 100;
 /// The longest a bullet rewrite may be, whatever the line it replaces.
 pub const MAX_BULLET_CHARS: usize = 220;
@@ -259,7 +259,7 @@ mod tests {
     fn requirements() -> Requirements {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../fixtures/requirements/sonnet/waymark-jr-swe.json"
+            "/../../fixtures/requirements/sonnet/northwind-jr-swe.json"
         );
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
     }

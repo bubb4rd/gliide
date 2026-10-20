@@ -1,0 +1,11 @@
+{
+  "input": "https://freehire.me/jobs/motion-planning-software-engineering-intern-summer-2027-spacely-sprockets-3rxo4u4f",
+  "request": "https://boards-api.greenhouse.io/v1/boards/spacely/jobs/7000000001",
+  "url": "https://boards-api.greenhouse.io/v1/boards/spacely/jobs/7000000001",
+  "status": 200,
+  "content_type": "application/json",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a Greenhouse board API job response; content invented."
+}

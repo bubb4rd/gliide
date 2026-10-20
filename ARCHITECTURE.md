@@ -4,34 +4,33 @@ A desktop and mobile app that takes a job posting (link or text) and one of your
 proposes the smallest set of honest edits that raise it, lets you accept, reject or edit each one with a click, and
 exports a one-page PDF in your design. macOS first; Windows and iOS from the same core.
 
-It is the Tern plugin ATS Fit (`~/src/legacy`) rebuilt as a product: same principles, a core that
-runs on every platform, an experience bank behind several masters, a composite score, faster runs, and model access
-through the subscription you already pay for.
+Its goals: a core that runs on every platform, an experience bank behind several masters, a composite score, fast
+runs, and model access through the agent subscription you already pay for.
 
-## Principles (kept from ATS Fit)
+## Principles
 
 | Principle | Mechanism |
 |---|---|
 | The model never scores | It extracts requirements and proposes edits; code computes every percentage from rendered text |
-| Nothing invented | Prompt rules, plus a grounding validator (new here) that checks each rewrite against your bank |
+| Nothing invented | Prompt rules, plus a grounding validator that checks each rewrite against your bank |
 | The master is never touched | A tailored resume is `apply(master, changes)`; only "Save to master" writes a new revision |
 | Every edit is yours to take | Each change is a toggle with its own wording field; your edits are labeled yours and never dropped by the fit check |
 | One page, measured | The template reports real wrapped line counts; nothing guesses at line wrapping |
 | ATS-readable | Real PDF text, read back and re-scored after export |
 
-## What changes from ATS Fit
+## Design choices
 
-| ATS Fit | gliide | Why |
-|---|---|---|
-| One `master.json` | An experience bank (everything you've done) and masters that select from it (SWE, IT, design…) | Relevant experience outside a master isn't lost |
-| `claude -p` only | `Llm` trait over your own agent CLIs: ACP agents (Codex, Gemini CLI, any registry agent) and `claude -p` | Your subscription, no API bill |
-| `typst` CLI | Typst embedded as a Rust library | No install; metrics in-process |
-| One evaluate call (25 s–2 min) | Two calls: **extract** (cached per posting) then **suggest** (streamed) | Score appears in seconds |
-| Score = weighted skills | Composite of six components, shown as now / projected / ceiling | Requested |
-| Fit loop, up to 16 compiles | One measure pass for every candidate text; compile loop only for page overflow | Speed |
-| Change keys by index (`b2`, `k5`) | Keys by content hash | Your decisions survive a re-run |
-| Luau re-implementation of a text field | Web text editing | Clicks place the caret; selection, IME, spellcheck for free |
-| Tern kv + files | SQLite + exported files | Queries over applications; revisions |
+| Choice | Why |
+|---|---|
+| An experience bank (everything you've done) and masters that select from it (SWE, IT, design…), rather than one resume file | Relevant experience outside a master isn't lost |
+| `Llm` trait over your own agent CLIs: ACP agents (Codex, Gemini CLI, any registry agent) and `claude -p` | Your subscription, no API bill |
+| Typst embedded as a Rust library, not the `typst` CLI | No install; metrics in-process |
+| Two calls, **extract** (cached per posting) then **suggest** (streamed), rather than one evaluate call (25 s–2 min) | Score appears in seconds |
+| A composite of six components, shown as now / projected / ceiling | Shows which part of the fit is missing and what edits can still move |
+| One measure pass for every candidate text; a compile loop only for page overflow | Speed: no compile per attempt |
+| Change keys by content hash, not by index (`b2`, `k5`) | Your decisions survive a re-run |
+| Web text editing | Clicks place the caret; selection, IME, spellcheck for free |
+| SQLite + exported files | Queries over applications; revisions |
 
 ## Stack
 
@@ -94,27 +93,25 @@ flowchart TD
 
 ## 1. Model access: your subscription, through your own agent
 
-**Viable on desktop, with conditions.** The app never calls a model API itself and never sees a credential. It
-launches an agent CLI you installed and signed in to, and talks to it over stdio: Agent Client Protocol (ACP) for
-agents that speak it, `claude -p` for Claude. Usage bills to your subscription under your own agreement with the lab.
+The app never calls a model API itself, and never ships, reads or stores a credential. It launches an agent CLI you
+installed and signed in to yourself, and talks to it over stdio: Agent Client Protocol (ACP) for agents that speak it,
+`claude -p` for Claude. Usage bills to your own subscription, and your own agreement with each lab applies to it.
 
 ### Per lab
 
-| Lab | Agent the app launches | Subscription sign-in | Terms (checked Oct 2026) | Verdict |
-|---|---|---|---|---|
-| OpenAI | `codex-acp` (ACP adapter that runs the Codex CLI) | ChatGPT login, advertised by the adapter as an ACP auth method | Codex supports "Sign in with ChatGPT for subscription access" | Use over ACP |
-| Google | `gemini --acp` (native ACP mode) | Google AI Pro/Ultra; free tier moved to Antigravity CLI on 2026-06-18 | Third-party software may not "harvest or piggyback on Gemini CLI's OAuth"; launching the official binary, which signs in itself, is the registry/IDE integration path | Use over ACP; never touch its tokens |
-| Anthropic | `claude -p` (the unmodified Claude Code binary) | Pro/Max via Claude Code's own `/login` | Third-party developers may not "offer Claude.ai login" or route requests through plan credentials for their users, and Agent SDK products should use API keys; the terms don't prevent "an end user signing in to the unmodified Claude Code binary with their own Claude subscription" | Use `claude -p`, **not** the ACP adapter (`claude-agent-acp` is built on the Agent SDK) |
-| Others (Copilot, Cursor, Mistral, Qwen…) | Any agent in the ACP registry | Theirs | Theirs | Available through the same ACP path; not tested by default |
+| Lab | Agent the app launches | Subscription sign-in |
+|---|---|---|
+| OpenAI | `codex-acp` (ACP adapter that runs the Codex CLI) | ChatGPT login, advertised by the adapter as an ACP auth method |
+| Google | `gemini --acp` (native ACP mode) | Google AI Pro/Ultra, done by the official Gemini CLI itself; the app never touches its tokens |
+| Anthropic | `claude -p` (the unmodified Claude Code binary), not the ACP adapter (`claude-agent-acp` is built on the Agent SDK) | Pro/Max via Claude Code's own `/login` |
+| Others (Copilot, Cursor, Mistral, Qwen…) | Any agent in the ACP registry, through the same ACP path; not tested by default | Theirs |
 
-Sources: [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
+Each lab's own documentation: [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
 [Claude plan usage of the Agent SDK](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan),
 [Codex authentication](https://developers.openai.com/codex/auth),
 [codex-acp](https://github.com/agentclientprotocol/codex-acp), [Gemini CLI ACP mode](https://geminicli.com/docs/cli/acp-mode/),
 [Gemini CLI FAQ](https://geminicli.com/docs/resources/faq), [ACP agents](https://agentclientprotocol.com/get-started/agents).
-
-Personal use is clearly fine. Before selling the app, get written confirmation from each lab: these terms changed
-twice in 2026 (Anthropic paused one change in June and added API credits to Max in October).
+These terms change; whether your use fits them is between you and the lab.
 
 ### What ACP doesn't give, and how the app makes up for it
 
@@ -130,8 +127,8 @@ ACP is built for coding agents in editors, not for one-shot structured calls.
 | Prompt caching | Not controllable; the agent decides |
 | Desktop only: stdio means a subprocess | iOS can't spawn processes; Streamable HTTP transport is a draft. See iOS below |
 
-`claude -p` keeps ATS Fit's exact call (`--json-schema`, `--system-prompt`, `--tools ""`, no settings, no session),
-so Claude gets real schema enforcement.
+`claude -p` is called with `--json-schema`, `--system-prompt`, `--tools ""`, no settings and no session, so Claude
+gets real schema enforcement.
 
 ### The provider trait
 
@@ -159,7 +156,8 @@ the agent too and links to its install guide; whether that setup is done is the 
 ### The bank
 
 Everything you've done, in one document: every job, project, school, certification and skills line, including
-graphic design and other roles you don't show for SWE. Same shape as ATS Fit's master, plus:
+graphic design and other roles you don't show for SWE. Same shape as a v1 resume (`master.json`: one resume's
+sections, entries, bullets and skills lines), plus:
 
 | Field | Purpose |
 |---|---|
@@ -172,26 +170,26 @@ graphic design and other roles you don't show for SWE. Same shape as ATS Fit's m
 ```json
 {
   "schema": 2,
-  "name": "Jane (JJ) Doe",
+  "name": "Jane Q. Doe",
   "contact": [{ "text": "jane.doe@example.com", "url": "mailto:jane.doe@example.com" }],
   "sections": [
     {
-      "id": "work", "kind": "experience", "title": "WORK & LEADERSHIP EXPERIENCE",
+      "id": "work", "kind": "experience", "title": "WORK EXPERIENCE",
       "entries": [{
-        "id": "nhs", "name": "Northwind Historical Society", "url": "", "place": "Springfield, IL",
-        "dates": "June 2026 – Sep 2026", "start": "2026-06", "end": "2026-09",
-        "subtitle": "Software Engineer Intern", "tags": ["swe"], "notes": [],
+        "id": "acme", "name": "Acme Widgets Co.", "url": "https://example.com/acme", "place": "Springfield, IL",
+        "dates": "June 2025 – Sep 2025", "start": "2025-06", "end": "2025-09",
+        "subtitle": "Software Engineering Intern", "tags": ["swe"], "notes": [],
         "bullets": [{
-          "id": "nhs.2",
-          "text": "Built backend REST API integrations moving business-directory and member-offer data to …",
-          "variants": ["Integrated REST APIs that moved directory and member-offer data to …"],
-          "skills": ["REST APIs", "Webhooks"]
+          "id": "acme.2",
+          "text": "Wrote integration tests in GitHub Actions for the order API, catching 14 regressions before release",
+          "variants": ["Added GitHub Actions integration tests to the order API that caught 14 regressions before release"],
+          "skills": ["GitHub Actions", "Integration testing"]
         }]
       }]
     },
     {
       "id": "skills", "kind": "skills", "title": "SKILLS",
-      "groups": [{ "id": "tools", "label": "Tools & Technologies", "items": ["Git", "GitHub CI/CD", "Figma"] }]
+      "groups": [{ "id": "tools", "label": "Tools & Technologies", "items": ["Git", "GitHub Actions", "Docker"] }]
     }
   ]
 }
@@ -206,16 +204,16 @@ skills, under what title and template. It holds no text of its own.
 {
   "id": "swe", "title": "Software Engineering", "template": "classic-serif", "pageLimit": 1,
   "sections": [
-    { "id": "work", "title": "WORK & LEADERSHIP EXPERIENCE",
-      "entries": [{ "id": "nhs", "bullets": [{ "id": "nhs.1" }, { "id": "nhs.2", "variant": 0 }] }] },
-    { "id": "skills", "groups": [{ "id": "tools", "items": ["Git", "GitHub CI/CD"] }] }
+    { "id": "work", "title": "WORK EXPERIENCE",
+      "entries": [{ "id": "acme", "bullets": [{ "id": "acme.1" }, { "id": "acme.2", "variant": 0 }] }] },
+    { "id": "skills", "groups": [{ "id": "tools", "items": ["Git", "GitHub Actions"] }] }
   ]
 }
 ```
 
-`resolve(bank, master)` produces the same resume JSON ATS Fit's template already reads, so rendering, scoring and
-the change engine never see the difference. A v1 → v2 migrator turns your `master.json` into a bank and an `swe`
-master that selects all of it.
+`resolve(bank, master)` produces a plain v1 resume JSON, the shape the template reads, so rendering, scoring and the
+change engine never see the difference. A v1 → v2 migrator turns a v1 `master.json` into a bank and an `swe` master
+that selects all of it.
 
 **Editing:** fix a bullet in the bank and every master that shows it gets the fix. A wording that only suits one
 track is a variant, and the master picks it. An entry's details (`resume_core::facts`: name, subtitle, place, dates
@@ -237,7 +235,7 @@ The bank model holds both methods, so the app can switch between them without a 
 
 | Mode | Suggest sees | Can propose |
 |---|---|---|
-| **Master only** (ATS Fit today) | The resolved master | Rewrites, skills, swaps, cuts within it |
+| **Master only** | The resolved master | Rewrites, skills, swaps, cuts within it |
 | **Bank-aware** | The master, plus up to 5 bank entries outside it, ranked by requirement-term overlap (computed in code, before the call) | All of the above, plus: include an entry or bullet from the bank, swap one entry for another |
 
 Bank suggestions are listed in their own group, **From your bank**, each with its points and the line cost, and are
@@ -290,7 +288,7 @@ Prompts and schemas are files in `prompts/`, built in and overridable from a dev
 | Suggest (streamed) | Tagged master; bank candidates in bank-aware mode; `Requirements`; posting | `Suggestions` |
 | Rewrite one | Master, posting, the line, your note ("shorter", "mention Kafka") | One line |
 | Instruct | Tailored resume as it reads now (tagged, with budgets, variants and skills), requirement terms marked on or off the page, scope, your instruction | A reply, up to 6 edits, what it skipped |
-| Import | Resume text, links (`anchor text -> URL`) | The resume word for word, in ATS Fit's master shape (`prompts/import.md`); merged into the bank by code (below) |
+| Import | Resume text, links (`anchor text -> URL`) | The resume word for word, in the v1 resume shape (`prompts/import.md`); merged into the bank by code (below) |
 | Cover letter / one paragraph | Tailored resume, posting, letter, note | Letter / paragraph |
 
 **Running calls.** Each call runs as a task under its job (`model_call`; a newer call for the job supersedes it), and
@@ -310,8 +308,8 @@ slot, and a newer one wins it.
 proposes a few edits within a scope (entries, bullets, skills lines, the summary; empty for anywhere). Each edit lands
 as your own edit turned off, all in one undo step, pending until you accept it; accepting turns off whatever else holds
 that line. An edit that names a line off the master, outside the scope, a note line or the line's current words is
-dropped into `skipped` beside the parts the model couldn't back. On a real bank (5.7k characters of input) sonnet
-answered in 14–16 s in one turn, every id a real tag, the scope kept.
+dropped into `skipped` beside the parts the model couldn't back. With a bank and master of about 5.7k characters of
+input, sonnet answered in 14–16 s in one turn, every id a real tag, the scope kept.
 
 Its honesty rules add to Suggest's, because you are in the conversation. Three sources back a line: the resume, the
 skills you confirmed (the chat's "Do you have Bash experience?"), and your own word in the instruction ("I ran the
@@ -324,11 +322,12 @@ instruct` runs a list of asks against a bank and master through `claude -p` to s
 Suggest and Instruct share two rules. Soft skills (time management, communication, documentation…) are how the work
 was done, not claims of their own: backed wherever a line's work plainly exercises them, written into that work as a
 person would write it, never bolted on and never with invented specifics. And rewording never raises a claim
-(suggested is not delivered). On a real bank and an Acme Pharma posting asking for time management, Suggest marked it
-"no" (a gap) in 3 of 3 runs before; "add", on the testing bullet, in 3 of 3 after (projected 77–82% before, 80–85%
-after); a Chase posting's plan was unchanged.
+(suggested is not delivered). Against a posting asking for time management, Suggest marked it "no" (a gap) in 3 of 3
+runs before this rule; "add", on a testing bullet, in 3 of 3 after (projected 77–82% before, 80–85% after); another
+posting's plan was unchanged.
 
-Extract defaults to **sonnet**. In the M0 spike (`claude -p`, 11 postings each) sonnet was the fastest (p50 6.3 s, p90
+Extract defaults to **sonnet**. In the M0 spike (`claude -p`, 11 postings each, measured on the original postings that
+the synthetic fixtures in `fixtures/postings/` later replaced) sonnet was the fastest (p50 6.3 s, p90
 6.9 s) and ranked priorities best; haiku runs with extended thinking under Claude Code (p50 14.8 s, 10.9 s with
 `--effort low`) and over-marks priority 1. All 33 runs were schema-valid on the first try. Prompt fixes queued for M2:
 no person-describing phrases as skills, `term` word for word with normal forms in `aliases`, priority 1 for at most a
@@ -339,7 +338,7 @@ are never knockouts, title/company/location passed in from ingest, `degree.equiv
 
 | Field | Content |
 |---|---|
-| `role`, `company`, `short_role`, `location`, `seniority` | As ATS Fit, plus seniority (intern, entry, mid, senior, lead) |
+| `role`, `company`, `short_role`, `location`, `seniority` | As the posting states them; seniority is one of intern, entry, mid, senior, lead |
 | `skills[]` | `term` (posting's exact words), `aliases[]`, `kind` (hard, tool, domain, soft), `priority` 1–3, `required`, `group` (one-of alternatives share a group id, `priority` and `required`) |
 | `title_terms[]` | Words of the job title an ATS matches on |
 | `years_min`, `degree` (level, fields, `equivalent`), `certifications[]` | Hard requirements; null when absent |
@@ -347,13 +346,13 @@ are never knockouts, title/company/location passed in from ingest, `degree.equiv
 
 ### Suggest: what to change (master-dependent)
 
-ATS Fit's `schema.json`, with evidence, sources and bank operations added:
+`prompts/suggest.schema.json`: changes with their evidence, sources and bank operations:
 
 | Field | Content |
 |---|---|
 | `verdict`, `headline` | apply / tailor / stretch / skip; one line |
 | `evidence[]` | Per requirement skill: `have` (yes / add / no) and `ids[]`, the lines that back it |
-| `keywords[]` | As ATS Fit: add / edit / drop a term on a Skills line, note line or bullet |
+| `keywords[]` | Add / edit / drop a term on a Skills line, note line or bullet |
 | `bullets[]` | rewrite / add / cut, `id`, `before`, `after`, `hits[]`, `sources[]` (ids it draws facts from), `variant` (when it picked one of yours) |
 | `skills_ops[]` | Add, remove, rename or reorder Skills items |
 | `bank[]` | Bank-aware only: include an entry or bullet, or swap entries, with `why` and the skills it adds |
@@ -361,13 +360,13 @@ ATS Fit's `schema.json`, with evidence, sources and bank operations added:
 | `summary` | Optional summary line, only from facts in the bank |
 | `gaps[]` | Unsupported requirements, with one honest fix each |
 
-Rules kept word for word from `prompt.md`: never invent; the posting's exact words; line budget; in-place swaps keep
-the part of speech; tags are never text.
+Rules in `prompts/suggest.md`: never invent; the posting's exact words; line budget; in-place swaps keep the part of
+speech; tags are never text.
 
-### Grounding validator (new)
+### Grounding validator
 
-Runs on every model-written line before it becomes a change; closes ATS Fit's stated limit "nothing checks the
-model's wording against the resume".
+Runs on every model-written line before it becomes a change, so the model's wording is checked against the resume
+rather than trusted.
 
 - Numbers, percentages, money and dates in `after` must appear in its `sources` lines.
 - Proper nouns and tool names (alias dictionary + capitalized tokens) must appear in the bank, or be a requirement
@@ -380,7 +379,7 @@ model's wording against the resume".
 
 ### Import: a resume into the bank
 
-The model only copies the file (ATS Fit's `import.md`: word for word, fixing extraction damage); `resume_core::import`
+The model only copies the file (`prompts/import.md`: word for word, fixing extraction damage); `resume_core::import`
 decides where it goes, and nothing is saved before you review it next to the master it makes (new lines highlighted).
 
 | Part of the file | Goes |
@@ -391,7 +390,7 @@ decides where it goes, and nothing is saved before you review it next to the mas
 | Contact item | Offered only (the contact line is on every resume) |
 
 Nothing existing changes or goes, so every master resolves as it did. The import makes a new master that shows the
-file (default template, the PDF's page count as its limit), or replaces one you pick. ATS Fit's `master.json` takes the
+file (default template, the PDF's page count as its limit), or replaces one you pick. A v1 `master.json` takes the
 same path without the model call. `ez import <file> --bank … --title …` runs it from the command line.
 
 ## 4. The composite score
@@ -411,7 +410,7 @@ Components the posting doesn't specify drop out, and the rest are renormalized:
 
 $$S = \frac{\sum_c w_c\, s_c}{\sum_{c \in \text{present}} w_c}, \qquad s_c \in [0, 1]$$
 
-**Matching is literal, like ATS Fit's `literal_fit`:** whole-term matches ("Java" is not in "JavaScript"), with an
+**Matching is literal:** whole-term matches ("Java" is not in "JavaScript"), with an
 alias dictionary (`JS` ↔ `JavaScript`, `k8s` ↔ `Kubernetes`) and near forms (plural, hyphenated, "&"/"and") reported
 separately as "with near forms".
 
@@ -459,7 +458,7 @@ produces the tailored JSON. All three are pure functions in `resume-core`.
 
 **Keys** are `hash(op, target, before)`, so a re-run that proposes the same change keeps your decision and wording.
 
-**Whether a change is in** (ATS Fit's state machine, unchanged):
+**Whether a change is in:**
 
 ```mermaid
 stateDiagram-v2
@@ -494,7 +493,7 @@ A template is a `.typ` file plus a manifest (`name`, `atsSafe`, `columns`, previ
 4. In `sys.inputs.mode == "measure"`, lay out a list of candidate texts at the width of the line each targets and
    record their line counts.
 
-`classic-serif` is a port of ATS Fit's `resume.typ` (11pt, 0.5in margins, ruled headings, 12.62pt pitch). A test
+`classic-serif` sets 11pt type, 0.5in margins, ruled headings and a 12.62pt line pitch. A test
 compiles every template against fixture resumes and checks the metadata.
 
 ### Fit, in one pass instead of a loop
@@ -526,7 +525,7 @@ only the page count needs the loop.
 
 | Source | How |
 |---|---|
-| Pasted link | Board APIs where public (Greenhouse, Lever; Workday's career-site data `/wday/cxs/{tenant}/{site}/job/…`, SmartRecruiters' Posting API, Workable's `api/v2/accounts/{account}/jobs/{shortcode}`, Recruitee's `api/offers/{slug}`), Ashby's job page data (its board API has no company name), else schema.org `JobPosting` JSON-LD, else `<main>` text; LinkedIn search links rewritten to the job page, as in ATS Fit |
+| Pasted link | Board APIs where public (Greenhouse, Lever; Workday's career-site data `/wday/cxs/{tenant}/{site}/job/…`, SmartRecruiters' Posting API, Workable's `api/v2/accounts/{account}/jobs/{shortcode}`, Recruitee's `api/offers/{slug}`), Ashby's job page data (its board API has no company name), else schema.org `JobPosting` JSON-LD, else `<main>` text; LinkedIn search links rewritten to the job page |
 | Pasted text | Used as is |
 | macOS | Global hotkey "evaluate clipboard"; share extension from Safari |
 | iOS | Share extension from Safari and the LinkedIn app (a native Swift target beside the Tauri app) |
@@ -540,7 +539,7 @@ source: you apply on the employer's link (LinkedIn's job page for a LinkedIn job
 | Source | What | How |
 |---|---|---|
 | freehire | Every board it collects (about 270 sources) | Public API (`https://freehire.me/api/v1`; no account or key; documented API use is within its terms). Always on |
-| LinkedIn | Postings only LinkedIn has (agencies, Easy Apply) | The guest search (`jobs-guest/jobs/api/seeMoreJobPostings/search`, no login; `resume_ingest::linkedin`): one search per master title and country (at most 6), 10 jobs a page, at most 5 pages, 0.7 s between requests, `f_TPR` since its last answer plus an hour (the first: 3 days), seniority → `f_E`, employment → `f_JT`; at most hourly (a launch soon after a pull skips it). A 429 (or 999) backs LinkedIn off — pulls and searches leave it alone for its `Retry-After` and at least an hour (6 h after a refusal) — and the feed's status says until when in muted text instead of an error; the jobs found before it are kept. The guest job page hides the employer's link, so a LinkedIn job's link is LinkedIn's. On by default (setting) |
+| LinkedIn | Postings only LinkedIn has (agencies, Easy Apply) | **Opt-in, off by default.** LinkedIn's User Agreement doesn't allow automated access, so Settings → Feed turns it on beside a notice saying so; gliide reads the public guest search only while it's on, and whether to use it is the user's call. The guest search (`jobs-guest/jobs/api/seeMoreJobPostings/search`, no login; `resume_ingest::linkedin`): one search per master title and country (at most 6), 10 jobs a page, at most 5 pages, 0.7 s between requests, `f_TPR` since its last answer plus an hour (the first: 3 days), seniority → `f_E`, employment → `f_JT`; at most hourly (a launch soon after a pull skips it). A 429 (or 999) backs LinkedIn off — pulls and searches leave it alone for its `Retry-After` and at least an hour (6 h after a refusal) — and the feed's status says until when in muted text instead of an error; the jobs found before it are kept. The guest job page hides the employer's link, so a LinkedIn job's link is LinkedIn's |
 | Watchlist | Your target companies, minutes after they post | Their boards polled directly (`resume_ingest::watch`): Greenhouse, Lever and Ashby board APIs, Workday's `/wday/cxs/…/jobs` (POST, 20 a page), SmartRecruiters' postings, Workable's widget API, Recruitee's offers; every open job, at most 500 a board, newest first. Added in Settings by any careers link of the board |
 | Fantastic.jobs | 58 ATS and 200k+ career sites, indexed hourly | Its `career-site-job-listing-api` actor through Apify (`resume_ingest::fantastic`; your Apify token in Settings; run-sync, 300 s): once a day, the day's new jobs (a week's after a missed day), the masters' titles, the countries, years and employment from the query, at most 300 jobs. Apify bills per job (from about $4 per 1,000 on its Free plan, which includes $5 a month). Off without a token |
 
@@ -587,10 +586,10 @@ places, daily cap, threshold, hours between pulls, LinkedIn on, watchlist links,
 (freehire's cursor, LinkedIn's and Fantastic.jobs' last answers, last pull, last errors). The hours between pulls has
 no control in Settings yet (3 by default). The Apify token is stored in the local store as written.
 
-Measured 2026-10-13 under the default filters: about 40 new jobs a day from freehire (42 in one day, 276 in seven).
-Freehire records a job a median 40 h after the employer's date (p25 13.6 h); LinkedIn's guest search and the
-watchlist find jobs within the hour, Fantastic.jobs within a day. On 2026-10-14 five boards (Wing, NVIDIA, Canva,
-Hugging Face, bunq) listed 693 open jobs; the local check kept 84.
+Over a week of pulls in October 2026 under the default filters for one software master: about 40 new jobs a day from
+freehire. Freehire records a job a median 40 h after the employer's date (p25 13.6 h); LinkedIn's guest search (when
+on) and the watchlist find jobs within the hour, Fantastic.jobs within a day. A five-board watchlist listed 693 open
+jobs; the local check kept 84.
 
 ### Company logos
 
@@ -621,9 +620,9 @@ dismissed rows left out; Extract's name once checked, else freehire's), one comp
    (`resume_ingest::logos::icon_links`, below): the first that decodes at 32px or more on its longer side. The site
    not answering is no icon found.
 
-Measured 2026-10-13 on the store in use: freehire had a logo for 42 of the feed's 52 companies, and the 7 of the other
-10 it lists have no website there either, so the site route is for companies freehire knows the site of but has no
-logo for (through it: Capital One, Databricks, Figma, KLA, Rhombus, TriNet and Wing all gave their mark, 2.5–7 s each).
+On a feed of 52 companies (October 2026), freehire had a logo for 42, and 7 of the other 10 have no website there
+either, so the site route is for companies freehire knows the site of but has no logo for (through it, seven
+companies' sites each gave their mark in 2.5–7 s).
 
 Images are read with `HttpFetcher::get_image` (`image/*` only, ≤ 512 KB) and stored like a logo you set, in
 `companies` with `source` `freehire` or `site` (yours is `yours`); a fetched logo never replaces yours. Each lookup is
@@ -661,7 +660,7 @@ in order:
    fetched again.
 3. `CompanyMark` shows them through the `logo://` scheme as it shows the logos you set.
 4. Greenhouse and Lever's extra request; then **Set website…** and website-from-text for pasted postings and
-   imported applications (4 of 5 postings and 5 of 7 applications in use on 2026-10-13 had no link to read).
+   imported applications (pasted text and imported applications often carry no link to read).
 
 ### Salary range
 
@@ -710,6 +709,10 @@ The review's preview pane opens with a map of the job's place (DESIGN.md `PlaceM
 
 Rows use UUIDs and `updated_at` so sync can be added later without a migration. No sync until decided.
 
+The app data folder (`~/Library/Application Support/dev.bubb4rd.gliide/` on macOS) is named by the bundle identifier
+`dev.bubb4rd.gliide`. The identifier is permanent: changing it would strand every install's data in the old folder.
+It isn't shown to users and is independent of the Apple signing team.
+
 ## 9. UI
 
 Visual language, tokens, components, motion and screen recipes: [`design/DESIGN.md`](design/DESIGN.md), binding for
@@ -732,7 +735,7 @@ from your selections, and the headroom left; components on hover.
 replaces, `+n pts`, and actions: Edit (inline field), Rewrite with a note (one model call for that line), Save to
 master. Skill chips toggle with a click: gray → yours (adds it to its line), green → not yours (removes it).
 
-**Keyboard first** (carried from ATS Fit): `↑` `↓` select (changes, then other lines), Space toggle, `⏎` edit, `n`
+**Keyboard first:** `↑` `↓` select (changes, then other lines), Space toggle, `⏎` edit, `n`
 rewrite with a note, `a` add your own (a skill, a bullet, a missing summary), `e` export, `r` re-run, `⌘Z` / `⇧⌘Z`
 undo/redo over the draft log.
 
@@ -768,7 +771,7 @@ gliide/
 | Layer | What |
 |---|---|
 | Unit (`resume-core`) | Resolve, matcher (whole terms, aliases, near forms), dates and years, `apply` per op, key stability across re-runs, validator cases, bank candidate ranking |
-| Golden | `fixtures/postings × fixtures/masters` with recorded model outputs → score components, tailored JSON, page count; deterministic, in CI |
+| Golden | `fixtures/postings` × the fixture bank's masters (`fixtures/banks/`) with recorded model outputs → score components, tailored JSON, page count; deterministic, in CI |
 | Templates | Every template × every fixture resume compiles, emits the contract's metadata, and round-trips its PDF text |
 | Providers | A fake ACP agent (the SDK's `Agent` trait) in tests: permission requests denied, malformed JSON repaired once, timeouts |
 | Prompt evals (`ez eval`, not CI) | Live runs per agent over fixtures: schema failures, repairs, validator and line-budget violations, latency; both modes |
@@ -784,22 +787,25 @@ gliide/
 | Export | ≤ 300 ms |
 
 M0 measured Extract through `claude -p` with sonnet at p50 6.3 s / p90 6.9 s. M1 measured a warm re-render after a
-one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS Fit: about 0.36 s).
+one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (a `typst` CLI compile: about 0.36 s).
 
 ## 13. Roadmap
 
+Measurements below (latencies, scores) were taken on the original postings and resume that the synthetic fixtures
+later replaced; re-running them on today's fixtures may give different numbers.
+
 | Milestone | Delivers | Done when |
 |---|---|---|
-| M0 Spike: providers ✓ (Claude) | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over the 11 postings in `fixtures/postings/`; `codex-acp` and `gemini --acp` join once core features work | Done for Claude: 33/33 valid first try; sonnet default; outputs in `fixtures/requirements/` |
-| M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to ATS Fit with system fonts; identical line and page metrics with bundled Liberation Serif |
+| M0 Spike: providers ✓ (Claude) | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over 11 postings; `codex-acp` and `gemini --acp` join once core features work | Done for Claude: 33/33 valid first try (sonnet, haiku, haiku `--effort low`); sonnet default; sonnet's outputs for today's fixture postings in `fixtures/requirements/sonnet/` |
+| M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to the `typst` CLI's output with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
-| M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 fixture postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (waymark 74.2 → 84.2); a real bank with roles outside the master is needed to settle the mode experiment |
-| M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv` (ATS Fit's rows imported), agent settings; `resume-store` (SQLite), `resume-pipeline` | Done: in use instead of ATS Fit. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` give identical scores, states and points on the recorded fixtures |
+| M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (a junior SWE posting, now `northwind-jr-swe`: 74.2 → 84.2); a bank with roles outside the master is needed to settle the mode experiment |
+| M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv`, agent settings; `resume-store` (SQLite), `resume-pipeline` | Done. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` gave identical scores, states and points on the recorded outputs of the time |
 | M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; second template (design track), the mode experiment's report | Decision on the default mode |
-| M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (ATS Fit's `cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Parity with ATS Fit, plus tracking |
-| M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search, the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: first live pull on 2026-10-13 checked 20 jobs within the cap, 12 fits after per-place copies were folded; sources: 2026-10-14 pull from five boards kept 84 of 693 jobs, every board's first job read from its API |
+| M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (`prompts/cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Cover letters and application tracking |
+| M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search (opt-in), the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: a live pull checks jobs within the daily cap, per-place copies folded; a five-board watchlist pull kept 84 of 693 jobs, every board's first job read from its API |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
-| M8 Distribution | Signing, notarization, auto-update; labs' written OK for subscription use | Installable by someone else |
+| M8 Distribution | Signing, notarization, auto-update | Installable by someone else |
 
 ## 14. Open decisions
 
@@ -810,7 +816,7 @@ one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (ATS 
 | Bank-aware vs master-only suggestions | **Experiment** in M3–M5 on one data model; default chosen from the metrics |
 | Sync | **Not yet** |
 | Company logo source | **Decided:** first party (posting pages, the company's own site); logo.dev if coverage needs a third party |
-| Job feed source | **Decided:** freehire's public API (no account), LinkedIn's guest search, a watchlist of company boards polled directly, and Fantastic.jobs through your Apify token (paid per job, once a day); nothing written back. Who pays for paid sources if gliide is sold: decided then |
+| Job feed source | **Decided:** freehire's public API (no account), LinkedIn's guest search (opt-in, off by default), a watchlist of company boards polled directly, and Fantastic.jobs through your Apify token (paid per job, once a day); nothing written back |
 | Feed schedule | **Decided:** in the app (launch, every 3 h); `ez feed pull` from launchd later |
 | Model access on iOS | Open until M7: Mac relay (needs pairing, close to sync) or your own API key |
 

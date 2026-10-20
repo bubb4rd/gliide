@@ -1,0 +1,165 @@
+{
+  "certifications": [],
+  "company": "Acme Robotics",
+  "degree": {
+    "equivalent": true,
+    "fields": [
+      "Computer Science",
+      "related engineering field"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [
+    {
+      "kind": "authorization",
+      "text": "May not employ candidates with certain U.S. visa categories"
+    },
+    {
+      "kind": "authorization",
+      "text": "No future F-1 or H-1B sponsorship"
+    },
+    {
+      "kind": "onsite",
+      "text": "Onsite Tuesday, Wednesday, and Thursday"
+    }
+  ],
+  "location": "Pittsburgh, PA",
+  "role": "Software Engineer, ROS",
+  "seniority": "entry",
+  "short_role": "swe",
+  "skills": [
+    {
+      "aliases": [
+        "TS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Python"
+    },
+    {
+      "aliases": [
+        "React.js"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "React"
+    },
+    {
+      "aliases": [
+        "front-end framework"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "frontend framework"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "data structures"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "algorithms"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "computer science fundamentals"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "debugging"
+    },
+    {
+      "aliases": [
+        "data pipeline"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "data pipelines"
+    },
+    {
+      "aliases": [
+        "front-end"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "frontend"
+    },
+    {
+      "aliases": [
+        "back-end"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "backend"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "infrastructure"
+    },
+    {
+      "aliases": [
+        "problem solving"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "Problem-Solving"
+    },
+    {
+      "aliases": [
+        "communicate"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "Communication"
+    }
+  ],
+  "title_terms": [
+    "Software Engineer",
+    "ROS"
+  ],
+  "years_min": 1
+}

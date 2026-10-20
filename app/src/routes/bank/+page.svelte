@@ -1,7 +1,7 @@
 <!--
   Experience (/bank): everything you've done. Your name, then each section in a card: an entry is its name and
   dates, its role, place and length, its first bullet, and which masters show it; a skills line, its items. Import
-  picks a resume file (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its review (/bank/import). Each
+  picks a resume file (PDF, Word, Markdown, text, or a gliide v1 JSON) and opens its review (/bank/import). Each
   entry (not a skills line) opens its editor (/bank/entries/<id>).
 -->
 <script lang="ts">
@@ -151,7 +151,7 @@
   <div class="center">
     <Empty
       title="No experience yet"
-      body="Import your resume as a PDF, Word file or ATS Fit's master.json: its entries become your bank, and the resume your first master."
+      body="Import your resume as a PDF, Word file or gliide v1 JSON: its entries become your bank, and the resume your first master."
     >
       {#snippet action()}
         <Button variant="primary" size="lg" icon={FileUp} kbd="I" onclick={pick}>Import resume</Button>

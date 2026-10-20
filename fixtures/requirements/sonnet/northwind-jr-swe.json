@@ -1,0 +1,165 @@
+{
+  "certifications": [],
+  "company": "Northwind Media",
+  "degree": null,
+  "knockouts": [
+    {
+      "kind": "other",
+      "text": "Offer contingent upon successful background check"
+    }
+  ],
+  "location": "Remote (US)",
+  "role": "Junior Software Engineer",
+  "seniority": "entry",
+  "short_role": "swe",
+  "skills": [
+    {
+      "aliases": [
+        "React.js"
+      ],
+      "group": "web_framework",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "React"
+    },
+    {
+      "aliases": [
+        "NextJS"
+      ],
+      "group": "web_framework",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Next.js"
+    },
+    {
+      "aliases": [],
+      "group": "web_framework",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "Phoenix"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 1,
+      "required": true,
+      "term": "Git"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "version control"
+    },
+    {
+      "aliases": [
+        "TS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "Elixir"
+    },
+    {
+      "aliases": [
+        "Postgres"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": false,
+      "term": "PostgreSQL"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "functional programming"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "testing frameworks"
+    },
+    {
+      "aliases": [
+        "continuous integration"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "CI/CD"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Jira"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "GitHub"
+    },
+    {
+      "aliases": [
+        "code review"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "code reviews"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "domain",
+      "priority": 3,
+      "required": false,
+      "term": "healthcare technology"
+    },
+    {
+      "aliases": [
+        "written communication",
+        "verbal communication",
+        "communication skills"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "written and verbal communication"
+    }
+  ],
+  "title_terms": [
+    "Software Engineer"
+  ],
+  "years_min": null
+}

@@ -1,0 +1,216 @@
+{
+  "certifications": [],
+  "company": "Initech Consulting",
+  "degree": {
+    "equivalent": false,
+    "fields": [
+      "Management Information Systems",
+      "Computer Science",
+      "Computer Engineering"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [
+    {
+      "kind": "authorization",
+      "text": "Legally authorized to work in the US without sponsorship"
+    },
+    {
+      "kind": "other",
+      "text": "Graduation between December 2026 and August 2027"
+    },
+    {
+      "kind": "onsite",
+      "text": "Hybrid model"
+    }
+  ],
+  "location": "Hybrid - Austin",
+  "role": "Entry-Level Software Engineer",
+  "seniority": "entry",
+  "short_role": "swe",
+  "skills": [
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "Python"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "Java"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "SQL"
+    },
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [
+        "dotnet"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": ".NET"
+    },
+    {
+      "aliases": [
+        "Amazon Web Services"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": false,
+      "term": "AWS"
+    },
+    {
+      "aliases": [
+        "Microsoft Azure"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": false,
+      "term": "Azure"
+    },
+    {
+      "aliases": [
+        "GCP"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Google Cloud"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Databricks"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "PySpark"
+    },
+    {
+      "aliases": [
+        "continuous integration"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "CI/CD"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Docker"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "Terraform"
+    },
+    {
+      "aliases": [
+        "retrieval-augmented generation"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "RAG"
+    },
+    {
+      "aliases": [
+        "large language models"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "LLMs"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "prompt engineering"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "LangChain"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "React"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "Angular"
+    },
+    {
+      "aliases": [
+        "communication",
+        "communicate"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "communication skills"
+    }
+  ],
+  "title_terms": [
+    "Software Engineer"
+  ],
+  "years_min": null
+}

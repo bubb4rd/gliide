@@ -1,0 +1,52 @@
+{
+  "data": {
+    "public_slug": "software-engineer-cogswell-cogs-nw3mel5f",
+    "source": "icims",
+    "manually_added": false,
+    "external_id": "careers.cogswell.example:30535",
+    "url": "https://careers.cogswell.example/jobs/30535?lang=en-us&utm_source=freehire.me",
+    "title": "Software Engineer",
+    "company": "Cogswell Cogs",
+    "company_slug": "cogswell-cogs",
+    "location": "Seattle, Washington, United States",
+    "description": "<h2>Company Overview</h2><br><br><p>Cogswell Cogs builds the parts that keep machines turning. Factories in a dozen countries run on our cogs, and on the software that tells them when a part is about to wear out.</p><br><br><h2>What you&#39;ll do</h2><br><ul><li>Build and maintain backend services in Go and Java</li><li>Write tests &amp; review code with your team</li><li>Help run the services you build</li></ul><br><h2>Job Designation</h2><p><b>Hybrid:</b>&nbsp;Employee divides their time between in-office and remote work.</p><br><h2>Compensation</h2><p>The base salary range for this role is $120,000&ndash;$150,000 per year.</p>",
+    "countries": [
+      "us"
+    ],
+    "regions": [
+      "north_america"
+    ],
+    "work_mode": "onsite",
+    "skills": [
+      "python"
+    ],
+    "cities": [],
+    "collections": [],
+    "is_tech": "tech",
+    "posted_at": "2026-10-13T17:00:00Z",
+    "created_at": "2026-10-13T18:00:00Z",
+    "updated_at": "2026-10-13T18:00:00Z",
+    "last_seen_at": "2026-10-13T18:00:00Z",
+    "closed_at": null,
+    "enrichment": {
+      "employment_type": "internship",
+      "seniority": "intern",
+      "category": "software_engineering",
+      "posting_language": "en"
+    },
+    "enriched_at": null,
+    "enrichment_version": 0,
+    "view_count": 0,
+    "applied_count": 0,
+    "upvote_count": 0,
+    "downvote_count": 0,
+    "my_vote": 0,
+    "reality": {
+      "class": "fresh",
+      "age_days": 0,
+      "repost_count": 1,
+      "mass_posting_count": 1,
+      "fake_freshness": false
+    }
+  }
+}

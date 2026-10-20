@@ -6,7 +6,7 @@ import { appError } from "$lib/api";
 import { toast } from "$lib/ui";
 
 /**
- * Asks for a resume (PDF, Word, Markdown, text, or ATS Fit's master.json) and opens its import review, which goes to
+ * Asks for a resume (PDF, Word, Markdown, text, or a gliide v1 JSON) and opens its import review, which goes to
  * `back` once it's added or discarded (Experience without one).
  */
 export async function chooseResume(defaultPath?: string, back?: string | null) {

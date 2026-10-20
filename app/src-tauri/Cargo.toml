@@ -3,6 +3,7 @@ name = "gliide"
 version = "0.1.0"
 description = "Tailor a one-page resume to a job posting, honestly"
 edition.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [lib]

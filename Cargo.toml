@@ -4,6 +4,7 @@ members = ["crates/*", "app/src-tauri"]
 
 [workspace.package]
 edition = "2024"
+license = "AGPL-3.0-only"
 publish = false
 
 # Typst, image codecs and SQLite are slow unoptimized: a debug build of the app would take seconds per rebuild of

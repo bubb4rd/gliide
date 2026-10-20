@@ -1,0 +1,179 @@
+{
+  "certifications": [],
+  "company": "Fabrikam Health",
+  "degree": {
+    "equivalent": true,
+    "fields": [
+      "computer science",
+      "Software Engineering"
+    ],
+    "level": "bachelor"
+  },
+  "knockouts": [],
+  "location": "Remote (US)",
+  "role": "Mobile Developer I",
+  "seniority": "entry",
+  "short_role": "mobile_dev",
+  "skills": [
+    {
+      "aliases": [
+        "React-Native"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "React Native"
+    },
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [
+        "TS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [
+        "React.js"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "React"
+    },
+    {
+      "aliases": [
+        "RESTful APIs",
+        "REST API"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "REST APIs"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "tool",
+      "priority": 2,
+      "required": true,
+      "term": "Git"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "iOS"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "Android"
+    },
+    {
+      "aliases": [
+        "software development lifecycle"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "SDLC"
+    },
+    {
+      "aliases": [
+        "Agile delivery"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "Agile"
+    },
+    {
+      "aliases": [
+        "mobile UI/UX"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "mobile UI/UX principles"
+    },
+    {
+      "aliases": [
+        "unit tests",
+        "integration tests"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "unit and integration tests"
+    },
+    {
+      "aliases": [
+        "SDKs"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "third-party SDKs"
+    },
+    {
+      "aliases": [
+        "code review"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "code reviews"
+    },
+    {
+      "aliases": [
+        "healthcare IT"
+      ],
+      "group": null,
+      "kind": "domain",
+      "priority": 3,
+      "required": false,
+      "term": "Health IT"
+    },
+    {
+      "aliases": [
+        "communication"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "communication skills"
+    }
+  ],
+  "title_terms": [
+    "Mobile Developer"
+  ],
+  "years_min": null
+}

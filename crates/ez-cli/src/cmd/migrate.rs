@@ -4,7 +4,7 @@ use resume_core::{Resume, migrate_v1};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// ATS Fit's master.json.
+    /// A legacy v1 master.json.
     v1: PathBuf,
     /// Folder for bank.json and masters/swe.json.
     #[arg(long)]

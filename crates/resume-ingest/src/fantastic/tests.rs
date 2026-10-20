@@ -47,30 +47,30 @@ async fn sample_items_become_feed_jobs() {
         .await
         .unwrap();
     assert_eq!(jobs.len(), 6);
-    let glyphic = jobs
+    let weyland = jobs
         .iter()
-        .find(|j| j.slug == "fantastic:2410329455")
+        .find(|j| j.slug == "fantastic:9100000101")
         .unwrap();
-    assert_eq!(glyphic.origin, Origin::Fantastic);
-    assert_eq!(glyphic.title, "Scientist / Senior Scientist, Library Prep");
-    assert_eq!(glyphic.company, "Glyphic Biotechnologies");
+    assert_eq!(weyland.origin, Origin::Fantastic);
+    assert_eq!(weyland.title, "Scientist / Senior Scientist, Sample Prep");
+    assert_eq!(weyland.company, "Weyland Corp");
     assert_eq!(
-        glyphic.location.as_deref(),
+        weyland.location.as_deref(),
         Some("Berkeley, California, United States")
     );
     assert_eq!(
-        glyphic.url,
-        "https://job-boards.greenhouse.io/glyphicbiotechnologies/jobs/4449306009"
+        weyland.url,
+        "https://job-boards.greenhouse.io/weylandcorp/jobs/4000000101"
     );
-    assert_eq!(glyphic.source, "greenhouse");
-    assert_eq!(glyphic.external_id, None);
-    assert_eq!(glyphic.posted_at.as_deref(), Some("2026-10-13T01:20:46Z"));
-    assert_eq!(glyphic.found_at, "2026-10-13T01:23:25.863592Z");
-    assert_eq!(glyphic.employment_type.as_deref(), Some("full_time"));
-    assert_eq!(glyphic.work_mode.as_deref(), Some("onsite"));
-    assert_eq!(glyphic.years_min, Some(5));
+    assert_eq!(weyland.source, "greenhouse");
+    assert_eq!(weyland.external_id, None);
+    assert_eq!(weyland.posted_at.as_deref(), Some("2026-10-13T01:20:46Z"));
+    assert_eq!(weyland.found_at, "2026-10-13T01:23:25.863592Z");
+    assert_eq!(weyland.employment_type.as_deref(), Some("full_time"));
+    assert_eq!(weyland.work_mode.as_deref(), Some("onsite"));
+    assert_eq!(weyland.years_min, Some(5));
     assert_eq!(
-        glyphic.salary,
+        weyland.salary,
         Some(Salary {
             min_cents: Some(11_172_500),
             max_cents: Some(16_195_000),
@@ -79,19 +79,19 @@ async fn sample_items_become_feed_jobs() {
         })
     );
     assert!(
-        glyphic
+        weyland
             .skills
             .starts_with(&["molecularbiology".to_owned(), "biochemistry".to_owned()])
     );
-    let text = glyphic.description.as_deref().unwrap();
-    assert!(text.contains("single-molecule proteome sequencing platform"));
+    let text = weyland.description.as_deref().unwrap();
+    assert!(text.contains("benchtop protein assay platform"));
     for bad in ["<p", "</", "&amp;", "&nbsp;", "  ", "\n\n\n"] {
         assert!(!text.contains(bad), "description contains {bad:?}");
     }
 
     let hourly = jobs
         .iter()
-        .find(|j| j.slug == "fantastic:2410322102")
+        .find(|j| j.slug == "fantastic:9100000102")
         .unwrap();
     assert_eq!(
         hourly
@@ -103,7 +103,7 @@ async fn sample_items_become_feed_jobs() {
 
     let intern = jobs
         .iter()
-        .find(|j| j.slug == "fantastic:2410327682")
+        .find(|j| j.slug == "fantastic:9100000103")
         .unwrap();
     assert_eq!(intern.employment_type.as_deref(), Some("internship"));
     assert_eq!(intern.years_min, Some(0));
@@ -111,7 +111,7 @@ async fn sample_items_become_feed_jobs() {
 
     let contract = jobs
         .iter()
-        .find(|j| j.slug == "fantastic:2410323001")
+        .find(|j| j.slug == "fantastic:9100000104")
         .unwrap();
     assert_eq!(contract.employment_type.as_deref(), Some("contract"));
     assert_eq!(contract.work_mode.as_deref(), Some("remote"));
@@ -120,14 +120,14 @@ async fn sample_items_become_feed_jobs() {
 
     let no_place = jobs
         .iter()
-        .find(|j| j.slug == "fantastic:2410329681")
+        .find(|j| j.slug == "fantastic:9100000105")
         .unwrap();
     assert_eq!(no_place.location, None);
     assert_eq!(no_place.years_min, Some(10));
 
     let workday = jobs
         .iter()
-        .find(|j| j.slug == "fantastic:2410353075")
+        .find(|j| j.slug == "fantastic:9100000106")
         .unwrap();
     assert_eq!(workday.source, "workday");
     assert_eq!(

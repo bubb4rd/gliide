@@ -1,4 +1,4 @@
-// A master or tailored resume (ATS Fit's master.json shape, as a JSON string in `sys.inputs.data`) in the one-page
+// A master or tailored resume (the v1 master JSON shape, as a JSON string in `sys.inputs.data`) in the one-page
 // Google Docs design: Times New Roman 11pt, 0.5in margins, sections between rules, bold names with italic dates at the
 // right. Liberation Serif, metric-compatible with Times New Roman, stands in where it isn't installed.
 //

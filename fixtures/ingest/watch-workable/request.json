@@ -1,0 +1,11 @@
+{
+  "input": "https://apply.workable.com/soylent/",
+  "request": "https://apply.workable.com/api/v1/widget/accounts/soylent",
+  "url": "https://apply.workable.com/api/v1/widget/accounts/soylent",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a Workable widget API response; content invented. Only the fields the watchlist reads are kept."
+}

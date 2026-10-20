@@ -42,7 +42,7 @@ pub enum PipelineError {
         source: std::io::Error,
     },
     #[error(
-        "gliide reads .pdf, .docx, .md, .txt and ATS Fit's master.json. Save it as a PDF and import that."
+        "gliide reads .pdf, .docx, .md, .txt and v1 resume JSON. Save it as a PDF and import that."
     )]
     UnsupportedFile,
     #[error("This file isn't a PDF gliide can open. Export it again as a PDF, or import a .docx.")]
@@ -60,7 +60,7 @@ pub enum PipelineError {
     #[error("This file has no text in it. Choose the file your resume is in.")]
     EmptyFile,
     #[error(
-        "This file isn't an ATS Fit master.json ({0}). Choose the master.json ATS Fit tailors from."
+        "This file isn't a v1 resume JSON ({0}). Choose your resume file, or a JSON in gliide's v1 resume format."
     )]
     NotMasterJson(serde_json::Error),
 }

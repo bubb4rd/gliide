@@ -1,0 +1,17 @@
+{
+  "jobPostingInfo": {
+    "id": "0000aaaa",
+    "title": "Software Engineer, Agent Runtime",
+    "jobDescription": "<p>Are you ready to turn agent research into dependable, production-grade systems? Join us!</p><p></p><p>At Cyberdyne, we build the runtime that keeps autonomous agents sandboxed &amp; observable.</p><p></p><p><b>What You’ll be Doing:</b></p><ul><li><p>Track the cutting edge: follow research on tool use and planning, and bring what works into the product.</p></li><li><p>Design isolation for untrusted code.</p></li></ul><p><b>What We Need to See:</b></p><ul><li><p>5+ years writing systems software in Rust or Go.</p></li></ul>",
+    "location": "US, Remote",
+    "timeType": "Full time",
+    "jobReqId": "JR1000001",
+    "jobPostingId": "Software-Engineer--Agent-Runtime_JR1000001",
+    "jobPostingSiteId": "CyberdyneCareers",
+    "externalUrl": "https://cyberdyne.wd5.myworkdayjobs.com/CyberdyneCareers/job/US-Remote/Software-Engineer--Agent-Runtime_JR1000001"
+  },
+  "hiringOrganization": {
+    "name": "2100 Cyberdyne USA",
+    "url": ""
+  }
+}

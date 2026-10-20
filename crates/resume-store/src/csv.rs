@@ -1,19 +1,18 @@
-//! `applications.csv`: the spreadsheet ATS Fit kept in the export folder, which the app keeps writing so his existing
-//! sheet keeps working. ATS Fit's eight columns come first, then the app's.
+//! `applications.csv`: the application log in the export folder, which the app keeps writing so an existing
+//! spreadsheet keeps working. The legacy eight columns come first, then the app's.
 
 use crate::{AppStatus, Application, new_id, now};
 
-/// ATS Fit's header.
-const ATS_FIT_HEADER: &str =
-    "date,company,role,fit_planned,fit_on_page,resume,cover_letter,posting";
+/// The legacy header.
+const LEGACY_HEADER: &str = "date,company,role,fit_planned,fit_on_page,resume,cover_letter,posting";
 
 /// `applications.csv` for `apps`, given newest first like [`crate::Store::applications`]; written oldest first:
 /// `date,company,role,fit_planned,fit_on_page,resume,cover_letter,posting,status,fit_now`. `fit_planned` is the
-/// projected score and `fit_on_page` the on-file score, rounded to whole numbers like ATS Fit; RFC 4180 quoting.
+/// projected score and `fit_on_page` the on-file score, rounded to whole numbers; RFC 4180 quoting.
 pub fn applications_csv(apps: &[Application]) -> String {
     let mut rows: Vec<&Application> = apps.iter().rev().collect();
     rows.sort_by(|a, b| a.date.cmp(&b.date));
-    let mut out = format!("{ATS_FIT_HEADER},status,fit_now\n");
+    let mut out = format!("{LEGACY_HEADER},status,fit_now\n");
     for a in rows {
         let cells = [
             field(&a.date),
@@ -33,7 +32,7 @@ pub fn applications_csv(apps: &[Application]) -> String {
     out
 }
 
-/// The rows of an ATS Fit `applications.csv` (its eight-column header; the app's extra columns are read when present)
+/// The rows of an `applications.csv` (the legacy eight-column header; the app's extra columns are read when present)
 /// as applications with no posting, status `applied`. Newest first like [`crate::Store::applications`], so
 /// `applications_csv(&parse_ats_fit_csv(text))` writes the rows back in their order. Text without a `date`,
 /// `company` and `role` header gives none.

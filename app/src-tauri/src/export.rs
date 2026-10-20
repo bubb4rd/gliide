@@ -17,8 +17,8 @@ use crate::state::{App, lock};
 
 /// The log mirrored for spreadsheets, in the export folder.
 const CSV: &str = "applications.csv";
-/// The header the app writes (`applications_csv`): ATS Fit's eight columns, then its own. A file with any other
-/// header (ATS Fit's, or one edited in a spreadsheet) has its new rows imported before the app writes over it.
+/// The header the app writes (`applications_csv`): the legacy eight columns, then its own. A file with any other
+/// header (the legacy one, or one edited in a spreadsheet) has its new rows imported before the app writes over it.
 const APP_COLUMNS: [&str; 10] = [
     "date",
     "company",
@@ -127,7 +127,7 @@ pub fn export_cover(app: &App, review: &str) -> Result<Exported> {
     recorded(app, r, a, &path, None)
 }
 
-/// `<company>_<short_role>_<surname>_<kind>`, ATS Fit's file name for an export.
+/// `<company>_<short_role>_<surname>_<kind>`, the file name for an export.
 fn file_stem(r: &Review, kind: &str) -> String {
     let company = non_empty(cover::company(r)).unwrap_or("company");
     let surname = r.bank.name.split_whitespace().last().unwrap_or("resume");
@@ -217,7 +217,7 @@ fn write_csv(app: &App) -> Result<()> {
 }
 
 /// Imports the rows of `<export_dir>/applications.csv` the store doesn't have yet (same date, company, role and
-/// resume file), unless the file carries the app's own header: ATS Fit's log, or one you edited, is never lost to the
+/// resume file), unless the file carries the app's own header: a legacy log, or one you edited, is never lost to the
 /// app's next write. Runs before every write, so rows added there since are read too. A file that isn't UTF-8 is an
 /// error: the caller must not write over it.
 pub fn import_applications_csv(app: &App) -> Result<()> {
@@ -287,7 +287,7 @@ fn non_empty(s: &str) -> Option<&str> {
     Some(s.trim()).filter(|s| !s.is_empty())
 }
 
-/// ATS Fit's file-name part: lowercase, runs of anything but letters and digits as one `_`, trimmed of `_`.
+/// A file-name part: lowercase, runs of anything but letters and digits as one `_`, trimmed of `_`.
 pub fn slug(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.to_lowercase().chars() {
@@ -354,8 +354,8 @@ mod tests {
     }
 
     #[test]
-    fn slugs_like_ats_fit() {
-        assert_eq!(slug("Globex"), "globex");
+    fn slugs_file_name_parts() {
+        assert_eq!(slug("Acme Corp"), "acme_corp");
         assert_eq!(slug("  Jr. SDE / Platform "), "jr_sde_platform");
         assert_eq!(slug("AT&T"), "at_t");
     }

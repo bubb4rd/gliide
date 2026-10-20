@@ -1,4 +1,4 @@
-//! Cover letters (ATS Fit's `cover.md` and `cover-paragraph.md`): a one-page letter written from the tailored resume
+//! Cover letters (prompts `cover.md` and `cover-paragraph.md`): a one-page letter written from the tailored resume
 //! as the draft has it (your toggles and edits included) and the posting, and one paragraph of it rewritten with a
 //! note. The prompts ask for honesty (nothing the resume doesn't show, never what you lack); there's no validator for
 //! prose, so the letter is yours to edit.
@@ -61,7 +61,7 @@ pub struct CoverInput<'a> {
     pub posting: &'a str,
 }
 
-/// `resume` as plain text, the way ATS Fit hands it to the letter: name, contact line, then `## Title` per section,
+/// `resume` as plain text, the way the letter prompt reads it: name, contact line, then `## Title` per section,
 /// `Name, place · dates`, subtitle, `Label: text` note lines, `- bullet` lines and `Label: item, item` skills lines.
 pub fn resume_text(resume: &Resume) -> String {
     let mut s = String::new();

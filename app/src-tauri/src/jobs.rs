@@ -266,7 +266,7 @@ fn seniority(s: Seniority) -> &'static str {
     }
 }
 
-/// `pasted`, `from Greenhouse`, `from freehire`, `read from globex.com`.
+/// `pasted`, `from Greenhouse`, `from freehire`, `read from acme.com`.
 fn source(p: &Posting) -> String {
     let board = match p.method {
         Method::Pasted => return "pasted".to_owned(),
@@ -297,7 +297,7 @@ fn source(p: &Posting) -> String {
     format!("from {board}")
 }
 
-/// `https://www.globex.com/careers/…` → `globex.com`.
+/// `https://www.acme.com/careers/…` → `acme.com`.
 fn host(url: &str) -> Option<&str> {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let host = rest.split(['/', '?', '#']).next()?;

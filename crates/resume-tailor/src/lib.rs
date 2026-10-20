@@ -6,7 +6,7 @@
 //! runs. One you turned on is in, or forced when it would be left out. Yours and forced changes are never left out by
 //! the fit check; when they run long they stay, with a warning.
 //!
-//! **Fit, as ATS Fit's fit loop with one measure pass.** One measure compile lays out every in-change's new text at
+//! **Fit, as a fit loop with one measure pass.** One measure compile lays out every in-change's new text at
 //! the width of the line it targets: a rewrite, variant, set, swap or note addition over its line's original count is
 //! left out ("takes 3 lines, not 2"); a skills line keeps its line count by leaving out its additions, lowest priority
 //! first. Then `apply` and compile; while the resume runs over its page limit, the lowest-priority included bank entry

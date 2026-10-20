@@ -1,0 +1,26 @@
+{
+  "id": 1000001,
+  "shortcode": "1A2B3C4D5E",
+  "title": "Open-Source Machine Learning Engineer - US Remote",
+  "remote": true,
+  "location": {
+    "city": "New York",
+    "country": "United States",
+    "countryCode": "US",
+    "region": "New York"
+  },
+  "locations": [
+    {
+      "city": "New York",
+      "country": "United States",
+      "countryCode": "US",
+      "hidden": false,
+      "region": "New York"
+    }
+  ],
+  "state": "published",
+  "workplace": "remote",
+  "description": "<p></p><p>At Soylent AI, we're on a mission to make open models easy to use. Our libraries &amp; tools are used by many fictional developers.</p><p>You’ll maintain open-source training code.</p>",
+  "requirements": "<p>Please provide a cover letter about why you want to work in open source at Soylent AI.</p><ul><li>Strong Python.</li></ul>",
+  "benefits": "<ul><li>Flexible hours</li><li>Remote-first team</li></ul>"
+}

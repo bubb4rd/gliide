@@ -1,4 +1,4 @@
-//! Literal matching, as ATS Fit's `literal_fit` (ARCHITECTURE.md §4): a requirement is on the page when its term, or
+//! Literal matching (ARCHITECTURE.md §4): a requirement is on the page when its term, or
 //! one of its aliases, appears there as a whole term, case-insensitively. Near forms (singular/plural, hyphen, space or
 //! joined, `&`/`and`) are found too, and reported separately: an ATS that matches literally may miss them.
 //!

@@ -1,0 +1,11 @@
+{
+  "input": "https://careers.massivedynamic.example/en_US/careers/JobDetail/Software-Engineer/66000",
+  "request": "https://careers.massivedynamic.example/en_US/careers/JobDetail/Software-Engineer/66000",
+  "url": "https://careers.massivedynamic.example/en_US/careers/JobDetail/Software-Engineer/66000",
+  "status": 200,
+  "content_type": "text/html;charset=UTF-8",
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a careers-portal job page (header, nav, aside, form and footer chrome around <main>); content invented."
+}

@@ -1,0 +1,11 @@
+{
+  "input": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=0",
+  "request": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=0",
+  "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software+engineer&location=United+States&f_TPR=r86400&start=0",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "retry_after": null,
+  "body": "body.html",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: 10 cards shaped like a LinkedIn guest search page (its card markup kept); companies, titles, locations, job ids, tracking ids and logos invented."
+}

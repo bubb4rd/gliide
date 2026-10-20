@@ -1,0 +1,11 @@
+{
+  "input": "https://freehire.me/api/v1/jobs/search?seniority=junior&employment_type=full_time&category=software_engineering,backend,frontend,fullstack&countries=us&source_exclude=adzuna,whatjobs,himalayas&reality=fresh&sort=created_at&order=desc&limit=5&offset=0",
+  "request": "https://freehire.me/api/v1/jobs/search?seniority=junior&employment_type=full_time&category=software_engineering,backend,frontend,fullstack&countries=us&source_exclude=adzuna,whatjobs,himalayas&reality=fresh&sort=created_at&order=desc&limit=5&offset=0",
+  "url": "https://freehire.me/api/v1/jobs/search?seniority=junior&employment_type=full_time&category=software_engineering,backend,frontend,fullstack&countries=us&source_exclude=adzuna,whatjobs,himalayas&reality=fresh&sort=created_at&order=desc&limit=5&offset=0",
+  "status": 200,
+  "content_type": "application/json",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a freehire job search response; companies, jobs and links invented."
+}

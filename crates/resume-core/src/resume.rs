@@ -1,4 +1,4 @@
-//! The resolved resume: ATS Fit's `master.schema.json` shape, plus the build-only fields a template reads for the fit
+//! The resolved resume: the v1 master JSON shape, plus the build-only fields a template reads for the fit
 //! check and the review's highlight. Templates read this as `sys.inputs.data`.
 
 use schemars::JsonSchema;

@@ -22,7 +22,7 @@ pub enum Mode {
     BankAware,
 }
 
-/// One edit. Ids are the tagged resume's: entry `nhs`, bullet `nhs.2`, note line `asu#2`, skills line `tools`,
+/// One edit. Ids are the tagged resume's: entry `acme`, bullet `acme.2`, note line `state-u#2`, skills line `tools`,
 /// section `work`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]

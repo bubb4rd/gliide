@@ -1,0 +1,59 @@
+{
+  "data": {
+    "company": {
+      "slug": "sirius",
+      "name": "Sirius Cybernetics",
+      "collections": [],
+      "job_count": 20,
+      "regions": [
+        "north_america"
+      ],
+      "countries": [
+        "us"
+      ],
+      "domains": [
+        "ai"
+      ],
+      "company_types": [
+        "product"
+      ],
+      "company_sizes": [
+        "1000+"
+      ],
+      "industries": [
+        "ai",
+        "manufacturing"
+      ],
+      "year_founded": 1975,
+      "employee_count": 10001,
+      "hq_country": "us",
+      "organization_type": "Enterprise",
+      "tagline": "Sirius Cybernetics makes robots with genuine people personalities.",
+      "company_info": {
+        "source": "hirebase",
+        "website": "https://www.sirius.example",
+        "services": "Robotics, AI",
+        "locations": [
+          {
+            "code": "US",
+            "name": "United States"
+          }
+        ],
+        "description": "Sirius Cybernetics makes robots with genuine people personalities."
+      },
+      "remote_regions": [],
+      "yc_batch": null,
+      "yc_status": null,
+      "yc_stage": null,
+      "yc_flags": [],
+      "maturity": "public",
+      "upvote_count": 0,
+      "downvote_count": 0,
+      "my_vote": 0,
+      "feedback_count": 0,
+      "feedback_rating_avg": null
+    },
+    "jobs": [],
+    "referral_available": false
+  }
+}

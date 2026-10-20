@@ -21,7 +21,7 @@ pub fn get_settings(app: &App) -> Settings {
     app.settings()
 }
 
-/// Saves `s` (trimmed; empty models fall back to the defaults' `sonnet`). A new export folder holding ATS Fit's
+/// Saves `s` (trimmed; empty models fall back to the defaults' `sonnet`). A new export folder holding an existing
 /// `applications.csv` has its rows imported (when it can be read: every write imports again first).
 pub fn set_settings(app: &App, mut s: Settings) -> Result<Settings> {
     let trim = |v: &mut String, default: &str| {

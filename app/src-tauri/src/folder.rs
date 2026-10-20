@@ -115,10 +115,10 @@ mod tests {
     #[test]
     fn a_file_is_what_its_name_says() {
         for (name, want) in [
-            ("globex_jr_sde_doe_resume.pdf", Resume),
-            ("globex_jr_sde_doe_resume-2.pdf", Resume),
-            ("initech_swe_doe_cover_letter.pdf", CoverLetter),
-            ("umbrella_swe_doe_cover_letter-2.pdf", CoverLetter),
+            ("acme_swe_doe_resume.pdf", Resume),
+            ("acme_swe_doe_resume-2.pdf", Resume),
+            ("globex_swe_doe_cover_letter.pdf", CoverLetter),
+            ("northwind_swe_doe_cover_letter-2.pdf", CoverLetter),
             ("Doe Resume Cover Letter.PDF", CoverLetter),
             ("CoverLetter.pdf", CoverLetter),
             ("Jane Doe CV.pdf", Resume),

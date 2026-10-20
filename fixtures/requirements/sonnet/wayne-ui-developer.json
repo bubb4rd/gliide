@@ -1,0 +1,186 @@
+{
+  "certifications": [],
+  "company": "Wayne Markets",
+  "degree": null,
+  "knockouts": [],
+  "location": "Chicago",
+  "role": "UI Developer - Options Market Making",
+  "seniority": "entry",
+  "short_role": "ui_dev",
+  "skills": [
+    {
+      "aliases": [
+        "JS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "JavaScript"
+    },
+    {
+      "aliases": [
+        "TS"
+      ],
+      "group": "language",
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "TypeScript"
+    },
+    {
+      "aliases": [
+        "UI developer"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 1,
+      "required": true,
+      "term": "UI development"
+    },
+    {
+      "aliases": [
+        "component development",
+        "library development"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "component and library development"
+    },
+    {
+      "aliases": [
+        "UX design",
+        "UI design"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": true,
+      "term": "UX and UI design principles"
+    },
+    {
+      "aliases": [
+        "React.js"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "React"
+    },
+    {
+      "aliases": [
+        "component library"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "component libraries"
+    },
+    {
+      "aliases": [
+        "design system"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 2,
+      "required": false,
+      "term": "design systems"
+    },
+    {
+      "aliases": [
+        "data rich user interfaces"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "complex and data rich user interfaces"
+    },
+    {
+      "aliases": [
+        "finance"
+      ],
+      "group": null,
+      "kind": "domain",
+      "priority": 3,
+      "required": false,
+      "term": "financial sector"
+    },
+    {
+      "aliases": [
+        "AI tools"
+      ],
+      "group": null,
+      "kind": "tool",
+      "priority": 3,
+      "required": false,
+      "term": "AI-powered tools"
+    },
+    {
+      "aliases": [
+        "troubleshoot"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "troubleshooting"
+    },
+    {
+      "aliases": [
+        "debug"
+      ],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "debugging"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "hard",
+      "priority": 3,
+      "required": false,
+      "term": "code review"
+    },
+    {
+      "aliases": [
+        "problem solving"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "problem-solving"
+    },
+    {
+      "aliases": [],
+      "group": null,
+      "kind": "soft",
+      "priority": 2,
+      "required": true,
+      "term": "attention to detail"
+    },
+    {
+      "aliases": [
+        "multitasking"
+      ],
+      "group": null,
+      "kind": "soft",
+      "priority": 3,
+      "required": true,
+      "term": "manage multiple tasks"
+    }
+  ],
+  "title_terms": [
+    "UI Developer",
+    "Market Making",
+    "Options Market Making"
+  ],
+  "years_min": null
+}

@@ -1,0 +1,11 @@
+{
+  "input": "https://jobs.ashbyhq.com/initech",
+  "request": "https://api.ashbyhq.com/posting-api/job-board/initech",
+  "url": "https://api.ashbyhq.com/posting-api/job-board/initech",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: shaped like a Ashby job board API response; content invented. Only the fields the watchlist reads are kept."
+}

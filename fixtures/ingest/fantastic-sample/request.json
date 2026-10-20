@@ -1,0 +1,11 @@
+{
+  "input": "{\"timeRange\":\"1h\",\"limit\":10,\"descriptionType\":\"text\",\"includeCompanyDetails\":false}",
+  "request": "https://api.apify.com/v2/acts/fantastic-jobs~career-site-job-listing-api/run-sync-get-dataset-items?token=dummy&timeout=240",
+  "url": "https://api.apify.com/v2/acts/fantastic-jobs~career-site-job-listing-api/run-sync-get-dataset-items?token=dummy&timeout=240",
+  "status": 201,
+  "content_type": "application/json; charset=utf-8",
+  "retry_after": null,
+  "body": "body.json",
+  "fetched": "2026-10-13",
+  "note": "Synthetic: 6 items shaped like Fantastic.jobs' public ATS sample (the actor's item shape, descriptionType html, so description_html); companies, postings and ids invented, unused heavy fields dropped. The request and status stand for a successful run."
+}

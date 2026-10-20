@@ -1,5 +1,5 @@
 //! Resume files for the import (ARCHITECTURE.md §3 "Import"): a PDF, DOCX, Markdown or plain-text resume read as its
-//! text and links, for the import call's `<resume>` and `<links>` blocks; ATS Fit's `master.json` read as the resume
+//! text and links, for the import call's `<resume>` and `<links>` blocks; a v1 master JSON read as the resume
 //! it already is.
 //!
 //! Every file's text is normalized the same way: `\r\n` reads as `\n`, each line loses its trailing whitespace, the
@@ -30,7 +30,7 @@ use crate::PipelineError;
 /// A resume as the import reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResumeSource {
-    /// An ATS Fit `master.json` (v1): already structured, no model call needed.
+    /// A v1 master JSON (the legacy format): already structured, no model call needed.
     AtsFit(Resume),
     /// A PDF, DOCX, Markdown or plain-text resume: text and links for the import call.
     File(ResumeFile),
@@ -745,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn an_ats_fit_master_json_reads_as_its_resume() {
+    fn a_v1_master_json_reads_as_its_resume() {
         let path = fixture("banks/jane-doe.v1.json");
         let ResumeSource::AtsFit(resume) = read_resume(&path).unwrap() else {
             panic!("not read as a master.json");
@@ -762,8 +762,10 @@ mod tests {
         assert!(matches!(err, PipelineError::NotMasterJson(_)), "{err:?}");
         let message = err.to_string();
         assert!(
-            message.starts_with("This file isn't an ATS Fit master.json (")
-                && message.ends_with("). Choose the master.json ATS Fit tailors from."),
+            message.starts_with("This file isn't a v1 resume JSON (")
+                && message.ends_with(
+                    "). Choose your resume file, or a JSON in gliide's v1 resume format."
+                ),
             "{message}"
         );
     }

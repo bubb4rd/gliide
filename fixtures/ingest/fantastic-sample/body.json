@@ -1,0 +1,487 @@
+[
+  {
+    "id": 9100000101,
+    "date_posted": "2026-10-13T01:20:46",
+    "date_created": "2026-10-13T01:23:25.863592",
+    "title": "Scientist / Senior Scientist, Sample Prep",
+    "organization": "Weyland Corp",
+    "organization_url": null,
+    "date_valid_through": null,
+    "locations": [
+      {
+        "@type": "Place",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "",
+          "addressLocality": "Berkeley, CA"
+        }
+      }
+    ],
+    "locations_alt": null,
+    "location_type": null,
+    "location_requirements": null,
+    "salary": null,
+    "employment_type": null,
+    "url": "https://job-boards.greenhouse.io/weylandcorp/jobs/4000000101",
+    "source_type": "ats",
+    "source": "greenhouse",
+    "source_domain": "job-boards.greenhouse.io",
+    "source_slug": "weylandcorp",
+    "organization_logo": null,
+    "cities_derived": [
+      "Berkeley"
+    ],
+    "regions_derived": [
+      "California"
+    ],
+    "countries_derived": [
+      "United States"
+    ],
+    "locations_derived": [
+      "Berkeley, California, United States"
+    ],
+    "timezones_derived": [
+      "America/Los_Angeles"
+    ],
+    "lats_derived": [
+      37.87
+    ],
+    "lngs_derived": [
+      -122.27
+    ],
+    "domain_derived": "weyland.example",
+    "ai_salary_currency": "USD",
+    "ai_salary_value": null,
+    "ai_salary_min_value": 111725,
+    "ai_salary_max_value": 161950,
+    "ai_salary_unit_text": "YEAR",
+    "ai_benefits": [
+      "Stock Options",
+      "Health Insurance",
+      "Paid Time Off"
+    ],
+    "ai_experience_level": "5-10",
+    "ai_work_arrangement": "On-site",
+    "ai_work_arrangement_office_days": null,
+    "ai_remote_location": null,
+    "ai_key_skills": [
+      "Molecular Biology",
+      "Biochemistry",
+      "Assay Development",
+      "Experimental Design",
+      "Lab Automation"
+    ],
+    "ai_hiring_manager_name": null,
+    "ai_hiring_manager_email_address": null,
+    "ai_employment_type": [
+      "FULL_TIME"
+    ],
+    "ai_visa_sponsorship": false,
+    "ai_taxonomies_a": [
+      "Science & Research",
+      "Engineering"
+    ],
+    "description_html": "<div class=\"content-intro\"><h3><strong>About Weyland Corp:</strong></h3>\n<p>Weyland Corp builds a benchtop protein assay platform for research labs. We&rsquo;ve raised &gt;$50M so far &amp; are growing the bench team.</p></div><div class=\"ql-block\" data-block-id=\"block-0001\">\n<p><strong>The role</strong></p>\n<p>You’ll own the sample prep stage of the assay, from&nbsp;raw lysate to a run-ready plate.<br>You will report to the Director of Assay Development.</p>\n<p><strong>What you’ll do</strong></p>\n<ul>\n<li>Design and run prep protocols &amp; track yield across runs</li>\n<li>Work with automation on liquid handling and plate QC</li>\n<li>Write up methods the team can repeat&nbsp;</li>\n</ul>\n<p><strong>What you bring</strong></p>\n<ul>\n<li>PhD with 1+ years in industry, or MS with 5+ years</li>\n<li>Hands-on molecular biology &amp; biochemistry</li>\n</ul>\n<p>&nbsp;</p>\n<p>The base pay range for this role is $111,725 &mdash; $161,950 per year.</p></div>",
+    "classification_isco": {
+      "id": "2113",
+      "name": "Chemists"
+    }
+  },
+  {
+    "id": 9100000102,
+    "date_posted": "2026-10-13T01:13:34",
+    "date_created": "2026-10-13T01:15:01.968106",
+    "title": "Production Team Lead (First Shift)",
+    "organization": "Spacely Sprockets",
+    "organization_url": null,
+    "date_valid_through": null,
+    "locations": [
+      {
+        "@type": "Place",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "",
+          "addressLocality": "Garden Grove, CA"
+        }
+      }
+    ],
+    "locations_alt": null,
+    "location_type": null,
+    "location_requirements": null,
+    "salary": null,
+    "employment_type": null,
+    "url": "https://job-boards.greenhouse.io/spacelysprockets/jobs/4000000102",
+    "source_type": "ats",
+    "source": "greenhouse",
+    "source_domain": "job-boards.greenhouse.io",
+    "source_slug": "spacelysprockets",
+    "organization_logo": null,
+    "cities_derived": [
+      "Garden Grove"
+    ],
+    "regions_derived": [
+      "California"
+    ],
+    "countries_derived": [
+      "United States"
+    ],
+    "locations_derived": [
+      "Garden Grove, California, United States"
+    ],
+    "timezones_derived": [
+      "America/Los_Angeles"
+    ],
+    "lats_derived": [
+      33.77
+    ],
+    "lngs_derived": [
+      -117.94
+    ],
+    "domain_derived": "spacely.example",
+    "ai_salary_currency": "USD",
+    "ai_salary_value": null,
+    "ai_salary_min_value": 31,
+    "ai_salary_max_value": 34,
+    "ai_salary_unit_text": "HOUR",
+    "ai_benefits": [
+      "Health Insurance",
+      "401(k)"
+    ],
+    "ai_experience_level": "2-5",
+    "ai_work_arrangement": "On-site",
+    "ai_work_arrangement_office_days": null,
+    "ai_remote_location": null,
+    "ai_key_skills": [
+      "Team Leadership",
+      "Production Management",
+      "Continuous Improvement",
+      "5S",
+      "Takt Time"
+    ],
+    "ai_hiring_manager_name": null,
+    "ai_hiring_manager_email_address": null,
+    "ai_employment_type": [
+      "FULL_TIME"
+    ],
+    "ai_visa_sponsorship": false,
+    "ai_taxonomies_a": [
+      "Manufacturing"
+    ],
+    "description_html": "<div class=\"content-intro\"><p>Spacely Sprockets makes drive sprockets for light vehicles.</p></div><div><p><strong>What you&rsquo;ll do</strong></p>\n<ul>\n<li>Lead a first-shift assembly crew &amp; set daily targets</li>\n<li>Hold the line to safety, quality, delivery &amp; cost</li>\n</ul>\n<p><strong>Pay</strong>&nbsp;$31 &ndash; $34 per hour</p></div>",
+    "classification_isco": {
+      "id": "3122",
+      "name": "Manufacturing supervisors"
+    }
+  },
+  {
+    "id": 9100000103,
+    "date_posted": "2026-10-13T01:00:28",
+    "date_created": "2026-10-13T01:22:03.783169",
+    "title": "Winter 2027 Intern, Controls",
+    "organization": "Planet Express",
+    "organization_url": null,
+    "date_valid_through": null,
+    "locations": [
+      {
+        "@type": "Place",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "",
+          "addressLocality": "Mountain View, CA"
+        }
+      }
+    ],
+    "locations_alt": null,
+    "location_type": null,
+    "location_requirements": null,
+    "salary": null,
+    "employment_type": null,
+    "url": "https://job-boards.greenhouse.io/planetexpress/jobs/4000000103",
+    "source_type": "ats",
+    "source": "greenhouse",
+    "source_domain": "job-boards.greenhouse.io",
+    "source_slug": "planetexpress",
+    "organization_logo": null,
+    "cities_derived": [
+      "Mountain View"
+    ],
+    "regions_derived": [
+      "California"
+    ],
+    "countries_derived": [
+      "United States"
+    ],
+    "locations_derived": [
+      "Mountain View, California, United States"
+    ],
+    "timezones_derived": [
+      "America/Los_Angeles"
+    ],
+    "lats_derived": [
+      37.39
+    ],
+    "lngs_derived": [
+      -122.08
+    ],
+    "domain_derived": "planetexpress.example",
+    "ai_salary_currency": "USD",
+    "ai_salary_value": 10000,
+    "ai_salary_min_value": null,
+    "ai_salary_max_value": null,
+    "ai_salary_unit_text": "YEAR",
+    "ai_benefits": null,
+    "ai_experience_level": "0-2",
+    "ai_work_arrangement": "On-site",
+    "ai_work_arrangement_office_days": null,
+    "ai_remote_location": null,
+    "ai_key_skills": [
+      "C++",
+      "Controls",
+      "Vehicle Dynamics",
+      "Git",
+      "Embedded Systems"
+    ],
+    "ai_hiring_manager_name": null,
+    "ai_hiring_manager_email_address": null,
+    "ai_employment_type": [
+      "INTERN"
+    ],
+    "ai_visa_sponsorship": false,
+    "ai_taxonomies_a": [
+      "Technology",
+      "Engineering"
+    ],
+    "description_html": "<div class=\"content-intro\"><p>Planet Express builds autonomous delivery vans.</p></div><p><span style=\"font-size: 12pt\">As a controls intern you&rsquo;ll tune the vehicle&nbsp;controller in simulation and on the test track.</span></p>\n<ul>\n<li>Model vehicle dynamics</li>\n<li>Ship C++ changes behind review</li>\n</ul>",
+    "classification_isco": {
+      "id": "2149",
+      "name": "Engineering professionals not elsewhere classified"
+    }
+  },
+  {
+    "id": 9100000104,
+    "date_posted": "2026-10-13T00:53:25",
+    "date_created": "2026-10-13T01:16:35.65308",
+    "title": "Software Engineer, AI-Assisted Development | Contract | Remote, MX",
+    "organization": "Prestige Worldwide",
+    "organization_url": null,
+    "date_valid_through": null,
+    "locations": [
+      {
+        "@type": "Place",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "MX",
+          "addressLocality": ""
+        }
+      }
+    ],
+    "locations_alt": null,
+    "location_type": null,
+    "location_requirements": null,
+    "salary": null,
+    "employment_type": null,
+    "url": "https://job-boards.greenhouse.io/prestigeworldwide/jobs/4000000104",
+    "source_type": "ats",
+    "source": "greenhouse",
+    "source_domain": "job-boards.greenhouse.io",
+    "source_slug": "prestigeworldwide",
+    "organization_logo": null,
+    "cities_derived": null,
+    "regions_derived": null,
+    "countries_derived": [
+      "Mexico"
+    ],
+    "locations_derived": [
+      "Mexico"
+    ],
+    "timezones_derived": [
+      "America/Mexico_City"
+    ],
+    "lats_derived": null,
+    "lngs_derived": null,
+    "domain_derived": "prestige.example",
+    "ai_salary_currency": null,
+    "ai_salary_value": null,
+    "ai_salary_min_value": null,
+    "ai_salary_max_value": null,
+    "ai_salary_unit_text": null,
+    "ai_benefits": null,
+    "ai_experience_level": "2-5",
+    "ai_work_arrangement": "Remote Solely",
+    "ai_work_arrangement_office_days": null,
+    "ai_remote_location": [
+      "Mexico"
+    ],
+    "ai_key_skills": [
+      "Python",
+      "TypeScript",
+      "Node.js",
+      "REST APIs",
+      "SQL"
+    ],
+    "ai_hiring_manager_name": null,
+    "ai_hiring_manager_email_address": null,
+    "ai_employment_type": [
+      "CONTRACTOR"
+    ],
+    "ai_visa_sponsorship": false,
+    "ai_taxonomies_a": [
+      "Technology",
+      "Software"
+    ],
+    "description_html": "<p>Prestige Worldwide is hiring contract engineers who write specs first &amp; let coding agents draft the code.</p>\n<ul>\n<li>Write clear specs&nbsp;and review generated code</li>\n<li>Build services in Node.js or Python</li>\n</ul>",
+    "classification_isco": {
+      "id": "2512",
+      "name": "Software developers"
+    }
+  },
+  {
+    "id": 9100000105,
+    "date_posted": "2026-10-13T00:15:19",
+    "date_created": "2026-10-13T01:23:40.408949",
+    "title": "Commercial Operations Contract Lead",
+    "organization": "Sterling Cooper",
+    "organization_url": null,
+    "date_valid_through": null,
+    "locations": null,
+    "locations_alt": null,
+    "location_type": null,
+    "location_requirements": null,
+    "salary": null,
+    "employment_type": null,
+    "url": "https://job-boards.greenhouse.io/sterlingcooper/jobs/4000000105",
+    "source_type": "ats",
+    "source": "greenhouse",
+    "source_domain": "job-boards.greenhouse.io",
+    "source_slug": "sterlingcooper",
+    "organization_logo": null,
+    "cities_derived": null,
+    "regions_derived": null,
+    "countries_derived": null,
+    "locations_derived": null,
+    "timezones_derived": null,
+    "lats_derived": null,
+    "lngs_derived": null,
+    "domain_derived": "sterlingcooper.example",
+    "ai_salary_currency": null,
+    "ai_salary_value": null,
+    "ai_salary_min_value": null,
+    "ai_salary_max_value": null,
+    "ai_salary_unit_text": null,
+    "ai_benefits": null,
+    "ai_experience_level": "10+",
+    "ai_work_arrangement": "Remote Solely",
+    "ai_work_arrangement_office_days": null,
+    "ai_remote_location": null,
+    "ai_key_skills": [
+      "Contract Negotiation",
+      "Deal Desk",
+      "Procurement",
+      "Stakeholder Management"
+    ],
+    "ai_hiring_manager_name": null,
+    "ai_hiring_manager_email_address": null,
+    "ai_employment_type": [
+      "FULL_TIME"
+    ],
+    "ai_visa_sponsorship": false,
+    "ai_taxonomies_a": [
+      "Legal",
+      "Sales"
+    ],
+    "description_html": "<p><strong>About the role</strong></p>\n<p>Run the contract desk for sales &amp; procurement.</p>\n<ul>\n<li>Draft and negotiate customer contracts</li>\n<li>10+ years in commercial contracts</li>\n</ul>",
+    "classification_isco": {
+      "id": "2611",
+      "name": "Lawyers"
+    }
+  },
+  {
+    "id": 9100000106,
+    "date_posted": "2026-10-13T00:00:00",
+    "date_created": "2026-10-13T01:58:35.493076",
+    "title": "Centre Manager, Accessibility Research Centre",
+    "organization": "Cogswell Cogs",
+    "organization_url": null,
+    "date_valid_through": null,
+    "locations": [
+      {
+        "@type": "Place",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "Australia",
+          "addressLocality": "Camperdown Building (L03C)"
+        }
+      }
+    ],
+    "locations_alt": null,
+    "location_type": null,
+    "location_requirements": null,
+    "salary": null,
+    "employment_type": null,
+    "url": "https://cogswell.wd105.myworkdayjobs.com/Cogswell_External/job/Camperdown/Centre-Manager-Accessibility-Research-Centre_0100006",
+    "source_type": "ats",
+    "source": "workday",
+    "source_domain": "cogswell.wd105.myworkdayjobs.com",
+    "source_slug": null,
+    "organization_logo": null,
+    "cities_derived": [
+      "Camperdown",
+      "City of Greater Geelong"
+    ],
+    "regions_derived": [
+      "Victoria"
+    ],
+    "countries_derived": [
+      "Australia"
+    ],
+    "locations_derived": [
+      "Camperdown, Victoria, Australia",
+      "City of Greater Geelong, Victoria, Australia"
+    ],
+    "timezones_derived": [
+      "Australia/Melbourne"
+    ],
+    "lats_derived": [
+      -38.23,
+      -38.15
+    ],
+    "lngs_derived": [
+      143.15,
+      144.36
+    ],
+    "domain_derived": "cogswell.example",
+    "ai_salary_currency": "AUD",
+    "ai_salary_value": null,
+    "ai_salary_min_value": 131108,
+    "ai_salary_max_value": 147858,
+    "ai_salary_unit_text": "YEAR",
+    "ai_benefits": [
+      "Superannuation"
+    ],
+    "ai_experience_level": "5-10",
+    "ai_work_arrangement": "On-site",
+    "ai_work_arrangement_office_days": null,
+    "ai_remote_location": null,
+    "ai_key_skills": [
+      "Operational Leadership",
+      "Research Management",
+      "Budgeting",
+      "Stakeholder Management"
+    ],
+    "ai_hiring_manager_name": null,
+    "ai_hiring_manager_email_address": null,
+    "ai_employment_type": [
+      "FULL_TIME"
+    ],
+    "ai_visa_sponsorship": false,
+    "ai_taxonomies_a": [
+      "Education",
+      "Management"
+    ],
+    "description_html": "<ul><li><span style=\"color:#000000\"><b>Full-time continuing role at the Camperdown site</b></span></li><li><span style=\"color:#000000\"><b>Base Salary $131,108 - $147,858 &#43; 17% superannuation</b></span></li></ul><p><b> </b></p><p><b>About the opportunity</b></p><p><b> </b></p><p><span style=\"color:#000000\">The centre&#39;s manager runs its operations, budget &amp; reporting.</span></p><p>Questions? Write to <a href=\"mailto:jane.doe&#64;example.com\">jane.doe&#64;example.com</a>.<br>Apply via the portal by Friday.</p>",
+    "classification_isco": {
+      "id": "1213",
+      "name": "Policy and planning managers"
+    }
+  }
+]

@@ -1,8 +1,9 @@
-//! Recorded responses, so parsers are tested offline on what the sites really sent.
+//! Recorded responses, so parsers are tested offline on the shape each site sends.
 //!
 //! A case directory (`fixtures/ingest/<case>/`) holds `request.json` (the input, the URL requested and the
 //! response's status and headers) and the body as `body.json` or `body.html`. A read makes one request, so a case
-//! holds one.
+//! holds one. The committed cases are synthetic: a real recording keeps the site's markup and fields, and its content
+//! (companies, postings, people, keys) is replaced with invented text before it goes into the repo.
 
 use std::fs;
 use std::path::{Path, PathBuf};
