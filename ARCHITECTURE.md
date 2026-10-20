@@ -718,6 +718,7 @@ gliide/
     ez-cli/                  `ez render | score | tailor | import | eval` for development and evals
   app/
     src-tauri/               Tauri commands over the crates (dto.rs → TypeScript bindings via ts-rs)
+    scripts/                 release-macos.sh: Developer ID signing, notarization, Gatekeeper checks
     src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen)
   templates/                 *.typ + manifests (classic-serif, cover-letter); fonts/
   design/                    DESIGN.md, tokens.css, lint.mjs, UI fonts

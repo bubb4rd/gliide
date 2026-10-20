@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release:mac": "sh scripts/release-macos.sh"
   },
   "dependencies": {
     "@lucide/svelte": "^1.55.0",

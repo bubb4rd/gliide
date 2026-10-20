@@ -15,7 +15,9 @@ Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 The app (macOS): `cd app && pnpm install && pnpm tauri dev` (needs `cargo install tauri-cli --version "^2"` or the
 pnpm `tauri` script, and Claude Code signed in). Its data lives in `~/Library/Application Support/dev.bubb4rd.gliide/`;
 exports and `applications.csv` go to `~/Documents/Resumes` (Settings → Export folder). Release build:
-`pnpm tauri build`. After changing `app/src-tauri/src/dto.rs`, `cargo test -p gliide` regenerates the TypeScript
+`pnpm tauri build` (unsigned); signed and notarized for sharing: `pnpm release:mac` from `app/` (needs a Developer ID
+Application certificate in the keychain and an App Store Connect API key; see `app/scripts/release-macos.sh`). After
+changing `app/src-tauri/src/dto.rs`, `cargo test -p gliide` regenerates the TypeScript
 bindings in `app/src/lib/api/bindings/`. App icon: `pnpm tauri icon src-tauri/app-icon.png` from `app/` (the logo on
 macOS's 1024 grid: an 824 rounded square with a soft shadow); `src-tauri/icon-art.png` is the full-bleed art, for
 iOS's own mask later.
