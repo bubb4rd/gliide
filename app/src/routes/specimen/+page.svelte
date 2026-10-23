@@ -42,6 +42,7 @@
     dayKey,
     Desk,
     Empty,
+    FileDrop,
     GroupHead,
     Heatmap,
     Icon,
@@ -77,6 +78,7 @@
     type TableSort,
   } from "$lib/ui";
   import { SEARCH_SOURCES_NOTE, searchSources } from "$lib/feed";
+  import { RESUME_FORMATS } from "$lib/import";
   import { FITS, LOGO, MCLEAN, OVER, PLANO, RIVERWOODS, WIDE_LOGO } from "./sample";
 
   // ── Company photo: the job header's mark opens the panel; Paste sets the square logo, Choose file the wide one ──
@@ -101,11 +103,11 @@
   let backdropScrolled = $state(false);
 
   // ── Setup steps: the bar in every state, and a sample that turns as the setup's steps do ──
-  const SETUP = ["Welcome", "Appearance", "Claude Code", "Experience", "Feed", "Ready"];
+  const SETUP = ["Welcome", "Experience", "What it says", "Agents", "Appearance", "Ready"];
   const TURNS = [
-    { title: "Your resume, fitted to every job", body: "The first step enters from the right, its parts 100ms apart." },
-    { title: "Choose how it looks", body: "Next: this one leaves to the left and the new one comes in from the right." },
-    { title: "Connect Claude Code", body: "Back: the reverse, and the bar’s fill sweeps back out." },
+    { title: "Your experience, fitted to every job", body: "The first step enters from the right, its parts 100ms apart." },
+    { title: "Bring in your resume", body: "Next: this one leaves to the left and the new one comes in from the right." },
+    { title: "What your resume says", body: "Back: the reverse, and the bar’s fill sweeps back out." },
     { title: "You’re set", body: "Reduced motion: the steps only fade, the fill only fades." },
   ];
   let turnAt = $state(0);
@@ -1153,7 +1155,7 @@
             <CompanyMark>Northwind Traders, a company name long enough that it truncates in a narrow cell</CompanyMark>
             <CompanyMark src={LOGO}>Northwind Traders, with its logo</CompanyMark>
             <p class="meta">Blank until you set a logo. A logo shows as the company publishes it: scaled to fit, rounded like the tile, never recolored.</p>
-            <p class="label">Agents (the setup's Claude Code step) · Claude · off: Codex, Gemini, not supported yet</p>
+            <p class="label">Agents (the setup's Agents step) · Claude · off: Codex, Gemini, not supported yet</p>
             <div class="row">
               <CompanyMark size={28} src="/agents/claude.png" />
               <CompanyMark size={28} src="/agents/openai.png" off />
@@ -1221,6 +1223,21 @@
               <div class="drop-panel"><LogoDrop busy onpaste={() => {}} onchoose={() => {}} onremove={() => {}} /></div>
               <div class="drop-panel"><LogoDrop set onpaste={() => {}} onchoose={() => {}} onremove={() => {}} /></div>
             </div>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">File drop (md, the setup's Experience step) · ready · files over it · taking the file</p>
+            <FileDrop icon={FileUp} text="Drop your resume here" hint={`${RESUME_FORMATS}. You check every line before it’s added.`}>
+              <Button variant="primary" kbd="I">Choose a file…</Button>
+            </FileDrop>
+            <FileDrop icon={FileUp} text="Drop to import it" hint={`${RESUME_FORMATS}. You check every line before it’s added.`} over>
+              <Button variant="primary" kbd="I">Choose a file…</Button>
+            </FileDrop>
+            <FileDrop icon={FileUp} text="Reading your resume…" hint={RESUME_FORMATS} busy>
+              <Button variant="primary" kbd="I" disabled>Choose a file…</Button>
+            </FileDrop>
+            <p class="meta">sm is the well inside Logo drop. A file dropped anywhere else on the window does nothing.</p>
           </div>
         </Card>
         <Card pad>
@@ -1389,9 +1406,9 @@
     <section class="section">
       <h2 class="title">Steps</h2>
       <p class="meta lede">
-        The first-run setup’s progress: a bar per step over its name, done and current in accent. The fill sweeps in
-        from the leading edge as you go on and back out as you go back. Done steps are buttons back to themselves; under
-        480px the names give way to one caption.
+        The first-run setup’s progress: a bar per step, done and current in accent, no names on screen (each is its
+        tooltip and what assistive tech reads). The fill sweeps in from the leading edge as you go on and back out as you
+        go back. Done steps are buttons back to themselves.
       </p>
       <div class="grid">
         <Card pad>
@@ -1402,16 +1419,7 @@
             <Steps steps={SETUP} current={5} label="Setup, the last step" onselect={() => {}} />
             <Steps steps={SETUP} current={6} label="Setup, all done" />
             <Steps steps={SETUP} current={3} label="Setup without a way back" />
-          </div>
-        </Card>
-        <Card pad>
-          <div class="tile">
-            <p class="label">Under 480px · first · a middle one · all done</p>
-            <div class="narrow">
-              <Steps steps={SETUP} current={0} label="Narrow setup, first step" onselect={() => {}} />
-              <Steps steps={SETUP} current={3} label="Narrow setup, a middle step" onselect={() => {}} />
-              <Steps steps={SETUP} current={6} label="Narrow setup, all done" />
-            </div>
+            <p class="meta">Hover a step for its name; a done one lightens on hover.</p>
           </div>
         </Card>
       </div>

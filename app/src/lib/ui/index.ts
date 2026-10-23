@@ -13,6 +13,7 @@ export { default as CompanyMark } from "./CompanyMark.svelte";
 export { default as Desk } from "./Desk.svelte";
 export { default as Empty } from "./Empty.svelte";
 export { default as GroupHead } from "./GroupHead.svelte";
+export { default as FileDrop } from "./FileDrop.svelte";
 export { default as Heatmap, dayKey } from "./Heatmap.svelte";
 export { default as Icon } from "./Icon.svelte";
 export { default as Input } from "./Input.svelte";

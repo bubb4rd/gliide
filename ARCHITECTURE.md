@@ -149,7 +149,11 @@ trait Llm {
 
 Settings shows each found agent, whether it's signed in (ACP auth methods; `claude` exit status), and its models.
 Setup links install a missing agent; the app never bundles one. A new install's first-run setup (`/welcome`) checks
-the agent too and links to its install guide; whether that setup is done is the `onboarded` setting.
+the agent too and links to its install guide; whether that setup is done is the `onboarded` setting. The setup puts
+you before your tools: the resume is imported before the Agents step, so when the agent is known not to be ready the
+Experience step says so and links ahead to it (import runs the model). Its What it says step writes the feed's
+settings as Settings → Feed does: a filter you never touch stays Auto (`None`, following the bank); the first change
+makes it yours, starting from what Auto had.
 
 ## 2. Data model: an experience bank and masters
 

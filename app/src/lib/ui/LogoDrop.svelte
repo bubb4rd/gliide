@@ -8,7 +8,7 @@
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import ImageUp from "@lucide/svelte/icons/image-up";
   import Button from "./Button.svelte";
-  import Icon from "./Icon.svelte";
+  import FileDrop from "./FileDrop.svelte";
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     over?: boolean;
@@ -25,10 +25,13 @@
 
 <div class={["drop", className]} {...rest}>
   <p class="label">Company photo</p>
-  <div class={["well", over && "well--over"]}>
-    <Icon icon={ImageUp} />
-    <p>{busy ? "Setting the photo…" : over ? "Drop to set the photo" : "Drop an image here"}</p>
-  </div>
+  <FileDrop
+    size="sm"
+    icon={ImageUp}
+    {over}
+    {busy}
+    text={busy ? "Setting the photo…" : over ? "Drop to set the photo" : "Drop an image here"}
+  />
   <div class="actions">
     <Button size="sm" icon={ClipboardPaste} kbd="⌘V" disabled={busy} onclick={onpaste}>Paste</Button>
     <Button size="sm" disabled={busy} onclick={onchoose}>Choose file…</Button>
@@ -46,36 +49,6 @@
   .label {
     margin: 0;
     padding: var(--space-1) var(--space-1) 0;
-  }
-  /* Concentric with the popover: 4 + 8 of padding = 12. */
-  .well {
-    display: grid;
-    justify-items: center;
-    align-content: center;
-    gap: var(--space-1);
-    height: 96px;
-    border: 1px dashed var(--input-border);
-    border-radius: var(--radius-xs);
-    color: var(--ink-3);
-    background: var(--sunken);
-    transition-property: background-color;
-    transition-duration: var(--dur-instant);
-    transition-timing-function: var(--ease-out);
-  }
-  .well p {
-    margin: 0;
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--ink-2);
-  }
-  .well--over {
-    border-style: solid;
-    border-color: var(--accent);
-    color: var(--accent-text);
-    background: var(--accent-soft);
-  }
-  .well--over p {
-    color: var(--accent-text);
   }
   .actions {
     display: flex;

@@ -1,10 +1,12 @@
 <!--
-  Steps: where a sequence is (the first-run setup). A 4px bar per step over its name; the steps done and the current
-  one filled in accent, which sweeps in from the leading edge as you move on (and back out as you go back). Done steps
-  are buttons back to themselves when `onselect` is given. Under 480px (where six names would truncate) they give way
-  to one caption, "Step 2 of 6 · Appearance".
+  Steps: where a sequence is (the first-run setup). A 4px bar per step, no names on screen: the steps done and the
+  current one filled in accent, which sweeps in from the leading edge as you move on (and back out as you go back).
+  Each step's name is its tooltip and what assistive tech reads. Done steps are buttons back to themselves when
+  `onselect` is given.
 -->
 <script lang="ts">
+  import { tip } from "./tip.svelte";
+
   interface Props {
     /** Each step's name, in order. */
     steps: string[];
@@ -17,38 +19,28 @@
   }
 
   let { steps, current, label, onselect }: Props = $props();
-
-  const at = $derived(Math.min(current, steps.length - 1));
 </script>
 
-<div class="steps">
-  <ol class="list" aria-label={label} style:--count={steps.length}>
-    {#each steps as step, i (i)}
-      {@const state = i < current ? "done" : i === current ? "current" : "next"}
-      <li class={["step", `step--${state}`]} aria-current={state === "current" ? "step" : undefined}>
-        {#if onselect && state === "done"}
-          <button type="button" class="cell" onclick={() => onselect(i)}>
-            <span class="bar" aria-hidden="true"></span>
-            <span class="name">{step}<span class="visually-hidden">, done</span></span>
-          </button>
-        {:else}
-          <span class="cell">
-            <span class="bar" aria-hidden="true"></span>
-            <span class="name">{step}{#if state === "done"}<span class="visually-hidden">, done</span>{/if}</span>
-          </span>
-        {/if}
-      </li>
-    {/each}
-  </ol>
-  <p class="caption meta num" aria-hidden="true">
-    {#if current >= steps.length}All {steps.length} done{:else}Step {at + 1} of {steps.length} · {steps[at]}{/if}
-  </p>
-</div>
+<ol class="list" aria-label={label} style:--count={steps.length}>
+  {#each steps as step, i (i)}
+    {@const state = i < current ? "done" : i === current ? "current" : "next"}
+    <li class={["step", `step--${state}`]} aria-current={state === "current" ? "step" : undefined}>
+      {#if onselect && state === "done"}
+        <button type="button" class="cell" {@attach tip(step)} onclick={() => onselect(i)}>
+          <span class="bar" aria-hidden="true"></span>
+          <span class="visually-hidden">{step}, done</span>
+        </button>
+      {:else}
+        <span class="cell" {@attach tip(step)}>
+          <span class="bar" aria-hidden="true"></span>
+          <span class="visually-hidden">{step}{#if state === "done"}, done{/if}</span>
+        </span>
+      {/if}
+    </li>
+  {/each}
+</ol>
 
 <style>
-  .steps {
-    container-type: inline-size;
-  }
   .list {
     display: grid;
     grid-template-columns: repeat(var(--count), minmax(0, 1fr));
@@ -60,26 +52,23 @@
   .step {
     min-width: 0;
   }
+  /* The 4px bar in a 20px cell, so it's a target worth aiming at. */
   .cell {
     display: grid;
-    gap: var(--space-2);
     width: 100%;
-    padding: 0;
+    padding: var(--space-2) 0;
     border: 0;
     border-radius: var(--radius-xs);
     font: inherit;
-    text-align: start;
-    color: var(--ink-3);
     background: none;
     cursor: default;
-    transition: color var(--dur-instant) var(--ease-out);
   }
   .bar {
     position: relative;
     height: 4px;
-    overflow: hidden;
     border-radius: var(--radius-full);
     background: var(--line-strong);
+    overflow: hidden;
   }
   /* Reduced motion: the fill fades in place. */
   .bar::after {
@@ -107,43 +96,10 @@
       scale: 1 1;
     }
   }
-  .name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-  }
-  .step--done .cell {
-    color: var(--ink-2);
-  }
-  .step--current .cell {
-    color: var(--ink);
-    font-weight: var(--weight-medium);
-  }
-  .caption {
-    display: none;
-    margin: var(--space-2) 0 0;
-  }
-  @container (width < 480px) {
-    .name {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-    }
-    .cell {
-      gap: 0;
-      padding-block: var(--space-1);
-    }
-    .caption {
-      display: block;
-    }
-  }
+  /* A done step you can go back to: its fill eases toward the track on hover. */
   @media (hover: hover) {
-    button.cell:hover {
-      color: var(--ink);
+    button.cell:hover .bar::after {
+      opacity: 0.72;
     }
   }
 </style>
