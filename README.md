@@ -32,18 +32,34 @@ launches it for every model call and never asks for or stores an API key. First-
 
 ## Build and run
 
-The app (macOS): `cd app && pnpm install && pnpm tauri dev` (needs `cargo install tauri-cli --version "^2"` or the
-pnpm `tauri` script, and Claude Code signed in). Its data lives in `~/Library/Application Support/dev.bubb4rd.gliide/`;
-exports and `applications.csv` go to `~/Documents/Resumes` (Settings → Export folder). Release build:
-`pnpm tauri build` (unsigned); signed and notarized for sharing: `pnpm release:mac` from `app/` (needs a Developer ID
-Application certificate in the keychain and an App Store Connect API key; see `app/scripts/release-macos.sh`). After
-changing `app/src-tauri/src/dto.rs`, `cargo test -p gliide` regenerates the TypeScript
-bindings in `app/src/lib/api/bindings/`. App icon: `pnpm tauri icon src-tauri/app-icon.png` from `app/` (the logo on
-macOS's 1024 grid: an 824 rounded square with a soft shadow); `src-tauri/icon-art.png` is the full-bleed art, for
-iOS's own mask later.
+```sh
+cd app
+pnpm install
+pnpm tauri dev
+```
 
-Design specimen: **Specimen** in the app's sidebar (dev builds; the `/specimen` route).
-Design lint: `node design/lint.mjs`. Tests: `cargo test --workspace` and `pnpm check` in `app/`.
+`pnpm tauri dev` uses the `tauri` script in `app/package.json` (or install the CLI with
+`cargo install tauri-cli --version "^2"`). App data lives in `~/Library/Application Support/dev.bubb4rd.gliide/`;
+exports and `applications.csv` go to `~/Documents/Resumes` (Settings → Export folder).
+
+A local release build: `pnpm tauri build` from `app/`. It's unsigned, which is fine on the machine that built it;
+macOS warns on other Macs.
+
+### Development
+
+- Tests: `cargo test --workspace`, and `pnpm check` in `app/`.
+- Design lint: `node design/lint.mjs`. Specimen: **Specimen** in the sidebar of a dev build (`/specimen`).
+- After changing `app/src-tauri/src/dto.rs`, `cargo test -p gliide` regenerates the TypeScript bindings in
+  `app/src/lib/api/bindings/`.
+
+### Releasing (maintainers)
+
+Official releases are signed with a Developer ID and notarized: `pnpm release:mac` from `app/`. It needs a
+Developer ID Application certificate and an App Store Connect API key; `app/scripts/release-macos.sh` lists what
+it reads. Contributors never need this. App icon: `pnpm tauri icon src-tauri/app-icon.png` (`icon-art.png` is the
+full-bleed art, kept for iOS).
+
+### Command line
 
 Core and rendering (`cargo run -p ez-cli --bin ez -- …`; outputs belong under the gitignored `local/`):
 
