@@ -4,6 +4,8 @@ From a job posting to a tailored, one-page resume: score the fit against one of 
 edits (rewrites, skills, entries from your experience bank) with a click each, and export a PDF in your design.
 macOS first; Windows and iOS from the same Rust core.
 
+![gliide's first-run setup: score with code, nothing invented, your resume stays yours](.github/assets/welcome.png)
+
 Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 
 | Document | What it covers |
@@ -12,7 +14,15 @@ Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 | [`design/DESIGN.md`](design/DESIGN.md) | The "Paper & Ink" design system: tokens, components, motion, screen recipes |
 | [`AGENTS.md`](AGENTS.md) | Rules for coding agents working in this repo |
 
-## Prerequisites
+## Install
+
+Download `gliide_<version>_aarch64.dmg` from the [latest release](https://github.com/bubb4rd/gliide/releases/latest),
+open it and drag gliide to Applications. The app is signed with a Developer ID and notarized by Apple, so it opens
+without a Gatekeeper warning. It runs on macOS on Apple Silicon and needs
+[Claude Code](https://code.claude.com) (`claude`) installed and signed in with your own Claude subscription: gliide
+launches it for every model call and never asks for or stores an API key. First-run setup checks for it.
+
+## Build prerequisites
 
 - macOS on Apple Silicon (the tested platform; no other platform is built yet).
 - Rust stable, 1.85 or newer (the workspace uses edition 2024), via [rustup](https://rustup.rs).
