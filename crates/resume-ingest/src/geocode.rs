@@ -192,15 +192,33 @@ fn is_country(s: &str) -> bool {
     COUNTRIES.iter().any(|c| c.eq_ignore_ascii_case(s))
 }
 
-/// Names no place: remote, anywhere, a country, a bare state code. A state's name is left to Nominatim (which finds
-/// it too broad to map): `New York` and `Washington` are cities too.
+/// Names no place: remote, anywhere, a country, a bare state code, a count of more. A state's name is left to
+/// Nominatim (which finds it too broad to map): `New York` and `Washington` are cities too.
 fn is_nowhere(s: &str) -> bool {
     let lower = s.to_lowercase();
     NOWHERE.contains(&lower.as_str())
         || WORKPLACE.contains(&lower.as_str())
         || is_country(s)
         || is_state_code(s)
+        || is_more(&lower)
         || VAGUE.iter().any(|v| lower.contains(v))
+}
+
+/// A list's tail that counts the places it leaves out instead of naming them: `+4 more`, `and 3 more`, `2 other
+/// locations`. Looked up, Nominatim finds something called "4".
+fn is_more(lower: &str) -> bool {
+    let mut words = lower.split_whitespace().skip_while(|w| *w == "and");
+    let count = words.next().unwrap_or_default().trim_start_matches('+');
+    let mut rest = words.peekable();
+    !count.is_empty()
+        && count.chars().all(|c| c.is_ascii_digit())
+        && rest.peek().is_some()
+        && rest.all(|w| {
+            matches!(
+                w,
+                "more" | "other" | "others" | "location" | "locations" | "place" | "places" | "site" | "sites"
+            )
+        })
 }
 
 /// The geocoding queries a job's location names, in order, at most four: `Hybrid - Plano, TX` → `Plano, TX`;
@@ -271,7 +289,10 @@ fn query(segment: &str) -> Option<String> {
     let mut parts: Vec<&str> = s.split(',').map(str::trim).collect();
     while parts.len() > 1
         && parts.last().is_some_and(|p| {
-            p.is_empty() || is_country(p) || WORKPLACE.contains(&p.to_lowercase().as_str())
+            p.is_empty()
+                || is_country(p)
+                || is_more(&p.to_lowercase())
+                || WORKPLACE.contains(&p.to_lowercase().as_str())
         })
     {
         parts.pop();
@@ -579,6 +600,13 @@ mod tests {
                 "Austin, TX; austin,  tx; Boston, MA; Denver, CO; Miami, FL",
                 &["Austin, TX", "Boston, MA", "Denver, CO", "Miami, FL"],
             ),
+            (
+                "Austin, TX; Charlotte, NC; Hartford, CT; +4 more",
+                &["Austin, TX", "Charlotte, NC", "Hartford, CT"],
+            ),
+            ("Seattle, WA, +2 more", &["Seattle, WA"]),
+            ("Denver, CO; and 3 other locations", &["Denver, CO"]),
+            ("+4 more", &[]),
         ];
         for (location, want) in cases {
             assert_eq!(queries(location), *want, "{location:?}");
