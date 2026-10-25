@@ -1,6 +1,7 @@
 <!--
   The job's place on a map, as a maps search shows a town: a pin on it in accent with its name beside it, its boundary
-  dashed, the towns and roads around it, framed to fit, and a label on top (a pin, then the place and its region).
+  dashed, the towns and roads around it, framed to fit, and a label on top (a pin, filled in accent as the map's, then
+  the place and its region).
   Edge to edge (it fills the top of the job's preview pane, over the desk; whatever holds it draws its edges). Static
   (no pan or zoom); with `onopen` the whole map is a button that opens it in Maps. Several places: all of them framed
   at first, the label saying "3 locations" or the place you're on, and a pager at the bottom (‹ All › … ‹ 2 / 3 ›)
@@ -366,9 +367,17 @@
     padding-inline: calc(var(--space-2) - 2px) var(--space-2);
     white-space: nowrap;
   }
+  /* Filled, as the map's own pin: accent, its eye in --on-accent. */
   .where :global(svg) {
     flex: none;
-    color: var(--accent-text);
+    color: var(--accent);
+  }
+  .where :global(svg path) {
+    fill: currentColor;
+  }
+  .where :global(svg circle) {
+    fill: var(--on-accent);
+    stroke: none;
   }
   .where-name,
   .where-region {
