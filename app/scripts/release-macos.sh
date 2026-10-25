@@ -63,9 +63,10 @@ unpacked=$(mktemp -d)
 trap 'rm -rf "$started" "$unpacked"' EXIT
 pnpm tauri build "$@"
 
-# Bundles land in the workspace's target/ (target/<triple>/release/… with --target).
+# Bundles land in the workspace's target/ (target/<triple>/release/… with --target). bundle_dmg.sh leaves its scratch
+# image (rw.<pid>.<name>.dmg) beside the app; it's no bundle.
 built=$(find ../target -path '*/release/bundle/*' \( -name '*.app' -o -name '*.dmg' -o -name '*.app.tar.gz' \) \
-	-newer "$started" -prune)
+	! -name 'rw.*.dmg' -newer "$started" -prune)
 [ -n "$built" ] || fail "no .app or .dmg built under ../target"
 bundle=$(printf '%s\n' "$built" | grep '\.app\.tar\.gz$' | head -n 1)
 [ -n "$bundle" ] || fail "no updater bundle (.app.tar.gz) built; is bundle.createUpdaterArtifacts on?"
