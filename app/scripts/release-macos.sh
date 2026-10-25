@@ -50,6 +50,7 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ]; then
 	stty echo
 	echo >&2
 fi
+export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 
 version=$(node -p "require('./src-tauri/tauri.conf.json').version")
 [ "$version" = "$(node -p "require('./package.json').version")" ] || fail "package.json's version isn't $version (tauri.conf.json's)"
