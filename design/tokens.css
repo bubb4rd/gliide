@@ -101,6 +101,10 @@
     0px 2px 6px -2px oklch(0 0 0 / 0.08),
     0px 24px 48px -16px oklch(0 0 0 / 0.16);
   --image-outline: oklch(0 0 0 / 0.1);
+  /* The working ring (WorkingRing): a model call writing a pane. Status, never depth. */
+  --ring-line: oklch(0.45 0.207 263.8 / 0.32);        /* the steady outline: --accent at 32% */
+  --ring-glow: inset 0 0 28px 0 oklch(0.45 0.207 263.8 / 0.05); /* the faint light inside the edge */
+  --ring-halo: 0.25;                                  /* opacity of the blurred band behind the bright one */
   --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
 
   /* ── Type ── */
@@ -160,6 +164,7 @@
   --dur-fast: 150ms;      /* press, exits, high-frequency state */
   --dur-base: 300ms;      /* entrances, icon cross-fades */
   --dur-loop: 1600ms;     /* one breath of the model-call status (Thinking) */
+  --dur-ring: 6400ms;     /* one lap of the working ring's band (4 × --dur-loop) */
   --stagger: 100ms;
   --ease-out: ease-out;
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
@@ -219,6 +224,9 @@
   --shadow-popover: 0 0 0 1px oklch(1 0 0 / 0.1), 0px 16px 32px -8px oklch(0 0 0 / 0.5);
   --shadow-page: 0 0 0 1px oklch(1 0 0 / 0.06), 0px 24px 48px -16px oklch(0 0 0 / 0.6);
   --image-outline: oklch(1 0 0 / 0.1);
+  --ring-line: oklch(0.68 0.15 263.8 / 0.38);
+  --ring-glow: inset 0 0 28px 0 oklch(0.68 0.15 263.8 / 0.08);
+  --ring-halo: 0.375;
 }
 
 /* The theme switch must not animate every color at once (better-ui). */

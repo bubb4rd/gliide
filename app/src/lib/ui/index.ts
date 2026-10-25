@@ -41,6 +41,7 @@ export { default as Toaster } from "./Toaster.svelte";
 export { default as Toolbar } from "./Toolbar.svelte";
 export { default as Tooltip } from "./Tooltip.svelte";
 export { default as Tooltips } from "./Tooltips.svelte";
+export { default as WorkingRing } from "./WorkingRing.svelte";
 export {
   tip,
   type TipContent,

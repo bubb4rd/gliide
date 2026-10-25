@@ -40,6 +40,7 @@
     Toolbar,
     tip,
     toast,
+    WorkingRing,
   } from "$lib/ui";
   import Chat from "./Chat.svelte";
   import SalaryEdit from "./SalaryEdit.svelte";
@@ -127,6 +128,20 @@
   const chatting = $derived(!onCover && review !== null && (s.phase === "ready" || s.phase === "suggesting"));
   const letter = $derived(s.cover && s.cover.review === review?.id ? s.cover : null);
   const letterFits = $derived(letter ? letter.pageCount <= 1 : true);
+  /**
+   * The first load: Extract, then Suggest, before there's a review (the moment between them included, Extract's step
+   * already in the trail). The column wears the ring, its stage centered, no placeholders.
+   */
+  const loading = $derived(
+    review === null &&
+      (s.phase === "opening" || s.phase === "suggesting") &&
+      (s.running !== null || s.steps.length > 0),
+  );
+  /** Between Extract and Suggest (Suggest not reported yet), the stage is Suggest's, from that moment. */
+  const loadStage = $derived(s.running?.stage ?? "suggesting");
+  const loadSince = $derived(s.running?.startedAt ?? performance.now());
+  /** A model call writing the column: the first load, or the whole cover letter (`Letter` centers its stage). */
+  const working = $derived(loading || (onCover && ready && s.drafting === "letter"));
   // The letter loads once per review, when its tab first shows.
   let letterFor: string | null = null;
   $effect(() => {
@@ -384,7 +399,10 @@
 </Toolbar>
 
 <div class={["split", shell.compact && "split--compact"]}>
-  <div class={["column", chatting && "column--chat"]} hidden={shell.compact && pane === "preview"}>
+  <div
+    class={["column", chatting && "column--chat", working && "column--working"]}
+    hidden={shell.compact && pane === "preview"}
+  >
     {#if shell.compact}
       <div class="tabs">
         <Segmented
@@ -457,7 +475,7 @@
         </div>
         {#if review?.headline}<p class="lede">{review.headline}</p>{/if}
       </div>
-    {:else if s.phase === "opening"}
+    {:else if s.phase === "opening" && !loading}
       <div class="job" aria-hidden="true">
         <span class="bone bone--meta"></span>
         <span class="bone bone--headline"></span>
@@ -483,8 +501,8 @@
       {/if}
     {/if}
 
-    <!-- The chat shows its own progress; this one is for the letter tab and the review's first load. -->
-    {#if s.running && !chatting && !s.instructing && s.drafting === null}
+    <!-- The chat shows its own progress, the first load and the letter centered; this one is for the rest. -->
+    {#if s.running && !loading && !chatting && !s.instructing && s.drafting === null}
       <div class="running">
         <Thinking
           steps={s.steps.map((step) => ({ label: DONE[step.stage], ms: step.ms }))}
@@ -553,7 +571,17 @@
           {/each}
         </div>
       {/if}
-      {#if s.phase !== "stopped"}
+      {#if loading}
+        <div class="center">
+          <Thinking
+            center
+            steps={s.steps.map((step) => ({ label: DONE[step.stage], ms: step.ms }))}
+            label={STAGES[loadStage]}
+            startedAt={loadSince}
+            oncancel={() => s.cancel()}
+          />
+        </div>
+      {:else if s.phase !== "stopped"}
         <div class="skeletons" aria-hidden="true">
           {#each [0, 1, 2, 3] as i (i)}
             <div class="skeleton">
@@ -566,6 +594,7 @@
       {/if}
     {/if}
   </div>
+  <div class="ring" hidden={shell.compact && pane === "preview"}><WorkingRing on={working} /></div>
 
   <div class="desk" hidden={shell.compact && pane === "changes"}>
     {#if shell.compact}
@@ -646,6 +675,26 @@
   }
   .column--chat > .tabs {
     padding: var(--space-3) var(--space-5) 0;
+  }
+  /* The working ring lies over the column's cell, still while the column scrolls under it. */
+  .column,
+  .ring {
+    grid-area: 1 / 1;
+  }
+  .ring {
+    position: relative;
+    pointer-events: none;
+  }
+  /* Written by a model call: the stage centered in the room the column has left. */
+  .column--working {
+    display: flex;
+    flex-direction: column;
+  }
+  .center {
+    flex: 1 0 auto;
+    display: grid;
+    place-items: center;
+    padding-block: var(--space-12);
   }
   .desk {
     display: grid;

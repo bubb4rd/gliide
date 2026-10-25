@@ -1,6 +1,6 @@
-// Motion for elements Svelte removes (toasts, the setup's steps). Durations and distances come from tokens.css;
-// movement and blur run only without the reduced-motion preference, which keeps the opacity fade (DESIGN.md Motion
-// budget).
+// Motion for elements Svelte removes (toasts, the setup's steps, the working ring). Durations and distances come from
+// tokens.css; movement and blur run only without the reduced-motion preference, which keeps the opacity fade
+// (DESIGN.md Motion budget).
 
 import type { TransitionConfig } from "svelte/transition";
 
@@ -27,4 +27,9 @@ export function exit(_node: Element, { side = 0 }: { side?: -1 | 0 | 1 } = {}): 
       return `opacity: ${t}; filter: blur(${u * blur}px); translate: ${move}`;
     },
   };
+}
+
+/** A status going away (the working ring): opacity only over `--dur-fast`, in every motion preference. */
+export function fadeOut(_node: Element): TransitionConfig {
+  return { duration: token("--dur-fast"), easing: easeOut, css: (t) => `opacity: ${t}` };
 }

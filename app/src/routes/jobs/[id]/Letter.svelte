@@ -132,17 +132,12 @@
   );
 </script>
 
-{#if writing && s.running}
-  <div class="running">
-    <Thinking
-      label="Writing the cover letter…"
-      startedAt={s.running.startedAt}
-      oncancel={() => s.cancel()}
-    />
+<!-- The whole letter being written: its stage centered in the ring (`Review`); the one before shows on the desk. -->
+{#if writing}
+  <div class="center">
+    <Thinking center label="Writing the cover letter…" startedAt={s.running?.startedAt} oncancel={() => s.cancel()} />
   </div>
-{/if}
-
-{#if !view}
+{:else if !view}
   <div class="rows" aria-hidden="true">
     {#each [0, 1, 2] as i (i)}
       <div class="skeleton">
@@ -153,20 +148,18 @@
     {/each}
   </div>
 {:else if !letter}
-  {#if !writing}
-    <Empty
-      title="No cover letter yet"
-      body="One page from this tailored resume, your toggles and edits included, and the posting. It claims nothing your resume doesn’t."
-    >
-      {#snippet action()}
-        <Button variant="primary" size="lg" icon={PenLine} kbd="W" onclick={() => s.writeCover()}
-          >Write cover letter</Button
-        >
-      {/snippet}
-    </Empty>
-  {/if}
+  <Empty
+    title="No cover letter yet"
+    body="One page from this tailored resume, your toggles and edits included, and the posting. It claims nothing your resume doesn’t."
+  >
+    {#snippet action()}
+      <Button variant="primary" size="lg" icon={PenLine} kbd="W" onclick={() => s.writeCover()}
+        >Write cover letter</Button
+      >
+    {/snippet}
+  </Empty>
 {:else}
-  <div class={["letter", writing && "letter--stale"]} inert={writing}>
+  <div class="letter">
     <div class="rows">
       <GroupHead
         label="Letter"
@@ -271,20 +264,15 @@
   .note > :global(.progress) {
     flex: 1;
   }
-  /* The progress stays in view while the letter under it scrolls. */
-  .running {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    margin: calc(var(--space-3) * -1) calc(var(--space-5) * -1);
-    padding: var(--space-3) var(--space-5);
-    background: var(--paper);
+  /* The stage centered in the room the column has left (the column is a flex column while it's written). */
+  .center {
+    flex: 1 0 auto;
+    display: grid;
+    place-items: center;
+    padding-block: var(--space-12);
   }
   .letter {
     display: contents;
-  }
-  .letter--stale > :global(:not(.keys-wrap)) {
-    opacity: 0.5;
   }
   .keys-wrap {
     position: sticky;

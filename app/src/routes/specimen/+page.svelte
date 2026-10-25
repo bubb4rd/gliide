@@ -74,6 +74,7 @@
     type TipContent,
     toast,
     exit,
+    WorkingRing,
     type TableColumn,
     type TableSort,
   } from "$lib/ui";
@@ -347,6 +348,9 @@
   let popoverOpen = $state(false);
   let popoverAnchor = $state<HTMLButtonElement>();
   let progressRun = $state(0);
+  // The working ring: on, then off once "finished"; the stage turns from Extract to Suggest.
+  let ringOn = $state(true);
+  let ringStage = $state(0);
 
   const statuses = [
     { value: "saved", label: "Saved" },
@@ -1138,6 +1142,40 @@
         </Card>
         <Card pad>
           <div class="tile">
+            <p class="label">
+              Working ring · a pane being written · centered Thinking · stage turning · finished (fades out) · reduced
+              motion: a still outline, breathing
+            </p>
+            <div class="working-pane">
+              {#if ringOn}
+                {#key progressRun}
+                  <Thinking
+                    center
+                    label={ringStage ? "Suggesting edits…" : "Reading the requirements…"}
+                    steps={ringStage ? [{ label: "Read the requirements", ms: 4200 }] : []}
+                    oncancel={() => (ringOn = false)}
+                  />
+                {/key}
+              {/if}
+              <WorkingRing on={ringOn} />
+            </div>
+            <div class="row">
+              <Button size="sm" disabled={!ringOn || ringStage === 1} onclick={() => (ringStage = 1)}>Next stage</Button>
+              <Button size="sm" disabled={!ringOn} onclick={() => (ringOn = false)}>Finish</Button>
+              <Button
+                size="sm"
+                icon={RotateCcw}
+                onclick={() => {
+                  ringStage = 0;
+                  ringOn = true;
+                  progressRun++;
+                }}>Restart</Button
+              >
+            </div>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
             <p class="label">Company mark · 16 sidebar · 20 beside a name · 28 two lines · 48 job header · with its name</p>
             <div class="row">
               <CompanyMark size={16} />
@@ -1857,6 +1895,15 @@
   .demo-body {
     margin: 0;
     padding: var(--space-2) var(--space-3);
+  }
+  .working-pane {
+    position: relative;
+    display: grid;
+    place-items: center;
+    height: 280px;
+    border-radius: var(--radius-md);
+    background: var(--paper);
+    overflow: hidden;
   }
   .part-progress {
     padding: 0 var(--space-3) var(--space-3);
