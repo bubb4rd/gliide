@@ -1,6 +1,6 @@
 [package]
 name = "gliide"
-version = "0.2.1"
+version = "0.2.2"
 description = "Tailor a one-page resume to a job posting, honestly"
 edition.workspace = true
 license.workspace = true
