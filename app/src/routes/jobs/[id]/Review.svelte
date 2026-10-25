@@ -629,12 +629,17 @@
     padding: var(--space-6) var(--space-5) 0;
     box-shadow: inset -1px 0 0 var(--line);
   }
-  /* The chat scrolls its own thread over the composer. */
+  /*
+   * The chat scrolls its own thread over the composer. Its hairline is a border, not the inset shadow: the strip and
+   * the composer are opaque and would paint over a shadow.
+   */
   .column--chat {
     display: flex;
     flex-direction: column;
     padding: 0;
     overflow: hidden;
+    border-inline-end: 1px solid var(--line);
+    box-shadow: none;
   }
   .column--chat > .tabs {
     padding: var(--space-3) var(--space-5) 0;
