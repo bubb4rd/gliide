@@ -855,10 +855,6 @@
           <Card pad as="section" id="about" tabindex={-1} aria-labelledby="about-title">
             <div class="card">
               <h2 class="name" id="about-title">About</h2>
-              <p class="lede">
-                gliide looks for a newer release on GitHub at launch and once a day; nothing about you is sent. Only a
-                release signed by the project installs.
-              </p>
               <dl class="fields">
                 <div class="field field--detail">
                   <dt class="num">gliide {update?.current ?? ""}</dt>
