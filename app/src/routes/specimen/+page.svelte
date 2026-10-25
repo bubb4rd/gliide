@@ -1534,13 +1534,16 @@
       <h2 class="title">Place map</h2>
       <p class="meta lede">
         Where the job is, as a maps search shows a town: the pin in accent with its name, the boundary dashed, the towns
-        and roads around it in graphite. Static; a click (or M on the job) opens it in Maps. Until the tiles arrive, and
-        when they can't, the name and region stand in.
+        and roads around it in graphite, the place and its region labeled on top. Static; a click (or M on the job)
+        opens it in Maps. Several places: framed together, the label counts them, and a pager at the foot steps the
+        camera to each and back to all (its count shows them all). Until the tiles arrive, and when they can't, the name
+        and region stand in.
       </p>
       <div class="grid cols-2">
         <div class="map-frame"><PlaceMap places={[PLANO]} onopen={() => {}} /></div>
         <div class="map-frame"><PlaceMap places={[MCLEAN]} /></div>
-        <div class="map-frame"><PlaceMap places={[RIVERWOODS, MCLEAN]} onopen={() => {}} /></div>
+        <div class="map-frame"><PlaceMap places={[RIVERWOODS, MCLEAN, PLANO]} onopen={() => {}} /></div>
+        <div class="map-frame"><PlaceMap places={[RIVERWOODS, MCLEAN, PLANO]} current={1} onopen={() => {}} /></div>
         <div class="map-frame"><PlaceMap places={[PLANO]} unavailable /></div>
       </div>
     </section>

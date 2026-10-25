@@ -228,9 +228,12 @@
   // ── Where it is: the map over the desk ──
   const where = $derived(head?.location ?? "");
   let places = $state<Place[]>([]);
+  /** The place the map is on (null: all of them). */
+  let mapAt = $state<number | null>(null);
   $effect(() => {
     const at = where;
     places = [];
+    mapAt = null;
     if (!at) return;
     let live = true;
     // Quiet when it fails (offline, Nominatim busy): the desk shows the page alone, as for a remote job.
@@ -241,9 +244,9 @@
       live = false;
     };
   });
-  /** Opens the first place in Maps (Apple Maps on the web where the Maps app isn't). */
+  /** Opens the place the map is on, else the first, in Maps (Apple Maps on the web where the Maps app isn't). */
   function openMap() {
-    const place = places[0];
+    const place = places[mapAt ?? 0] ?? places[0];
     if (!place) return false;
     const url = `https://maps.apple.com/?q=${encodeURIComponent(place.name)}&ll=${place.lat},${place.lon}`;
     openUrl(url).catch((e) => toast(appError(e).message, { tone: "danger" }));
@@ -605,7 +608,7 @@
 </div>
 
 {#snippet placeMap()}
-  <PlaceMap {places} onopen={openMap} />
+  <PlaceMap {places} bind:current={mapAt} onopen={openMap} />
 {/snippet}
 
 <style>
