@@ -76,7 +76,7 @@ Use the variable; never its value. Adding a token needs a row here and a reason.
 | `--ink-4` | Disabled and decorative only | Text that must be read |
 | `--line` / `--line-strong` | Hairline separators / dividers that must show | Depth |
 | `--input-border` | Form control edges (3:1 non-text) | Cards |
-| `--accent` / `--accent-text` / `--accent-soft` / `--on-accent` | Primary action, focus ring, selection, links, the verdict badge | Meaning "good" |
+| `--accent` / `--accent-text` / `--accent-soft` / `--on-accent` | Primary action, focus ring, selection, links, the verdict badge. Cobalt `#1344C5`, the app icon's tile (white on it 7.9:1; accent text ≥7.9:1 on every surface; dark lifts it to `oklch(0.68 0.15 263.8)`) | Meaning "good" |
 | `--gain` / `--gain-text` / `--gain-soft` | Score gain, points, skills you have, success | Buttons |
 | `--warn` / `--warn-soft` | A change left out by the fit check or validator; stretch verdict | Errors |
 | `--danger` / `--danger-soft` | Cut, remove, errors | Warnings |

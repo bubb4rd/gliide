@@ -43,7 +43,7 @@
   --sidebar: oklch(0.965 0.005 95 / 0.82); /* over native vibrancy; opaque fallback below */
   --hover: oklch(0.22 0.008 85 / 0.045);   /* row/button hover wash */
   --pressed: oklch(0.22 0.008 85 / 0.08);
-  --selected: oklch(0.5 0.19 262 / 0.08);
+  --selected: oklch(0.45 0.207 263.8 / 0.08);
   --page: oklch(1 0 0);                    /* the resume sheet: always white, in both themes */
   --page-ink: oklch(0.15 0 0);
   --page-mark: oklch(0.93 0.09 95);        /* inserted keywords on the sheet, both themes */
@@ -67,10 +67,10 @@
   --line-strong: oklch(0.22 0.008 85 / 0.16); /* input borders (3:1 non-text with --sunken) */
   --input-border: oklch(0.6 0.008 85);
 
-  /* ── One accent: cobalt ink ── */
-  --accent: oklch(0.5 0.19 262);           /* primary buttons, focus, selection */
-  --accent-text: oklch(0.48 0.19 262);     /* links and accent text */
-  --accent-soft: oklch(0.95 0.03 262);
+  /* ── One accent: cobalt ink (#1344C5, the app icon's tile) ── */
+  --accent: oklch(0.45 0.207 263.8);       /* primary buttons, focus, selection  white on it 7.9:1 */
+  --accent-text: oklch(0.43 0.207 263.8);  /* links and accent text  ≥7.9:1 on every surface */
+  --accent-soft: oklch(0.95 0.03 263.8);
   --on-accent: oklch(1 0 0);
 
   /* ── Meaning ── */
@@ -194,7 +194,7 @@
   --sidebar: oklch(0.18 0.003 85 / 0.82);
   --hover: oklch(1 0 0 / 0.05);
   --pressed: oklch(1 0 0 / 0.09);
-  --selected: oklch(0.68 0.15 262 / 0.14);
+  --selected: oklch(0.68 0.15 263.8 / 0.14);
   --ink: oklch(0.95 0.003 85);
   --ink-2: oklch(0.78 0.005 85);
   --ink-3: oklch(0.64 0.006 85);
@@ -202,9 +202,9 @@
   --line: oklch(1 0 0 / 0.07);
   --line-strong: oklch(1 0 0 / 0.14);
   --input-border: oklch(0.45 0.005 85);
-  --accent: oklch(0.68 0.15 262);
-  --accent-text: oklch(0.74 0.13 262);
-  --accent-soft: oklch(0.26 0.06 262);
+  --accent: oklch(0.68 0.15 263.8);
+  --accent-text: oklch(0.74 0.13 263.8);
+  --accent-soft: oklch(0.26 0.06 263.8);
   --on-accent: oklch(0.165 0.003 85);
   --gain: oklch(0.76 0.15 150);
   --gain-text: oklch(0.76 0.15 150);
