@@ -11,6 +11,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import Archive from "@lucide/svelte/icons/archive";
+  import CircleArrowDown from "@lucide/svelte/icons/circle-arrow-down";
   import FileText from "@lucide/svelte/icons/file-text";
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
@@ -89,6 +90,15 @@
     if (a.signedIn === null) return { tone: "neutral", sub: "Couldn't check sign-in" } as const;
     return { tone: "gain", sub: ["Signed in", a.plan].filter(Boolean).join(" · ") } as const;
   });
+
+  /** A newer release: the sidebar's foot says so, over the agent, until it's installed. */
+  const updateLine = $derived.by(() => {
+    const u = app.update;
+    if (!u?.available) return null;
+    if (u.state === "installing")
+      return `Downloading${u.progress === null ? "…" : ` ${Math.round(u.progress * 100)}%`}`;
+    return `gliide ${u.available}`;
+  });
 </script>
 
 <div class={["window", (shell.compact || bare || !ready) && "window--compact"]}>
@@ -153,6 +163,9 @@
           {#if dev}<NavItem href="/specimen" icon={Palette} current={within("/specimen")}>Specimen</NavItem>{/if}
           <NavItem href="/settings" icon={SlidersHorizontal} current={within("/settings")}>Settings</NavItem>
         </Nav>
+        {#if updateLine}
+          <NavItem href="/settings#about" icon={CircleArrowDown} sub={updateLine}>Update available</NavItem>
+        {/if}
         <NavItem href="/settings" sub={agentLine.sub} {@attach tip(app.agent?.problem)}>
           {#snippet lead()}<AgentMark src="/agents/claude.png" tone={agentLine.tone} />{/snippet}
           Claude Code

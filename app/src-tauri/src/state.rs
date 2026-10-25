@@ -382,6 +382,7 @@ fn default_settings() -> Settings {
         export_dir: home.join("Documents/Resumes").display().to_string(),
         claude_path: None,
         onboarded: false,
+        check_updates: true,
     }
 }
 

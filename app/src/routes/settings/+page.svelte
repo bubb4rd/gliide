@@ -139,6 +139,7 @@
       : []),
     { id: "export", label: "Export folder" },
     { id: "appearance", label: "Appearance" },
+    { id: "about", label: "About" },
   ]);
 
   $effect(() => {
@@ -401,6 +402,23 @@
       .filter(Boolean)
       .join(" · "),
   );
+
+  // ── About: this build and updates ──
+  const update = $derived(app.update);
+  const clock = new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  /** Where updates stand, in a sentence. */
+  const updateLine = $derived.by(() => {
+    if (!update) return "Not checked yet.";
+    if (update.state === "installing") {
+      const pct = update.progress === null ? "" : ` ${Math.round(update.progress * 100)}%`;
+      return `Downloading gliide ${update.available}…${pct}`;
+    }
+    if (update.state === "checking") return "Checking for updates…";
+    if (update.available) return `gliide ${update.available} is available.`;
+    const at = update.checkedAt ? new Date(update.checkedAt) : null;
+    if (!at || Number.isNaN(at.getTime())) return "Not checked yet.";
+    return update.error ? `Last checked ${clock.format(at)}.` : `Up to date · checked ${clock.format(at)}.`;
+  });
 </script>
 
 <Toolbar>
@@ -833,6 +851,52 @@
               </dl>
             </div>
           </Card>
+
+          <Card pad as="section" id="about" tabindex={-1} aria-labelledby="about-title">
+            <div class="card">
+              <h2 class="name" id="about-title">About</h2>
+              <p class="lede">
+                gliide looks for a newer release on GitHub at launch and once a day; nothing about you is sent. Only a
+                release signed by the project installs.
+              </p>
+              <dl class="fields">
+                <div class="field field--detail">
+                  <dt class="num">gliide {update?.current ?? ""}</dt>
+                  <dd>
+                    {#if update?.available}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={update.state !== "idle"}
+                        onclick={() => void app.installUpdate()}
+                      >
+                        {update.state === "installing" ? "Updating…" : "Restart to update"}
+                      </Button>
+                    {:else}
+                      <Button size="sm" disabled={!update || update.state !== "idle"} onclick={() => void app.checkUpdate()}>
+                        {update?.state === "checking" ? "Checking…" : "Check now"}
+                      </Button>
+                    {/if}
+                  </dd>
+                  <dd class="detail">
+                    <p class="hint num" aria-live="polite">{updateLine}</p>
+                    {#if update?.available && update.notes}<p class="notes">{update.notes}</p>{/if}
+                    {#if update?.error}<p class="problem">{update.error}</p>{/if}
+                  </dd>
+                </div>
+                <div class="field">
+                  <dt>Check for updates</dt>
+                  <dd class="toggle">
+                    <Checkbox
+                      checked={s.checkUpdates}
+                      label="Check for updates"
+                      onchange={(on) => save({ checkUpdates: on })}
+                    />
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </Card>
         </div>
       {/key}
     </div>
@@ -1178,5 +1242,14 @@
   /* A checkbox on the label's center line, not the dd's text baseline. */
   .toggle {
     display: flex;
+  }
+  /* A release's notes, as written, under where updates stand. */
+  .notes {
+    margin: var(--space-1-5) 0 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--ink-2);
+    white-space: pre-line;
+    text-wrap: pretty;
   }
 </style>

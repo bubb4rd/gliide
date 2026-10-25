@@ -1,23 +1,27 @@
 // What the shell and every screen share: jobs (the sidebar's counts and Recent), applications, company logos, the
-// library (bank and masters counts), settings, the agent's status, the models its aliases last ran and the model
-// calls running. Each refresh keeps the last good value when a command fails (lists start empty, the agent unknown),
-// so the window always draws; the failure goes to the console.
+// library (bank and masters counts), settings, the agent's status, the models its aliases last ran, the model calls
+// running and updates. Each refresh keeps the last good value when a command fails (lists start empty, the agent
+// unknown), so the window always draws; the failure goes to the console.
 
 import {
   agentStatus,
   appError,
   applications,
+  checkUpdate,
   deleteJob,
   getSettings,
+  installUpdate,
   jobs,
   library,
   logos,
   logoUrl,
   models as servedModels,
   onProgress,
+  onUpdate,
   running,
   setSettings,
   setStatus as saveStatus,
+  updateStatus,
   type AgentStatus,
   type AppStatus,
   type ApplicationRow,
@@ -26,6 +30,7 @@ import {
   type Library,
   type LogoRow,
   type Settings,
+  type UpdateStatus,
 } from "$lib/api";
 import { modelName } from "$lib/models";
 import { LIFETIME_WITH_ACTION_MS, toast } from "$lib/ui/toast.svelte";
@@ -59,6 +64,8 @@ class AppStore {
   models = $state<Record<string, string>>({});
   /** The model calls running, oldest first (`listen` keeps it current). */
   calls = $state<Progress[]>([]);
+  /** Updates: this build's version, a newer release once a check found one, a check or install running. */
+  update = $state<UpdateStatus | null>(null);
   /** Postings deleted while their Undo is still offered: out of every list, still in the store. */
   #deleting = new Set<string>();
 
@@ -149,6 +156,21 @@ class AppStore {
     if (status) this.agent = status;
   }
 
+  /** Looks for a newer release now (Settings → About's Check now). */
+  async checkUpdate() {
+    const status = await attempt("check update", checkUpdate);
+    if (status) this.update = status;
+  }
+
+  /** Installs the newer release and relaunches; a failure stays in `update.error` and a toast. */
+  async installUpdate() {
+    try {
+      await installUpdate();
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+    }
+  }
+
   /** After a model call: what each alias ran, for the names the chat shows. */
   async refreshModels() {
     const served = await attempt("models", servedModels);
@@ -160,18 +182,22 @@ class AppStore {
     return modelName(this.models[asked] ?? asked);
   }
 
-  /** Keeps `calls` current until the returned function runs. */
+  /** Keeps `calls` and `update` current until the returned function runs. */
   async listen(): Promise<() => void> {
-    let stop: () => void;
+    let stops: (() => void)[];
     try {
-      stop = await onProgress((calls) => (this.calls = calls));
+      stops = await Promise.all([
+        onProgress((calls) => (this.calls = calls)),
+        onUpdate((status) => (this.update = status)),
+      ]);
     } catch (e) {
-      console.error(`progress events: ${appError(e).message}`);
+      console.error(`events: ${appError(e).message}`);
       return () => {};
     }
-    const now = await attempt("running", running);
+    const [now, update] = await Promise.all([attempt("running", running), attempt("update status", updateStatus)]);
     if (now) this.calls = now;
-    return stop;
+    if (update) this.update = update;
+    return () => stops.forEach((stop) => stop());
   }
 
   async loadSettings() {

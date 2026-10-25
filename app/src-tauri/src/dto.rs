@@ -88,9 +88,17 @@ pub struct Settings {
     /// already using the app, so they load as done; a new install starts without it.
     #[serde(default = "set_up")]
     pub onboarded: bool,
+    /// Look for a newer release at launch and once a day (release builds; Settings → About). On unless turned off,
+    /// for settings saved before it existed too.
+    #[serde(default = "checks_updates")]
+    pub check_updates: bool,
 }
 
 fn set_up() -> bool {
+    true
+}
+
+fn checks_updates() -> bool {
     true
 }
 
@@ -109,6 +117,37 @@ pub struct AgentStatus {
     pub plan: Option<String>,
     /// Why it isn't usable, and what to do: "Run `claude` in Terminal and sign in".
     pub problem: Option<String>,
+}
+
+/// Where updating is: nothing running, checking, or downloading and installing the newer release.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum UpdateState {
+    #[default]
+    Idle,
+    Checking,
+    Installing,
+}
+
+/// What Settings → About and the sidebar show about updates (`update.rs`); the `update` event carries it.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UpdateStatus {
+    /// This build's version.
+    pub current: String,
+    /// A newer release the last check found.
+    pub available: Option<String>,
+    /// Its release notes.
+    pub notes: Option<String>,
+    pub state: UpdateState,
+    /// Share of the newer release downloaded (0–1), while installing and its size is known.
+    pub progress: Option<f64>,
+    /// When the last check finished (RFC 3339).
+    pub checked_at: Option<String>,
+    /// Why the last check or install failed.
+    pub error: Option<String>,
 }
 
 // ── Bank and masters ────────────────────────────────────────────────────────────────────────────────────────────

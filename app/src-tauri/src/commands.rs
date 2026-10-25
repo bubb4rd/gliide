@@ -4,19 +4,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::dto::{
     Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
     Decision, EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView,
     FeedView, FolderPdf, FolderView, ImportChoices, ImportView, Instructed, JobRow, JobView,
     KeyDecision, Library, LogoRow, LogoSource, Mode, Place, Progress, ReviewView, Rewritten,
-    SalaryRange, SearchCursor, SearchResults, Settings,
+    SalaryRange, SearchCursor, SearchResults, Settings, UpdateStatus,
 };
 use crate::state::{App, blocking};
 use crate::{
     cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place,
-    review, settings,
+    review, settings, update,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -43,6 +43,24 @@ pub async fn set_settings(app: St<'_>, settings: Settings) -> Res<Settings> {
 #[tauri::command]
 pub async fn models(app: St<'_>) -> Res<HashMap<String, String>> {
     blocking(&app, |app| app.served_models()).await
+}
+
+// ── Updates ──
+
+#[tauri::command]
+pub async fn update_status(app: AppHandle) -> Res<UpdateStatus> {
+    Ok(update::status(&app))
+}
+
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Res<UpdateStatus> {
+    Ok(update::check(&app).await)
+}
+
+/// Installs the release the last check found and relaunches the app; returns only when that failed.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Res<()> {
+    update::install(&app).await
 }
 
 // ── Bank and masters ──

@@ -155,6 +155,20 @@ Experience step says so and links ahead to it (import runs the model). Its What 
 settings as Settings → Feed does: a filter you never touch stays Auto (`None`, following the bank); the first change
 makes it yours, starting from what Auto had.
 
+### Updates
+
+The Rust side runs Tauri's updater plugin (`app/src-tauri/src/update.rs`); the webview never calls it and has no
+updater permission. Its one endpoint is the newest GitHub release's `latest.json` (`plugins.updater.endpoints`),
+which names the version, its notes, and per platform the `gliide.app.tar.gz` bundle and its signature; a bundle
+installs only when that signature checks against `plugins.updater.pubkey` (minisign; the private key is the
+maintainer's, `~/.tauri/gliide-updater.key`, used by `app/scripts/release-macos.sh`, which also writes
+`latest.json`). Release builds check about a minute after launch and then whenever 24 hours have passed (looked at
+hourly, so sleep doesn't skip a day) while the `check_updates` setting is on (default on); dev builds never check on
+their own. Check now (Settings → About) checks at once. A newer version shows in the sidebar's foot and in About;
+Restart to update downloads the bundle (progress at each whole percent in the `update` event), checks it, swaps the
+app in place and relaunches. `UpdateStatus` is the state: `current`, `available`, `notes`, `state` (idle, checking,
+installing), `progress`, `checkedAt`, `error`.
+
 ## 2. Data model: an experience bank and masters
 
 ### The bank
@@ -809,7 +823,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (`prompts/cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Cover letters and application tracking |
 | M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search (opt-in), the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: a live pull checks jobs within the daily cap, per-place copies folded; a five-board watchlist pull kept 84 of 693 jobs, every board's first job read from its API |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
-| M8 Distribution | Signing, notarization, auto-update | Installable by someone else |
+| M8 Distribution | Signing and notarization ✓ (`pnpm release:mac`); updates ✓ (§1 Updates: signed bundle and `latest.json` on each GitHub release, checked daily, installed on Restart to update) | Installable by someone else |
 
 ## 14. Open decisions
 

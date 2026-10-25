@@ -22,10 +22,14 @@ without a Gatekeeper warning. It runs on macOS on Apple Silicon and needs
 [Claude Code](https://code.claude.com) (`claude`) installed and signed in with your own Claude subscription: gliide
 launches it for every model call and never asks for or stores an API key. First-run setup checks for it.
 
+From 0.2.0 on, gliide looks for a newer release at launch and once a day and says so in the sidebar; **Restart to
+update** (Settings → About) installs it. Only a release signed with the project's update key installs. Copies older
+than 0.2.0 update once by hand, from the latest release.
+
 ## Build prerequisites
 
 - macOS on Apple Silicon (the tested platform; no other platform is built yet).
-- Rust stable, 1.85 or newer (the workspace uses edition 2024), via [rustup](https://rustup.rs).
+- Rust stable, 1.90 or newer (the workspace uses edition 2024; the updater plugin needs 1.90), via [rustup](https://rustup.rs).
 - Node.js 20.19+ or 22.12+ (Vite 8) and pnpm 9 (`corepack enable` picks up `packageManager` in `app/package.json`).
 - An agent CLI installed and signed in with your own subscription, such as
   [Claude Code](https://code.claude.com) (`claude`). gliide launches it; it never asks for or stores an API key.
@@ -54,10 +58,23 @@ macOS warns on other Macs.
 
 ### Releasing (maintainers)
 
-Official releases are signed with a Developer ID and notarized: `pnpm release:mac` from `app/`. It needs a
-Developer ID Application certificate and an App Store Connect API key; `app/scripts/release-macos.sh` lists what
-it reads. Contributors never need this. App icon: `pnpm tauri icon src-tauri/app-icon.png` (`icon-art.png` is the
-full-bleed art, kept for iOS).
+Official releases are signed with a Developer ID and notarized, and carry a bundle signed with the update key, which
+installed copies take. Contributors never need any of this.
+
+1. Bump the version in `app/package.json`, `app/src-tauri/Cargo.toml` and `app/src-tauri/tauri.conf.json` (the
+   script refuses to run while they differ); commit, tag `vX.Y.Z` and push both.
+2. `pnpm release:mac` from `app/`, with `RELEASE_NOTES` set to show beside the update in Settings → About. It needs
+   a Developer ID Application certificate, an App Store Connect API key and the update key
+   (`~/.tauri/gliide-updater.key` and its password); `app/scripts/release-macos.sh` lists what it reads. It writes
+   the `.dmg`, `gliide.app.tar.gz` (with its `.sig`) and `latest.json`.
+3. Attach all three to the GitHub release `vX.Y.Z`, marked latest (the script prints the `gh release create`
+   line). Installed copies read `releases/latest/download/latest.json`, so a release without it updates no one.
+
+The update key (made once with `pnpm tauri signer generate -w ~/.tauri/gliide-updater.key`; its public half is
+`plugins.updater.pubkey` in `tauri.conf.json`) must be kept with its password somewhere safe: without it, installed
+copies can never take another update; anyone holding both can ship one to them.
+
+App icon: `pnpm tauri icon src-tauri/app-icon.png` (`icon-art.png` is the full-bleed art, kept for iOS).
 
 ### Command line
 
@@ -89,6 +106,7 @@ network requests are these (links you open, such as a posting or Maps, go to you
 | [Fantastic.jobs](https://fantastic.jobs) via [Apify](https://apify.com) | Only with your Apify token in Settings; once a day | Your token, master titles, countries, years and employment filters |
 | OpenStreetMap [Nominatim](https://nominatim.org) | The review's map, once per place | The job's place name |
 | [OpenFreeMap](https://openfreemap.org) tiles | The review's map | Tile requests for the map area |
+| [GitHub](https://github.com/bubb4rd/gliide/releases) releases | At launch and once a day, unless Settings → About → Check for updates is off; Check now; Restart to update | A request for `latest.json` (and, when you update, the release's bundle). Nothing about you or your data |
 
 No telemetry, analytics or crash reporting: the app sends nothing about you or your usage to the project. The webview
 runs under a Content Security Policy (`app.security.csp` in `app/src-tauri/tauri.conf.json`): scripts only from the

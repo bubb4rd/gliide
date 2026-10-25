@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "gliide",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "identifier": "dev.bubb4rd.gliide",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -45,6 +45,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -52,5 +53,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCNzM1MjY2NTE2OEU1NEQKUldSTjVXaFJabEp6U3lRVzA0bXdaV3F0K0JoUGh0S01aMFoyeXpCYkI3WVlPSDRoQTZ1T05tZUgK",
+      "endpoints": ["https://github.com/bubb4rd/gliide/releases/latest/download/latest.json"]
+    }
   }
 }

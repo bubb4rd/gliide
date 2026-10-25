@@ -24,4 +24,9 @@ claudePath: string | null,
  * The first-run setup (`/welcome`) is done or skipped. Settings saved before it existed belong to someone
  * already using the app, so they load as done; a new install starts without it.
  */
-onboarded: boolean, };
+onboarded: boolean, 
+/**
+ * Look for a newer release at launch and once a day (release builds; Settings → About). On unless turned off,
+ * for settings saved before it existed too.
+ */
+checkUpdates: boolean, };

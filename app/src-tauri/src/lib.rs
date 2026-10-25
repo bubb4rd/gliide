@@ -19,6 +19,7 @@ pub mod place;
 pub mod review;
 pub mod settings;
 pub mod state;
+pub mod update;
 mod view;
 mod window;
 
@@ -34,6 +35,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol(logo::SCHEME, |ctx, request, responder| {
             let Some(state) = ctx.app_handle().try_state::<Arc<App>>() else {
                 return responder.respond(
@@ -61,6 +63,8 @@ pub fn run() {
             std::thread::spawn(move || warm.warm());
             tauri::async_runtime::spawn(feed::schedule(Arc::clone(&state)));
             app.manage(state);
+            app.manage(update::Updates::new(app.package_info().version.to_string()));
+            tauri::async_runtime::spawn(update::schedule(app.handle().clone()));
             window::setup(app)?;
             Ok(())
         })
@@ -69,6 +73,9 @@ pub fn run() {
             commands::get_settings,
             commands::set_settings,
             commands::models,
+            commands::update_status,
+            commands::check_update,
+            commands::install_update,
             commands::library,
             commands::read_import,
             commands::import_view,
