@@ -56,7 +56,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCNzM1MjY2NTE2OEU1NEQKUldSTjVXaFJabEp6U3lRVzA0bXdaV3F0K0JoUGh0S01aMFoyeXpCYkI3WVlPSDRoQTZ1T05tZUgK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUxOTRBM0RERDNENEYzQUMKUldTczg5VFQzYU9VNGUvd004NGpOdXlBZytGdGpic0VUUzE1aEREbWRJUUpvTWVzbjA4Q0RsVDUK",
       "endpoints": ["https://github.com/bubb4rd/gliide/releases/latest/download/latest.json"]
     }
   }
