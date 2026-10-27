@@ -8,6 +8,10 @@
   Above the table: a filter on company or role (/ or ⌘F focuses it, Esc clears it) and a status filter. A column
   header sorts by its column; a second click reverses it. Filters and sort stay as you left them when you come back
   from a job.
+
+  Applications have a checkbox (Shift-click for a range, ⌘A for every one shown): with any checked, the count gives
+  way to how many, Set status (S), which sets them all at once with Undo in the toast, and Clear (Esc). Only checked
+  rows still shown count; the checks clear once their status is set.
 -->
 <script lang="ts" module>
   import type { AppStatus } from "$lib/api";
@@ -29,7 +33,7 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { appError, type ApplicationRow, type JobRow, type SalaryRange } from "$lib/api";
+  import { appError, type AppStatus as Status, type ApplicationRow, type JobRow, type SalaryRange } from "$lib/api";
   import { applicationFit, scoreFit, type Fit } from "$lib/fit";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
@@ -116,6 +120,9 @@
 
   let loaded = $state(false);
   let filterInput = $state<ReturnType<typeof Input>>();
+  /** The checked rows' keys (applications only). */
+  let picked = $state(new Set<string>());
+  let statusOpen = $state(false);
 
   onMount(async () => {
     await Promise.all([app.refreshApplications(), app.refreshJobs(), app.settings ? null : app.loadSettings()]);
@@ -142,11 +149,13 @@
   $effect(() =>
     bindKeys({
       v: paste.run,
-      // In the filter, ⌘V pastes into it.
+      // In the filter, ⌘V pastes into it and ⌘A selects its text.
       "mod+v": (e) => (e.target instanceof HTMLInputElement ? false : paste.run()),
+      "mod+a": (e) => (e.target instanceof HTMLInputElement && e.target.type !== "checkbox" ? false : checkAllShown()),
+      s: () => (chosen.length ? void (statusOpen = true) : false),
       "/": focusFilter,
       "mod+f": focusFilter,
-      Escape: () => (filtered ? clearFilters() : false),
+      Escape: () => (chosen.length ? clearPicked() : filtered ? clearFilters() : false),
     }),
   );
 
@@ -203,7 +212,36 @@
     const where = view.show === "all" ? "" : ` in ${SHOW.find((s) => s.value === view.show)?.label}`;
     return query ? `Nothing${where} matches “${query}”.` : `Nothing${where} yet.`;
   });
+  /** The checked applications still shown, in the table's order of `rows`. */
+  const chosen = $derived(shown.flatMap((r) => (r.application && picked.has(r.key) ? [r.application] : [])));
   const csvPath = $derived(app.settings ? `${app.settings.exportDir.replace(/\/+$/, "")}/applications.csv` : null);
+
+  function checkAllShown() {
+    picked = new Set(shown.filter((r) => r.application).map((r) => r.key));
+  }
+
+  function clearPicked() {
+    picked = new Set();
+  }
+
+  const applicationsText = (n: number) => `${n} ${n === 1 ? "application" : "applications"}`;
+
+  /** Sets every checked application to `status` (those already there are left alone), with Undo in the toast. */
+  async function setChosen(status: Status) {
+    const rows = chosen.filter((a) => a.status !== status);
+    clearPicked();
+    if (!rows.length || !(await app.setStatus(rows, status))) return;
+    toast(`${applicationsText(rows.length)} set to ${STATUS[status].label}`, {
+      action: { label: "Undo", run: () => restore(rows) },
+    });
+  }
+
+  /** Puts each application back to the status it had in `rows`. */
+  function restore(rows: ApplicationRow[]) {
+    const by = new Map<Status, ApplicationRow[]>();
+    for (const a of rows) by.set(a.status, [...(by.get(a.status) ?? []), a]);
+    for (const [status, group] of by) void app.setStatus(group, status);
+  }
 
   const THIS_YEAR = new Date().getFullYear();
   /** `2026-10-12` → `Oct 12` (with the year when it isn't this one). */
@@ -256,11 +294,38 @@
       />
     </div>
     <Segmented options={SHOW} bind:value={view.show} label="Show" />
-    <span class="meta num count" aria-live="polite">{showing}</span>
+    {#if chosen.length}
+      <div class="bulk">
+        <span class="meta num" aria-live="polite">{chosen.length} selected</span>
+        <Menu
+          value={null as Status | null}
+          options={STATUS_OPTIONS}
+          label="Set status of {applicationsText(chosen.length)}"
+          placement="bottom-end"
+          kbd="S"
+          bind:open={statusOpen}
+          onchange={(s) => s && setChosen(s)}
+        >
+          {#snippet trigger()}Set status{/snippet}
+        </Menu>
+        <Button variant="ghost" kbd="Esc" onclick={clearPicked}>Clear</Button>
+      </div>
+    {:else}
+      <span class="meta num count" aria-live="polite">{showing}</span>
+    {/if}
   </div>
   {#if shown.length}
     <div class="table">
-      <Table columns={COLUMNS} rows={shown} bind:sort={view.sort} key={(r) => r.key} label="Applications">
+      <Table
+        columns={COLUMNS}
+        rows={shown}
+        bind:sort={view.sort}
+        key={(r) => r.key}
+        label="Applications"
+        bind:checked={picked}
+        checkable={(r) => r.application !== null}
+        checkLabel={(r) => `Select ${r.company} · ${r.role}`}
+      >
         {#snippet cell(row, column)}
           {#if column.key === "date"}
             <span class="num" {@attach tip(row.date)}>{shortDate(row.date)}</span>
@@ -296,7 +361,7 @@
                 label="Status for {row.company}"
                 variant="ghost"
                 size="sm"
-                onchange={(s) => app.setStatus(application, s)}
+                onchange={(s) => app.setStatus([application], s)}
               >
                 {#snippet trigger(current)}<Badge tone={STATUS[application.status].tone}>{current?.label}</Badge>{/snippet}
               </Menu>
@@ -381,13 +446,20 @@
     padding: var(--space-3) var(--space-6) var(--space-1);
     background: var(--surface);
   }
+  /* Shrinks (to 180px) before the bar wraps, so checking rows (the count gives way to wider controls) keeps one line. */
   .query {
-    flex: 0 1 280px;
-    min-width: 180px;
+    flex: 1 1 180px;
+    max-width: 280px;
   }
   .count {
     margin-inline-start: auto;
     white-space: nowrap;
+  }
+  .bulk {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-inline-start: auto;
   }
   .table {
     display: grid;

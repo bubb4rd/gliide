@@ -1031,20 +1031,31 @@ impl Store {
         Ok(())
     }
 
+    /// Sets every application in `ids` to `status`, in one transaction: an unknown id changes none of them. Returns
+    /// the applications as saved, in `ids`' order.
     pub fn set_application_status(
         &self,
-        id: &str,
+        ids: &[&str],
         status: AppStatus,
-    ) -> Result<Application, StoreError> {
-        let changed = self.conn.execute(
-            "UPDATE applications SET status = ?2, updated_at = ?3 WHERE id = ?1",
-            params![id, status.as_str(), now()],
-        )?;
-        if changed == 0 {
-            return Err(not_found("application", id));
+    ) -> Result<Vec<Application>, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let at = now();
+        for id in ids {
+            let changed = tx.execute(
+                "UPDATE applications SET status = ?2, updated_at = ?3 WHERE id = ?1",
+                params![id, status.as_str(), at],
+            )?;
+            if changed == 0 {
+                return Err(not_found("application", id));
+            }
         }
-        self.application_where("id = ?1", id)?
-            .ok_or_else(|| not_found("application", id))
+        tx.commit()?;
+        ids.iter()
+            .map(|id| {
+                self.application_where("id = ?1", id)?
+                    .ok_or_else(|| not_found("application", id))
+            })
+            .collect()
     }
 
     fn application_where(

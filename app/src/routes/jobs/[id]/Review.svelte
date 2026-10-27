@@ -8,6 +8,7 @@
   import { goto } from "$app/navigation";
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
   import Banknote from "@lucide/svelte/icons/banknote";
+  import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
@@ -168,6 +169,11 @@
     void app.refreshApplications();
   }
 
+  /** Exported and sent: the application goes from Saved to Applied. */
+  function markApplied() {
+    if (application?.status === "saved") void app.setStatus([application], "applied");
+  }
+
   // ── Toolbar ──
   function chooseMaster(master: string) {
     s.master = master;
@@ -270,6 +276,7 @@
   /** The chat's screen commands. Letters type into the composer there, so these run from its menu (or the toolbar). */
   const CHAT_KEYS: KeyCommand[] = $derived([
     { keys: [], label: "Export", run: () => void exportNow(), disabled: !ready },
+    { keys: [], label: "Mark applied", run: markApplied, disabled: application?.status !== "saved" },
     { keys: [], label: "Re-run", run: rerun, disabled: !ready },
     { keys: ["⌘Z"], label: "Undo", run: () => void s.undo(), disabled: !review?.canUndo },
     { keys: ["⇧⌘Z"], label: "Redo", run: () => void s.redo(), disabled: !review?.canRedo },
@@ -293,6 +300,7 @@
       disabled: !ready || !letter?.letter || s.drafting !== null,
     },
     { keys: ["$"], label: "Salary range", run: openSalary, disabled: !row },
+    { keys: [], label: "Mark applied", run: markApplied, disabled: application?.status !== "saved" },
     { keys: ["M"], label: "Open in Maps", run: openMap, disabled: !places.length },
     { keys: ["Tab"], label: "Resume", run: switchTab },
   ]);
@@ -349,10 +357,15 @@
         label="Status"
         variant="ghost"
         size="sm"
-        onchange={(status) => app.setStatus(current, status)}
+        onchange={(status) => app.setStatus([current], status)}
       >
         {#snippet trigger(option)}<Badge tone={STATUS[current.status].tone}>{option?.label}</Badge>{/snippet}
       </Menu>
+      {#if current.status === "saved"}
+        <Button variant="ghost" size="sm" icon={Check} {@attach tip("Set the status to Applied")} onclick={markApplied}>
+          Mark applied
+        </Button>
+      {/if}
     {/if}
   {/snippet}
   <!-- What you're working on (the document, and its master or a rewrite), then a divider, then export and delete. -->

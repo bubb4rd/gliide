@@ -319,11 +319,11 @@ pub async fn applications(app: St<'_>) -> Res<Vec<ApplicationRow>> {
 #[tauri::command]
 pub async fn set_status(
     app: St<'_>,
-    application: String,
+    applications: Vec<String>,
     status: AppStatus,
-) -> Res<ApplicationRow> {
+) -> Res<Vec<ApplicationRow>> {
     blocking(&app, move |app| {
-        export::set_status(app, &application, status)
+        export::set_status(app, &applications, status)
     })
     .await
 }

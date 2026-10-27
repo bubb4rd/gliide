@@ -398,17 +398,30 @@ fn applications_upsert_by_id_and_change_status() {
     assert!(!apps[0].updated_at.is_empty());
 
     let changed = store
-        .set_application_status("old", AppStatus::Interviewing)
+        .set_application_status(&["old", "new"], AppStatus::Interviewing)
         .unwrap();
-    assert_eq!(changed.status, AppStatus::Interviewing);
+    assert_eq!(
+        changed.iter().map(|a| (a.id.as_str(), a.status)).collect::<Vec<_>>(),
+        [
+            ("old", AppStatus::Interviewing),
+            ("new", AppStatus::Interviewing)
+        ]
+    );
+    assert!(store
+        .applications()
+        .unwrap()
+        .iter()
+        .all(|a| a.status == AppStatus::Interviewing));
+
+    // One unknown id: none of them change.
+    assert!(matches!(
+        store.set_application_status(&["old", "missing"], AppStatus::Offer),
+        Err(StoreError::NotFound { .. })
+    ));
     assert_eq!(
         store.applications().unwrap()[1].status,
         AppStatus::Interviewing
     );
-    assert!(matches!(
-        store.set_application_status("missing", AppStatus::Offer),
-        Err(StoreError::NotFound { .. })
-    ));
 }
 
 /// Synthetic legacy applications.csv rows, oldest first: quoted commas, an escaped quote, empty scores and files.

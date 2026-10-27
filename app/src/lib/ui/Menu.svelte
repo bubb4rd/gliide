@@ -28,6 +28,10 @@
     onchange?: (value: T) => void;
     /** What the closed menu shows for the current choice (a status `Badge`); its label by default. */
     trigger?: Snippet<[Option | undefined]>;
+    /** Whether the list is open (bindable): a screen key can open it. */
+    open?: boolean;
+    /** The screen key that opens it, as a hint inside the button. */
+    kbd?: string;
   }
 
   let {
@@ -40,10 +44,11 @@
     placement = "bottom-start",
     onchange,
     trigger,
+    open = $bindable(false),
+    kbd,
   }: Props = $props();
 
   const id = $props.id();
-  let open = $state(false);
   let button = $state<HTMLButtonElement>();
   let list = $state<HTMLDivElement>();
   let active = $state(0);
@@ -109,6 +114,7 @@
   {size}
   {disabled}
   iconEnd={ChevronDown}
+  {kbd}
   popovertarget="{id}-menu"
   aria-haspopup="listbox"
   aria-label="{label}: {current?.label ?? 'None'}"

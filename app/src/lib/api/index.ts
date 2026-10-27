@@ -265,8 +265,9 @@ export const exportCover = (review: string) => invoke<Exported>("export_cover", 
 
 // ── Applications ──
 export const applications = () => invoke<ApplicationRow[]>("applications");
-export const setStatus = (application: string, status: AppStatus) =>
-  invoke<ApplicationRow>("set_status", { application, status });
+/** Sets each application's status (all or none), rewriting applications.csv once. */
+export const setStatus = (applications: string[], status: AppStatus) =>
+  invoke<ApplicationRow[]>("set_status", { applications, status });
 
 // ── Job feed (freehire) ──
 /** Every row but skipped and dismissed: fits first (best score first), then not fit, checking, waiting, new. */

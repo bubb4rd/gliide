@@ -10,6 +10,11 @@
 
   With `selected`, one row is the screen's selection (its keys act on it; ↑↓ on the screen move it): the --selected
   wash, scrolled into view when it changes. A click or focus inside a row selects it.
+
+  With `checked` (bindable, row keys), a leading column of checkboxes picks rows for an action on all of them: the
+  rows `checkable` allows (all by default) get one; a checked row wears the --selected wash. Shift-click checks or
+  clears every checkable row from the last one clicked, in the order shown. The header's checkbox covers the rows
+  shown: on when all are, mixed when some are; a click checks them all, or clears them when all were.
 -->
 <script lang="ts" module>
   export type SortDir = "asc" | "desc";
@@ -54,6 +59,7 @@
   import type { Snippet } from "svelte";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import Checkbox from "./Checkbox.svelte";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -70,9 +76,27 @@
     selected?: string | null;
     /** A click or focus inside the row. */
     onselect?: (row: Row) => void;
+    /** The checked rows' keys (bindable); none, the table has no checkboxes. */
+    checked?: Set<string>;
+    /** Whether a row gets a checkbox (all by default). */
+    checkable?: (row: Row) => boolean;
+    /** A row's checkbox, for assistive tech ("Select Globex"). */
+    checkLabel?: (row: Row) => string;
   }
 
-  let { columns, rows, key, cell, label, sort = $bindable(), selected = null, onselect }: Props = $props();
+  let {
+    columns,
+    rows,
+    key,
+    cell,
+    label,
+    sort = $bindable(),
+    selected = null,
+    onselect,
+    checked = $bindable(),
+    checkable = () => true,
+    checkLabel = () => "Select row",
+  }: Props = $props();
 
   let body = $state<HTMLTableSectionElement>();
 
@@ -83,6 +107,40 @@
   });
 
   const sorted = $derived(sortRows(rows, columns, sort));
+
+  // ── Checking ──
+  const pickable = $derived(checked ? sorted.filter(checkable).map(key) : []);
+  const pickedShown = $derived(checked ? pickable.filter((k) => checked!.has(k)).length : 0);
+  /** The row last checked or cleared by a click: where a Shift-click's range starts. */
+  let anchorKey: string | null = null;
+  let extend = false;
+
+  function check(row: Row, on: boolean) {
+    if (!checked) return;
+    const k = key(row);
+    const from = extend && anchorKey !== null ? pickable.indexOf(anchorKey) : -1;
+    const to = pickable.indexOf(k);
+    const range = from >= 0 && to >= 0 ? pickable.slice(Math.min(from, to), Math.max(from, to) + 1) : [k];
+    const next = new Set(checked);
+    for (const r of range) {
+      if (on) next.add(r);
+      else next.delete(r);
+    }
+    checked = next;
+    anchorKey = k;
+  }
+
+  function checkAll() {
+    if (!checked) return;
+    const all = pickedShown === pickable.length;
+    const next = new Set(checked);
+    for (const k of pickable) {
+      if (all) next.delete(k);
+      else next.add(k);
+    }
+    checked = next;
+    anchorKey = null;
+  }
 
   function sortOn(column: TableColumn<Row>) {
     const first = column.sortFirst ?? (column.numeric ? "desc" : "asc");
@@ -96,10 +154,22 @@
 <div class="wrap">
   <table aria-label={label}>
     <colgroup>
+      {#if checked}<col class="pick-col" />{/if}
       {#each columns as column (column.key)}<col style:width={column.width} />{/each}
     </colgroup>
     <thead>
       <tr>
+        {#if checked}
+          <th scope="col" class="pick">
+            <Checkbox
+              checked={pickable.length > 0 && pickedShown === pickable.length}
+              mixed={pickedShown > 0 && pickedShown < pickable.length}
+              disabled={pickable.length === 0}
+              label="Select all shown"
+              onchange={checkAll}
+            />
+          </th>
+        {/if}
         {#each columns as column (column.key)}
           {@const end = column.numeric || column.align === "end"}
           <th scope="col" class={[end && "end"]} aria-sort={ariaSort(column)}>
@@ -119,14 +189,28 @@
     <tbody bind:this={body}>
       {#each sorted as row (key(row))}
         {@const on = selected !== null && key(row) === selected}
+        {@const picked = checked?.has(key(row)) ?? false}
         <!-- The screen's keys act on the selection; a row's own controls are its keyboard path. -->
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
         <tr
-          class={[on && "selected"]}
+          class={[on && "selected", picked && "checked"]}
           aria-current={on ? "true" : undefined}
+          aria-selected={checked ? picked : undefined}
           onclick={onselect && (() => onselect(row))}
           onfocusin={onselect && (() => onselect(row))}
         >
+          {#if checked}
+            <td class="pick">
+              {#if checkable(row)}
+                <Checkbox
+                  checked={picked}
+                  label={checkLabel(row)}
+                  onclick={(e) => (extend = e.shiftKey)}
+                  onchange={(next) => check(row, next)}
+                />
+              {/if}
+            </td>
+          {/if}
           {#each columns as column (column.key)}
             <td class={[column.numeric && "num", (column.numeric || column.align === "end") && "end"]}>
               {@render cell(row, column)}
@@ -175,8 +259,18 @@
     border-bottom: 1px solid var(--line);
     transition: background-color var(--dur-instant) var(--ease-out);
   }
-  .selected td {
+  .selected td,
+  .checked td {
     background: var(--selected);
+  }
+  /* The checkboxes' column: the table's 24px inset before it, 4px after (the next cell's own padding follows). */
+  .pick-col {
+    width: calc(var(--space-6) + 16px + var(--space-1));
+  }
+  th.pick,
+  td.pick {
+    padding-inline-end: var(--space-1);
+    line-height: 0;
   }
   th:first-child,
   td:first-child {
@@ -227,7 +321,7 @@
     visibility: visible;
   }
   @media (hover: hover) {
-    tbody tr:not(.selected):hover td {
+    tbody tr:not(.selected, .checked):hover td {
       background: var(--hover);
     }
     .sort:hover {

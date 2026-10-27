@@ -194,15 +194,16 @@ pub fn applications(app: &App) -> Result<Vec<ApplicationRow>> {
     Ok(lock(&app.store).applications()?.iter().map(row).collect())
 }
 
-/// Sets an application's status and rewrites `applications.csv`.
+/// Sets each application's status (all or none) and rewrites `applications.csv` once.
 pub fn set_status(
     app: &App,
-    application: &str,
+    applications: &[String],
     status: crate::dto::AppStatus,
-) -> Result<ApplicationRow> {
-    let a = lock(&app.store).set_application_status(application, status.into())?;
+) -> Result<Vec<ApplicationRow>> {
+    let ids: Vec<&str> = applications.iter().map(String::as_str).collect();
+    let saved = lock(&app.store).set_application_status(&ids, status.into())?;
     write_csv(app)?;
-    Ok(row(&a))
+    Ok(saved.iter().map(row).collect())
 }
 
 /// `applications.csv` in the export folder, from the store, after importing what the file holds that the store

@@ -743,7 +743,7 @@ composed Review screen.
 | Masters | Cards (track, template thumbnail, last edited); a master's editor is checkboxes and drag-to-order over the bank, with live preview |
 | Job | Posting input; requirements as chips; master picker with each master's score; score header |
 | Review | Score header; changes grouped by section, then **From your bank**; then **Other lines**: every master line no change touches, each with Edit and Rewrite with a note (either makes it your edit); live preview beside them |
-| Applications | Table with status, scores, files, posting link; CSV export |
+| Applications | Table with status, scores, files, posting link; CSV export. Statuses set many at once (checked rows, one `set_status` call: all or none, one CSV rewrite, Undo); an export starts as Saved, and the job's **Mark applied** moves it to Applied |
 | Settings | Agents found, signed in or not, model per call; mode (master only / bank-aware); export folder; default template |
 
 **Score header:** `Now 53%` → `Projected 78%` (large, live) with `Ceiling 85%` beside it; a bar showing now, the gain

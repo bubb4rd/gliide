@@ -8,6 +8,7 @@
   import { SvelteSet } from "svelte/reactivity";
   import { page } from "$app/state";
   import Archive from "@lucide/svelte/icons/archive";
+  import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsDownUp from "@lucide/svelte/icons/chevrons-down-up";
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
@@ -399,6 +400,9 @@
   let appSort = $state<TableSort>({ key: "date", dir: "desc" });
   /** The selected row (the Feed's keys act on it): Northwind to start; a click selects another. */
   let appSelected = $state<string | null>("2");
+  /** Checked rows (Applications' multi-select): Contoso to start, so the header is mixed; Fabrikam has no checkbox. */
+  let appChecked = $state(new Set(["3"]));
+  let bulkStatus = $state<string | null>(null);
 
   // ── Score bar: Applications' Fit column ──
   interface BarSample {
@@ -608,6 +612,11 @@
                   <Badge tone={statusTone[menuValue as keyof typeof statusTone]}>{current?.label}</Badge>
                 {/snippet}
               </Menu>
+              {#if menuValue === "saved"}
+                <Button variant="ghost" size="sm" icon={Check} onclick={() => (menuValue = "applied")}>
+                  Mark applied
+                </Button>
+              {/if}
             {/snippet}
             <Segmented
               options={[
@@ -924,10 +933,11 @@
               <Chip state="missing" p1>SQL Server</Chip>
               <Chip state="have" disabled {@attach tip("Only stated in your bullets")}>Agile</Chip>
             </div>
-            <p class="label">Checkbox · off · on · disabled</p>
+            <p class="label">Checkbox · off · on · mixed · disabled</p>
             <div class="row">
               <Checkbox bind:checked={check.off} label="Off example" />
               <Checkbox bind:checked={check.on} label="On example" />
+              <Checkbox checked={false} mixed label="Mixed example" />
               <Checkbox checked={false} label="Disabled off" disabled />
               <Checkbox checked label="Disabled on" disabled />
             </div>
@@ -1111,6 +1121,9 @@
                 {/snippet}
               </Menu>
               <Menu value="swe" options={masters} label="Master (disabled)" disabled />
+              <Menu bind:value={bulkStatus} options={statuses} label="Set status" kbd="S">
+                {#snippet trigger()}Set status{/snippet}
+              </Menu>
             </div>
             <p class="meta">↑↓ or click opens; ↑↓ Home End move; ⏎ chooses; Esc closes.</p>
             <p class="label">Popover</p>
@@ -1296,7 +1309,8 @@
       <p class="meta lede">
         Headers sort: the sorted column is ink with its arrow, others show the arrow faintly on hover or focus; a second
         click reverses. Role doesn’t sort; empty On file sorts last either way. One row can be selected (Northwind, in
-        the selected wash); a click selects another.
+        the selected wash); a click selects another. With checkboxes (second table), checked rows share that wash;
+        Shift-click checks a range; the header is on, mixed or off for the rows shown; Fabrikam has no checkbox.
       </p>
       <Card>
         <div class="table">
@@ -1308,6 +1322,33 @@
             label="Applications (specimen)"
             selected={appSelected}
             onselect={(r) => (appSelected = r.id)}
+          >
+            {#snippet cell(row, column)}
+              {#if column.key === "status"}
+                <Badge tone={statusTone[row.status]}>{statuses.find((s) => s.value === row.status)?.label}</Badge>
+              {:else if column.key === "resume"}
+                <a class="file" href="#review">{row.resume}</a>
+              {:else if column.key === "onFile"}
+                {row.onFile ?? "—"}
+              {:else if column.key === "company"}
+                <CompanyMark>{row.company}</CompanyMark>
+              {:else}
+                {row[column.key as "date" | "role" | "now" | "projected"]}
+              {/if}
+            {/snippet}
+          </Table>
+        </div>
+      </Card>
+      <Card>
+        <div class="table">
+          <Table
+            columns={appColumns}
+            rows={appRows}
+            key={(r) => r.id}
+            label="Applications with checkboxes (specimen)"
+            bind:checked={appChecked}
+            checkable={(r) => r.status !== "rejected"}
+            checkLabel={(r) => `Select ${r.company}`}
           >
             {#snippet cell(row, column)}
               {#if column.key === "status"}

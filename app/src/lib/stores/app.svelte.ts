@@ -116,22 +116,30 @@ class AppStore {
   }
 
   /**
-   * Sets an application's status at once, here and on its posting (the sidebar's Recent), and saves it (rewriting
-   * applications.csv); puts it back, with the error in a toast, if the save fails.
+   * Sets the applications' status at once, here and on their postings (the sidebar's Recent), and saves them in one
+   * call (rewriting applications.csv); puts each back, with the error in a toast, if the save fails. Resolves whether
+   * it saved.
    */
-  async setStatus(row: ApplicationRow, status: AppStatus) {
-    const put = (s: AppStatus) => {
-      this.applications = this.applications.map((a) => (a.id === row.id ? { ...a, status: s } : a));
-      if (row.job) this.jobs = this.jobs.map((j) => (j.id === row.job ? { ...j, status: s } : j));
+  async setStatus(rows: ApplicationRow[], status: AppStatus): Promise<boolean> {
+    if (!rows.length) return true;
+    const before = new Map(rows.map((r) => [r.id, r.status]));
+    const byJob = new Map(rows.flatMap((r) => (r.job ? [[r.job, r.id] as const] : [])));
+    const put = (of: (id: string) => AppStatus) => {
+      this.applications = this.applications.map((a) => (before.has(a.id) ? { ...a, status: of(a.id) } : a));
+      this.jobs = this.jobs.map((j) => {
+        const id = byJob.get(j.id);
+        return id ? { ...j, status: of(id) } : j;
+      });
     };
-    const before = row.status;
-    put(status);
+    put(() => status);
     try {
-      const saved = await saveStatus(row.id, status);
-      this.applications = this.applications.map((a) => (a.id === saved.id ? saved : a));
+      const saved = new Map((await saveStatus([...before.keys()], status)).map((a) => [a.id, a]));
+      this.applications = this.applications.map((a) => saved.get(a.id) ?? a);
+      return true;
     } catch (e) {
-      put(before);
+      put((id) => before.get(id) ?? status);
       toast(appError(e).message, { tone: "danger" });
+      return false;
     }
   }
 
