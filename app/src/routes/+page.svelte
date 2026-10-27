@@ -1,7 +1,8 @@
 <!--
   `/` is the Overview: a greeting, your activity (postings added and applications sent: counts over a range, and the
-  last 26 weeks by day), what's up next (applications in interviews, then postings not sent yet, best fit first) and
-  what's new for you (the feed's fits, newest posting first; hidden while the feed is off).
+  last 26 weeks by day), what's up next (applications with a round coming up, soonest first, then the rest in
+  interviews, then postings not sent yet, best fit first) and what's new for you (the feed's fits, newest posting
+  first; hidden while the feed is off).
   V (or ⌘V) pastes a posting, I imports a resume. The backdrop chosen in Settings → Appearance, if any, sits behind
   the top of the screen, toolbar included: the toolbar lies over it unpainted and without its crumb, and takes its
   paper back once the content scrolls under it.
@@ -9,14 +10,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import FileUp from "@lucide/svelte/icons/file-up";
-  import type { AppStatus, FeedItem } from "$lib/api";
+  import type { ApplicationRow, AppStatus, FeedItem } from "$lib/api";
   import { activity as feedActivity, openItem, postedText, postedTime } from "$lib/feed";
   import { applicationFit, jobFit, scoreFit, type Fit } from "$lib/fit";
   import { chooseResume } from "$lib/import";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
+  import { roundLine } from "$lib/rounds";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { STATUS } from "$lib/status";
@@ -135,7 +138,8 @@
     };
   }
 
-  // ── Up next: interviews first, then postings not sent yet, best fit first ──
+  // ── Up next: rounds by time (soonest first), then the rest in interviews, then postings not sent yet, best fit
+  // first ──
   interface Next {
     key: string;
     href: string;
@@ -145,10 +149,15 @@
     status: AppStatus | null;
     fit: Fit | null;
     day: string;
+    /** The next round, in words ("Technical · tomorrow 2:00 PM"). */
+    round: string | null;
   }
-  const interviewing = $derived<Next[]>(
-    app.applications
-      .filter((a) => a.status === "interviewing")
+  const interviewing = $derived.by<Next[]>(() => {
+    const now = new Date();
+    const start = (a: ApplicationRow) => (a.nextRound?.startsAt ? new Date(a.nextRound.startsAt).getTime() : null);
+    return app.applications
+      .filter((a) => start(a) !== null || a.status === "interviewing")
+      .sort((a, b) => (start(a) ?? Number.MAX_VALUE) - (start(b) ?? Number.MAX_VALUE))
       .map((a) => ({
         key: `application-${a.id}`,
         href: a.job ? `/jobs/${a.job}` : "/applications",
@@ -158,8 +167,9 @@
         status: a.status,
         fit: applicationFit(a),
         day: a.date,
-      })),
-  );
+        round: a.nextRound ? roundLine(a.nextRound, now) : null,
+      }));
+  });
   const waiting = $derived<Next[]>(
     app.jobs
       .filter((j) => j.status === null || j.status === "saved")
@@ -173,6 +183,7 @@
         status: j.status,
         fit: jobFit(j, app.applications),
         day: jobDay(j.addedAt),
+        round: null,
       })),
   );
   const next = $derived([...interviewing, ...waiting].slice(0, NEXT));
@@ -305,6 +316,11 @@
                 </span>
                 <span class="score">{@render fitBar(item.fit)}</span>
                 <span class="day meta num">{shortDay(item.day)}</span>
+                {#if item.round}
+                  <span class="round meta" {@attach tip(item.round)}>
+                    <Icon icon={CalendarClock} size={14} /><span class="round__text">{item.round}</span>
+                  </span>
+                {/if}
               </a>
             {:else}
               {#if !noBank}
@@ -449,13 +465,14 @@
   }
   /* Two lines: the company over its role, the status badge centered on both, the fit score over the day. The mark's
      edges meet the company's cap height and the role's baseline (centered, then 1px down). Up next and New for you
-     share it. */
+     share it. An application with a round coming up says when as a third line under the role. */
   .row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
       "lead company status score"
-      "lead role status day";
+      "lead role status day"
+      ". round round round";
     align-items: center;
     column-gap: var(--space-2);
     padding: var(--space-2) var(--space-5);
@@ -488,6 +505,25 @@
       "lead company score"
       "lead role day"
       ". knockouts knockouts";
+  }
+  /* The round's kind and when, after its icon, in ink 2; the line truncates, the icon never. */
+  .round {
+    grid-area: round;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    min-width: 0;
+    color: var(--ink-2);
+  }
+  .round :global(.icon) {
+    flex: none;
+    color: var(--ink-3);
+  }
+  .round__text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .lead {
     grid-area: lead;

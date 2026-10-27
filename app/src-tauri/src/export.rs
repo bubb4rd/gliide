@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 
 use resume_core::{PageFacts, score};
 use resume_pipeline::today;
-use resume_store::{AppStatus, Application, applications_csv, parse_ats_fit_csv};
+use resume_store::{AppStatus, Application, Store, applications_csv, parse_ats_fit_csv};
 use resume_tailor::Tailored;
 
 use crate::cover;
-use crate::dto::{ApplicationRow, Exported};
+use crate::dto::{ApplicationRow, Exported, StatusSet};
 use crate::error::{AppError, Result};
 use crate::review::Review;
 use crate::state::{App, lock};
@@ -177,9 +177,10 @@ fn recorded(
     path: &Path,
     on_file: Option<f64>,
 ) -> Result<Exported> {
-    let saved = lock(&app.store)
-        .application_for_posting(&r.posting_id)?
-        .unwrap_or(a);
+    let store = lock(&app.store);
+    let saved = store.application_for_posting(&r.posting_id)?.unwrap_or(a);
+    let next = store.next_round(&saved.id)?;
+    drop(store);
     write_csv(app)?;
     Ok(Exported {
         file_name: path
@@ -188,25 +189,38 @@ fn recorded(
             .unwrap_or_default(),
         path: path.display().to_string(),
         on_file,
-        application: row(&saved),
+        application: row(&saved, next),
     })
 }
 
 /// Every application, newest first.
 pub fn applications(app: &App) -> Result<Vec<ApplicationRow>> {
-    Ok(lock(&app.store).applications()?.iter().map(row).collect())
+    let store = lock(&app.store);
+    rows(&store, &store.applications()?)
 }
 
-/// Sets each application's status (all or none) and rewrites `applications.csv` once.
+/// Sets each application's status (all or none) and rewrites `applications.csv` once. Moving to Offer or Rejected
+/// cancels their upcoming rounds that haven't ended (`cancelled`).
 pub fn set_status(
     app: &App,
     applications: &[String],
     status: crate::dto::AppStatus,
-) -> Result<Vec<ApplicationRow>> {
+) -> Result<StatusSet> {
+    use crate::dto::AppStatus as S;
     let ids: Vec<&str> = applications.iter().map(String::as_str).collect();
-    let saved = lock(&app.store).set_application_status(&ids, status.into())?;
+    let store = lock(&app.store);
+    let saved = store.set_application_status(&ids, status.into())?;
+    let cancelled = match status {
+        S::Offer | S::Rejected => store.cancel_upcoming_rounds(&ids)?,
+        S::Saved | S::Applied | S::Interviewing => Vec::new(),
+    };
+    let applications = rows(&store, &saved)?;
+    drop(store);
     write_csv(app)?;
-    Ok(saved.iter().map(row).collect())
+    Ok(StatusSet {
+        applications,
+        cancelled,
+    })
 }
 
 /// `applications.csv` in the export folder, from the store, after importing what the file holds that the store
@@ -269,7 +283,14 @@ fn is_app_header(text: &str) -> bool {
     cells == APP_COLUMNS
 }
 
-pub fn row(a: &Application) -> ApplicationRow {
+/// `apps` as the UI lists them, each with its next round (one query for all).
+pub fn rows(store: &Store, apps: &[Application]) -> Result<Vec<ApplicationRow>> {
+    let mut next = store.next_rounds()?;
+    Ok(apps.iter().map(|a| row(a, next.remove(&a.id))).collect())
+}
+
+/// The application as the UI shows it, with `next` (its next round: [`Store::next_round`]).
+pub fn row(a: &Application, next: Option<resume_store::Round>) -> ApplicationRow {
     ApplicationRow {
         id: a.id.clone(),
         job: a.posting_id.clone(),
@@ -284,6 +305,7 @@ pub fn row(a: &Application) -> ApplicationRow {
         cover_letter: a.cover_path.clone(),
         url: a.url.clone(),
         status: a.status.into(),
+        next_round: next.map(crate::rounds::round),
     }
 }
 

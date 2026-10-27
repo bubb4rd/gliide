@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "starts_at", "minutes", "with", "place", "notes"],
+  "properties": {
+    "kind": {
+      "enum": [
+        "recruiter-screen",
+        "hiring-manager",
+        "technical",
+        "take-home",
+        "system-design",
+        "behavioral",
+        "onsite",
+        "final",
+        "other",
+        null
+      ]
+    },
+    "starts_at": { "type": ["string", "null"], "maxLength": 40 },
+    "minutes": { "type": ["integer", "null"], "minimum": 1, "maximum": 600 },
+    "with": { "type": "string", "maxLength": 160 },
+    "place": { "type": "string", "maxLength": 400 },
+    "notes": { "type": "string", "maxLength": 400 }
+  }
+}

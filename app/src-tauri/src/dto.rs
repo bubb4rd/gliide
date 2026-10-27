@@ -971,6 +971,113 @@ pub struct ApplicationRow {
     pub cover_letter: Option<String>,
     pub url: Option<String>,
     pub status: AppStatus,
+    /// The soonest upcoming round that is scheduled and hasn't ended.
+    pub next_round: Option<Round>,
+}
+
+// ── Interviews ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// One interview round of an application.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Round {
+    pub id: String,
+    /// The application it belongs to.
+    pub application: String,
+    pub kind: RoundKind,
+    /// When it starts, RFC 3339 with the offset it was given in; `None` while not scheduled.
+    pub starts_at: Option<String>,
+    /// How long, in minutes; `None` when not known.
+    pub minutes: Option<u32>,
+    /// Who you meet ("Priya Shah, Senior Engineer"); may be empty.
+    pub with: String,
+    /// A meeting link or an address; may be empty.
+    pub place: String,
+    pub notes: String,
+    pub state: RoundState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum RoundKind {
+    RecruiterScreen,
+    HiringManager,
+    Technical,
+    TakeHome,
+    SystemDesign,
+    Behavioral,
+    Onsite,
+    Final,
+    Other,
+}
+
+/// A round's state: upcoming (scheduled or not; one whose end has passed is over, shown as such), or cancelled (when
+/// the application moved to Offer or Rejected, or by you).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum RoundState {
+    Upcoming,
+    Cancelled,
+}
+
+/// A round as the form sends it, and what reading an invite fills in (each field it could read): `id` `None` for a
+/// new round, or one removed that Undo brings back.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RoundDraft {
+    pub id: Option<String>,
+    pub kind: Option<RoundKind>,
+    pub starts_at: Option<String>,
+    pub minutes: Option<u32>,
+    pub with: String,
+    pub place: String,
+    pub notes: String,
+}
+
+/// An application's rounds after one was saved or removed, oldest scheduled first and the unscheduled after them, and
+/// the application as it now stands.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RoundsView {
+    pub rounds: Vec<Round>,
+    pub application: ApplicationRow,
+    /// The status it had, when saving its first upcoming round moved it to Interviewing (Undo sets it back).
+    pub moved_from: Option<AppStatus>,
+}
+
+/// After a status change: the applications as saved, and the upcoming rounds that moving to Offer or Rejected
+/// cancelled (Undo restores them).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StatusSet {
+    pub applications: Vec<ApplicationRow>,
+    pub cancelled: Vec<String>,
+}
+
+/// The resume an application sent, for the Interview tab's desk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SentView {
+    /// One SVG document per page.
+    pub pages: Vec<String>,
+    /// `sent`: the tailored resume as exported, rendered again; `pdf`: the exported PDF itself (applications exported
+    /// before the app kept what it sent).
+    pub from: SentFrom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum SentFrom {
+    Sent,
+    Pdf,
 }
 
 // ── The export folder ───────────────────────────────────────────────────────────────────────────────────────────
@@ -1311,6 +1418,8 @@ pub enum Stage {
     Importing,
     /// A free-form instruction turned into proposed edits.
     Instructing,
+    /// A pasted interview invite read into a round.
+    Inviting,
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ pub mod cover;
 pub mod extract;
 pub mod import;
 pub mod instruct;
+pub mod invite;
 pub mod rewrite;
 pub mod suggest;
 

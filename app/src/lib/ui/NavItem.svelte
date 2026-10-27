@@ -3,7 +3,8 @@
   as Recent jobs (regular weight). With `sub`, a second, meta-sized line under the label (a job's role), ending in an
   optional `status` (a dot in its tone, then its word), or `busy` in its place while a model call runs for it (its
   stage word, swept as `Thinking`'s); the lead centers on both lines and each line truncates on its own, the status
-  never. `trailing` draws a mark at the first line's end instead of `meta` (a job's fit `ScoreBar`).
+  never. An empty `sub` leaves the second line to the status alone, from its start. `trailing` draws a mark at the
+  first line's end instead of `meta` (a job's fit `ScoreBar`).
   States: hover wash, current (pressed wash, ink icon).
 -->
 <script lang="ts">
@@ -69,7 +70,7 @@
   </span>
   {#if sub != null}
     <span class="sub meta">
-      <span class="text">{sub}</span>
+      {#if sub}<span class="text">{sub}</span>{/if}
       {#if busy}
         <span class="status sweep">{busy}</span>
       {:else if status}

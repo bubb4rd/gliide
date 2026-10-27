@@ -38,10 +38,15 @@ import type { Place } from "./bindings/Place";
 import type { Progress } from "./bindings/Progress";
 import type { ReviewView } from "./bindings/ReviewView";
 import type { Rewritten } from "./bindings/Rewritten";
+import type { Round } from "./bindings/Round";
+import type { RoundDraft } from "./bindings/RoundDraft";
+import type { RoundsView } from "./bindings/RoundsView";
 import type { SalaryRange } from "./bindings/SalaryRange";
 import type { SearchCursor } from "./bindings/SearchCursor";
 import type { SearchResults } from "./bindings/SearchResults";
+import type { SentView } from "./bindings/SentView";
 import type { Settings } from "./bindings/Settings";
+import type { StatusSet } from "./bindings/StatusSet";
 import type { UpdateStatus } from "./bindings/UpdateStatus";
 
 export type * from "./bindings/Accepted";
@@ -109,6 +114,11 @@ export type * from "./bindings/Proposal";
 export type * from "./bindings/Progress";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
+export type * from "./bindings/Round";
+export type * from "./bindings/RoundDraft";
+export type * from "./bindings/RoundKind";
+export type * from "./bindings/RoundState";
+export type * from "./bindings/RoundsView";
 export type * from "./bindings/SalaryPeriod";
 export type * from "./bindings/SalaryRange";
 export type * from "./bindings/SameEntry";
@@ -116,10 +126,13 @@ export type * from "./bindings/ScoreView";
 export type * from "./bindings/SearchCursor";
 export type * from "./bindings/SearchResults";
 export type * from "./bindings/SectionRow";
+export type * from "./bindings/SentFrom";
+export type * from "./bindings/SentView";
 export type * from "./bindings/Settings";
 export type * from "./bindings/SkillChip";
 export type * from "./bindings/Skipped";
 export type * from "./bindings/Stage";
+export type * from "./bindings/StatusSet";
 export type * from "./bindings/Target";
 export type * from "./bindings/TemplateRow";
 export type * from "./bindings/Theme";
@@ -270,9 +283,28 @@ export const exportCover = (review: string) => invoke<Exported>("export_cover", 
 
 // ── Applications ──
 export const applications = () => invoke<ApplicationRow[]>("applications");
-/** Sets each application's status (all or none), rewriting applications.csv once. */
+/** Sets each application's status (all or none), rewriting applications.csv once. Moving to Offer or Rejected cancels
+ *  their upcoming rounds (`cancelled`; `restoreRounds` takes them back). */
 export const setStatus = (applications: string[], status: AppStatus) =>
-  invoke<ApplicationRow[]>("set_status", { applications, status });
+  invoke<StatusSet>("set_status", { applications, status });
+
+// ── Interviews ──
+/** An application's rounds: scheduled ones by when they start, then the unscheduled. */
+export const rounds = (application: string) => invoke<Round[]>("rounds", { application });
+/** Saves a round (a new one when `draft.id` is null). The first upcoming round of a Saved or Applied application
+ *  moves it to Interviewing (`movedFrom` says from what). */
+export const saveRound = (application: string, draft: RoundDraft) =>
+  invoke<RoundsView>("save_round", { application, draft });
+export const removeRound = (round: string) => invoke<RoundsView>("remove_round", { round });
+/** Rounds a status change cancelled, upcoming again. */
+export const restoreRounds = (rounds: string[]) => invoke<ApplicationRow[]>("restore_rounds", { rounds });
+/** One model call: a pasted invite read into a round's fields (each it could read). Emits `progress` (`inviting`). */
+export const readInvite = (application: string, text: string) =>
+  invoke<RoundDraft>("read_invite", { application, text });
+/** A calendar invite file (`.ics`) read into a round's fields; no model call. */
+export const readInviteFile = (path: string) => invoke<RoundDraft>("read_invite_file", { path });
+/** The resume the application sent: what it exported, rendered again, else the exported PDF. */
+export const sentResume = (application: string) => invoke<SentView>("sent_resume", { application });
 
 // ── Job feed (freehire) ──
 /** Every row but skipped and dismissed: fits first (best score first), then not fit, checking, waiting, new. */

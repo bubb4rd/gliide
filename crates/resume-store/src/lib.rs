@@ -1,5 +1,6 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
-//! cover letters, applications, company logos, the job feed and settings (ARCHITECTURE.md §8).
+//! cover letters, applications and their interview rounds, company logos, the job feed and settings (ARCHITECTURE.md
+//! §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -7,7 +8,7 @@
 
 mod csv;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -36,6 +37,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("logos.sql"),
     include_str!("places.sql"),
     include_str!("interviews.sql"),
+    include_str!("rounds.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -207,6 +209,53 @@ pub struct Application {
 pub struct StatusChange {
     pub status: AppStatus,
     pub at: String,
+}
+
+/// An application's interview round.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Round {
+    pub id: String,
+    pub application_id: String,
+    /// The app's name for its kind (`technical`, `recruiter-screen`, …).
+    pub kind: String,
+    /// When it starts, RFC 3339 with the offset it was given in; `None` while not scheduled.
+    pub starts_at: Option<String>,
+    /// Its length; `None` when not known (an hour, where its end matters).
+    pub minutes: Option<u32>,
+    pub with: String,
+    /// A meeting link or an address.
+    pub place: String,
+    pub notes: String,
+    pub state: RoundState,
+    /// Set by the store on every write (the one given is ignored).
+    pub updated_at: String,
+}
+
+/// A round's state: upcoming (scheduled or not; one whose end has passed is over), or cancelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RoundState {
+    Upcoming,
+    Cancelled,
+}
+
+impl RoundState {
+    /// The lowercase name, as stored.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Upcoming => "upcoming",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    /// The state named `name` (as [`RoundState::as_str`] writes it).
+    pub fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "upcoming" => Self::Upcoming,
+            "cancelled" => Self::Cancelled,
+            _ => return None,
+        })
+    }
 }
 
 /// An analysis's cover letter: its parts as last written or edited.
@@ -1114,6 +1163,157 @@ impl Store {
             .flatten())
     }
 
+    // Rounds.
+
+    /// The application's rounds: scheduled ones by when they start, then the unscheduled by when they were added.
+    pub fn rounds(&self, application_id: &str) -> Result<Vec<Round>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {ROUND_COLUMNS} FROM rounds WHERE application_id = ?1
+             ORDER BY starts_at IS NULL, julianday(starts_at), created_at, rowid"
+        ))?;
+        let rows = stmt
+            .query_map([application_id], RawRound::from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter().map(RawRound::parse).collect()
+    }
+
+    pub fn round(&self, id: &str) -> Result<Option<Round>, StoreError> {
+        round_by_id(&self.conn, id)
+    }
+
+    /// Inserts or updates the round by `r.id` (an id not stored is inserted, as when Undo brings back one removed);
+    /// sets its `updated_at`. Returns it as saved; errors when its application doesn't exist.
+    pub fn put_round(&self, r: &Round) -> Result<Round, StoreError> {
+        if stored_status(&self.conn, &r.application_id)?.is_none() {
+            return Err(not_found("application", &r.application_id));
+        }
+        self.conn.execute(
+            "INSERT INTO rounds (id, application_id, kind, starts_at, minutes, with_whom, place, notes, state,
+                 created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
+             ON CONFLICT (id) DO UPDATE SET application_id = excluded.application_id, kind = excluded.kind,
+                 starts_at = excluded.starts_at, minutes = excluded.minutes, with_whom = excluded.with_whom,
+                 place = excluded.place, notes = excluded.notes, state = excluded.state,
+                 updated_at = excluded.updated_at",
+            params![
+                r.id,
+                r.application_id,
+                r.kind,
+                r.starts_at,
+                r.minutes,
+                r.with,
+                r.place,
+                r.notes,
+                r.state.as_str(),
+                now()
+            ],
+        )?;
+        round_by_id(&self.conn, &r.id)?.ok_or_else(|| not_found("round", &r.id))
+    }
+
+    /// Deletes the round; returns it as it was, `None` when there was none.
+    pub fn delete_round(&self, id: &str) -> Result<Option<Round>, StoreError> {
+        let round = round_by_id(&self.conn, id)?;
+        if round.is_some() {
+            self.conn
+                .execute("DELETE FROM rounds WHERE id = ?1", [id])?;
+        }
+        Ok(round)
+    }
+
+    /// Sets every round in `ids` to `state`, in one transaction: an unknown id changes none of them. Returns the rounds
+    /// as saved, in `ids`' order.
+    pub fn set_round_state(
+        &self,
+        ids: &[&str],
+        state: RoundState,
+    ) -> Result<Vec<Round>, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let at = now();
+        for id in ids {
+            let changed = tx.execute(
+                "UPDATE rounds SET state = ?2, updated_at = ?3 WHERE id = ?1",
+                params![id, state.as_str(), at],
+            )?;
+            if changed == 0 {
+                return Err(not_found("round", id));
+            }
+        }
+        tx.commit()?;
+        ids.iter()
+            .map(|id| round_by_id(&self.conn, id)?.ok_or_else(|| not_found("round", id)))
+            .collect()
+    }
+
+    /// Cancels the applications' upcoming rounds that haven't ended (the unscheduled too; one that's over stays as it
+    /// is). Returns the ids cancelled.
+    pub fn cancel_upcoming_rounds(
+        &self,
+        application_ids: &[&str],
+    ) -> Result<Vec<String>, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let at = now();
+        let mut cancelled = Vec::new();
+        {
+            let mut stmt = tx.prepare(&format!(
+                "UPDATE rounds SET state = 'cancelled', updated_at = ?2
+                 WHERE application_id = ?1 AND state = 'upcoming' AND {NOT_ENDED} RETURNING id"
+            ))?;
+            for id in application_ids {
+                let ids = stmt
+                    .query_map(params![id, at], |r| r.get::<_, String>(0))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                cancelled.extend(ids);
+            }
+        }
+        tx.commit()?;
+        Ok(cancelled)
+    }
+
+    /// Each application's next round, by application id: the soonest upcoming one that is scheduled and hasn't ended
+    /// (its start plus its length, an hour when unknown, is after now).
+    pub fn next_rounds(&self) -> Result<HashMap<String, Round>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {ROUND_COLUMNS} FROM (
+                 SELECT *, ROW_NUMBER() OVER (
+                     PARTITION BY application_id ORDER BY julianday(starts_at), created_at, rowid
+                 ) AS n
+                 FROM rounds WHERE state = 'upcoming' AND starts_at IS NOT NULL AND {NOT_ENDED}
+             ) WHERE n = 1"
+        ))?;
+        let rows = stmt
+            .query_map([], RawRound::from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|raw| {
+                let r = raw.parse()?;
+                Ok((r.application_id.clone(), r))
+            })
+            .collect()
+    }
+
+    /// One application's next round, as [`Store::next_rounds`] finds it.
+    pub fn next_round(&self, application_id: &str) -> Result<Option<Round>, StoreError> {
+        let row = self
+            .conn
+            .query_row(
+                &format!(
+                    "SELECT {ROUND_COLUMNS} FROM rounds
+                     WHERE application_id = ?1 AND state = 'upcoming' AND starts_at IS NOT NULL AND {NOT_ENDED}
+                     ORDER BY julianday(starts_at), created_at, rowid LIMIT 1"
+                ),
+                [application_id],
+                RawRound::from_row,
+            )
+            .optional()?;
+        row.map(RawRound::parse).transpose()
+    }
+
+    /// The application the round belongs to.
+    pub fn application(&self, id: &str) -> Result<Option<Application>, StoreError> {
+        self.application_where("id = ?1", id)
+    }
+
     fn application_where(
         &self,
         clause: &str,
@@ -1291,6 +1491,11 @@ const ANALYSIS_COLUMNS: &str = "id, posting_id, bank_rev, master_id, master_rev,
 const APPLICATION_COLUMNS: &str = "id, posting_id, analysis_id, date, company, role, url, status, now, projected, \
                                    on_file, resume_path, cover_path, notes, updated_at";
 
+const ROUND_COLUMNS: &str =
+    "id, application_id, kind, starts_at, minutes, with_whom, place, notes, state, updated_at";
+/// A round that hasn't ended: unscheduled, or its end (start plus its length, an hour when unknown) after now.
+const NOT_ENDED: &str = "(starts_at IS NULL OR julianday(starts_at) + COALESCE(minutes, 60) / 1440.0 > julianday('now'))";
+
 struct RawPosting {
     id: String,
     json: String,
@@ -1412,6 +1617,47 @@ impl RawFeed {
             created_at: self.created_at,
         })
     }
+}
+
+struct RawRound {
+    r: Round,
+    state: String,
+}
+
+impl RawRound {
+    fn from_row(r: &Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            r: Round {
+                id: r.get(0)?,
+                application_id: r.get(1)?,
+                kind: r.get(2)?,
+                starts_at: r.get(3)?,
+                minutes: r.get(4)?,
+                with: r.get(5)?,
+                place: r.get(6)?,
+                notes: r.get(7)?,
+                state: RoundState::Upcoming,
+                updated_at: r.get(9)?,
+            },
+            state: r.get(8)?,
+        })
+    }
+
+    fn parse(self) -> Result<Round, StoreError> {
+        let state = serde_json::from_value(serde_json::Value::String(self.state))?;
+        Ok(Round { state, ..self.r })
+    }
+}
+
+fn round_by_id(conn: &Connection, id: &str) -> Result<Option<Round>, StoreError> {
+    let row = conn
+        .query_row(
+            &format!("SELECT {ROUND_COLUMNS} FROM rounds WHERE id = ?1"),
+            [id],
+            RawRound::from_row,
+        )
+        .optional()?;
+    row.map(RawRound::parse).transpose()
 }
 
 struct RawApplication {

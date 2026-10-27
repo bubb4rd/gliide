@@ -10,13 +10,14 @@ use crate::dto::{
     Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
     Decision, EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView,
     FeedView, FolderPdf, FolderView, ImportChoices, ImportView, Instructed, JobRow, JobView,
-    KeyDecision, Library, LogoRow, LogoSource, Mode, Place, Progress, ReviewView, Rewritten,
-    SalaryRange, SearchCursor, SearchResults, Settings, UpdateStatus,
+    KeyDecision, Library, LogoRow, LogoSource, Mode, Place, Progress, ReviewView, Rewritten, Round,
+    RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
+    StatusSet, UpdateStatus,
 };
 use crate::state::{App, blocking};
 use crate::{
-    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place,
-    review, settings, update,
+    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place, review,
+    rounds, settings, update,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -331,11 +332,51 @@ pub async fn set_status(
     app: St<'_>,
     applications: Vec<String>,
     status: AppStatus,
-) -> Res<Vec<ApplicationRow>> {
+) -> Res<StatusSet> {
     blocking(&app, move |app| {
         export::set_status(app, &applications, status)
     })
     .await
+}
+
+// ── Interviews ──
+
+#[tauri::command]
+pub async fn rounds(app: St<'_>, application: String) -> Res<Vec<Round>> {
+    blocking(&app, move |app| rounds::rounds(app, &application)).await
+}
+
+#[tauri::command]
+pub async fn save_round(app: St<'_>, application: String, draft: RoundDraft) -> Res<RoundsView> {
+    blocking(&app, move |app| {
+        rounds::save_round(app, &application, draft)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn remove_round(app: St<'_>, round: String) -> Res<RoundsView> {
+    blocking(&app, move |app| rounds::remove_round(app, &round)).await
+}
+
+#[tauri::command]
+pub async fn restore_rounds(app: St<'_>, rounds: Vec<String>) -> Res<Vec<ApplicationRow>> {
+    blocking(&app, move |app| crate::rounds::restore_rounds(app, &rounds)).await
+}
+
+#[tauri::command]
+pub async fn read_invite(app: St<'_>, application: String, text: String) -> Res<RoundDraft> {
+    rounds::read_invite(&app, &application, text).await
+}
+
+#[tauri::command]
+pub async fn read_invite_file(app: St<'_>, path: String) -> Res<RoundDraft> {
+    blocking(&app, move |_| rounds::read_invite_file(&path)).await
+}
+
+#[tauri::command]
+pub async fn sent_resume(app: St<'_>, application: String) -> Res<SentView> {
+    blocking(&app, move |app| rounds::sent_resume(app, &application)).await
 }
 
 // ── Company logos ──

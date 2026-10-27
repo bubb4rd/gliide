@@ -11,12 +11,14 @@ pub mod error;
 pub mod export;
 pub mod feed;
 pub mod folder;
+mod ics;
 pub mod import;
 pub mod jobs;
 pub mod library;
 pub mod logo;
 pub mod place;
 pub mod review;
+pub mod rounds;
 pub mod settings;
 pub mod state;
 pub mod update;
@@ -116,6 +118,13 @@ pub fn run() {
             commands::export_pdf,
             commands::applications,
             commands::set_status,
+            commands::rounds,
+            commands::save_round,
+            commands::remove_round,
+            commands::restore_rounds,
+            commands::read_invite,
+            commands::read_invite_file,
+            commands::sent_resume,
             commands::logos,
             commands::set_logo,
             commands::remove_logo,

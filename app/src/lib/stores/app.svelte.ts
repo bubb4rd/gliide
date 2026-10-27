@@ -18,6 +18,7 @@ import {
   models as servedModels,
   onProgress,
   onUpdate,
+  restoreRounds,
   running,
   setSettings,
   setStatus as saveStatus,
@@ -117,8 +118,8 @@ class AppStore {
 
   /**
    * Sets the applications' status at once, here and on their postings (the sidebar's Recent), and saves them in one
-   * call (rewriting applications.csv); puts each back, with the error in a toast, if the save fails. Resolves whether
-   * it saved.
+   * call (rewriting applications.csv); puts each back, with the error in a toast, if the save fails. Moving to Offer or
+   * Rejected cancels their upcoming rounds; a toast says so, with Undo. Resolves whether it saved.
    */
   async setStatus(rows: ApplicationRow[], status: AppStatus): Promise<boolean> {
     if (!rows.length) return true;
@@ -133,14 +134,38 @@ class AppStore {
     };
     put(() => status);
     try {
-      const saved = new Map((await saveStatus([...before.keys()], status)).map((a) => [a.id, a]));
-      this.applications = this.applications.map((a) => saved.get(a.id) ?? a);
+      const set = await saveStatus([...before.keys()], status);
+      this.#putApplications(set.applications);
+      if (set.cancelled.length) {
+        const n = set.cancelled.length;
+        toast(n === 1 ? "Cancelled the upcoming round" : `Cancelled ${n} upcoming rounds`, {
+          action: {
+            label: "Undo",
+            run: async () => {
+              const rows = await attempt("rounds", () => restoreRounds(set.cancelled));
+              if (rows) this.#putApplications(rows);
+            },
+          },
+        });
+      }
       return true;
     } catch (e) {
       put((id) => before.get(id) ?? status);
       toast(appError(e).message, { tone: "danger" });
       return false;
     }
+  }
+
+  /** Puts these applications, as saved, in place of the ones with their ids. */
+  putApplications(rows: ApplicationRow[]) {
+    this.#putApplications(rows);
+    const status = new Map(rows.flatMap((r) => (r.job ? [[r.job, r.status] as const] : [])));
+    this.jobs = this.jobs.map((j) => (status.has(j.id) ? { ...j, status: status.get(j.id) ?? j.status } : j));
+  }
+
+  #putApplications(rows: ApplicationRow[]) {
+    const saved = new Map(rows.map((a) => [a.id, a]));
+    this.applications = this.applications.map((a) => saved.get(a.id) ?? a);
   }
 
   async refreshLogos() {

@@ -7,8 +7,8 @@ use resume_core::salary::{Period, Salary};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, FeedState, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Rev,
-    StatusChange, Store, StoreError, applications_csv, parse_ats_fit_csv,
+    AppStatus, Application, FeedState, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Rev, Round,
+    RoundState, StatusChange, Store, StoreError, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -646,7 +646,7 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent;
+        "DROP TABLE rounds; DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
          ALTER TABLE postings DROP COLUMN salary; PRAGMA user_version = 1;",
     )
@@ -695,7 +695,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 8);
+    assert_eq!(version, 9);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -804,7 +804,7 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent;
+        "DROP TABLE rounds; DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
     )
     .unwrap();
@@ -832,7 +832,7 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent; PRAGMA user_version = 7;",
+        "DROP TABLE rounds; DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent; PRAGMA user_version = 7;",
     )
     .unwrap();
     drop(conn);
@@ -846,6 +846,218 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     assert_eq!(store.status_history("a").unwrap().len(), 1);
     drop(store);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn round(id: &str, application: &str, starts_at: Option<&str>) -> Round {
+    Round {
+        id: id.into(),
+        application_id: application.into(),
+        kind: "technical".into(),
+        starts_at: starts_at.map(Into::into),
+        minutes: Some(45),
+        with: "Priya Shah".into(),
+        place: "https://zoom.us/j/1".into(),
+        notes: String::new(),
+        state: RoundState::Upcoming,
+        updated_at: String::new(),
+    }
+}
+
+#[test]
+fn rounds_list_scheduled_first_and_upsert_by_id() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    // Offsets differ: the order is by the instant, not the text.
+    store
+        .put_round(&round("late", "a", Some("2026-11-03T14:00:00-05:00")))
+        .unwrap();
+    store
+        .put_round(&round("early", "a", Some("2026-11-03T18:00:00+01:00")))
+        .unwrap();
+    store.put_round(&round("open", "a", None)).unwrap();
+    let ids =
+        |s: &Store| -> Vec<String> { s.rounds("a").unwrap().into_iter().map(|r| r.id).collect() };
+    assert_eq!(ids(&store), ["early", "late", "open"]);
+
+    let saved = store
+        .put_round(&Round {
+            minutes: None,
+            with: String::new(),
+            ..round("open", "a", Some("2026-11-01T09:00:00Z"))
+        })
+        .unwrap();
+    assert_eq!((saved.minutes, saved.with.as_str()), (None, ""));
+    assert!(!saved.updated_at.is_empty());
+    assert_eq!(ids(&store), ["open", "early", "late"]);
+
+    let removed = store.delete_round("late").unwrap().unwrap();
+    assert_eq!(store.delete_round("late").unwrap(), None);
+    assert_eq!(ids(&store), ["open", "early"]);
+    // Undo: the same id saved again comes back.
+    store.put_round(&removed).unwrap();
+    assert_eq!(ids(&store), ["open", "early", "late"]);
+
+    assert!(matches!(
+        store.put_round(&round("x", "nope", None)),
+        Err(StoreError::NotFound {
+            what: "application",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn cancelling_takes_only_rounds_not_over_and_restores_by_id() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    store
+        .put_application(&app("b", "2026-10-02", "Globex"))
+        .unwrap();
+    store
+        .put_round(&round("past", "a", Some("2001-01-01T09:00:00Z")))
+        .unwrap();
+    store
+        .put_round(&round("soon", "a", Some("2999-01-01T09:00:00Z")))
+        .unwrap();
+    store.put_round(&round("open", "a", None)).unwrap();
+    store
+        .put_round(&round("other", "b", Some("2999-01-01T09:00:00Z")))
+        .unwrap();
+
+    let mut cancelled = store.cancel_upcoming_rounds(&["a"]).unwrap();
+    cancelled.sort();
+    assert_eq!(cancelled, ["open", "soon"]);
+    assert_eq!(
+        store.round("past").unwrap().unwrap().state,
+        RoundState::Upcoming
+    );
+    assert_eq!(
+        store.round("other").unwrap().unwrap().state,
+        RoundState::Upcoming
+    );
+    assert!(store.cancel_upcoming_rounds(&["a"]).unwrap().is_empty());
+
+    let restored = store
+        .set_round_state(&["soon", "open"], RoundState::Upcoming)
+        .unwrap();
+    assert_eq!(
+        restored
+            .iter()
+            .map(|r| (r.id.as_str(), r.state))
+            .collect::<Vec<_>>(),
+        [
+            ("soon", RoundState::Upcoming),
+            ("open", RoundState::Upcoming)
+        ]
+    );
+    // An unknown id changes none of them.
+    assert!(
+        store
+            .set_round_state(&["soon", "gone"], RoundState::Cancelled)
+            .is_err()
+    );
+    assert_eq!(
+        store.round("soon").unwrap().unwrap().state,
+        RoundState::Upcoming
+    );
+}
+
+#[test]
+fn next_rounds_are_the_soonest_scheduled_not_ended() {
+    let store = Store::open_in_memory().unwrap();
+    for id in ["a", "b", "c"] {
+        store.put_application(&app(id, "2026-10-01", id)).unwrap();
+    }
+    store
+        .put_round(&round("a-past", "a", Some("2001-01-01T09:00:00Z")))
+        .unwrap();
+    store
+        .put_round(&round("a-later", "a", Some("2999-03-01T09:00:00Z")))
+        .unwrap();
+    store
+        .put_round(&round("a-next", "a", Some("2999-01-01T09:00:00+09:00")))
+        .unwrap();
+    store.put_round(&round("a-open", "a", None)).unwrap();
+    store
+        .put_round(&Round {
+            state: RoundState::Cancelled,
+            ..round("b-cancelled", "b", Some("2999-01-01T09:00:00Z"))
+        })
+        .unwrap();
+    store.put_round(&round("c-open", "c", None)).unwrap();
+
+    let next = store.next_rounds().unwrap();
+    assert_eq!(next.len(), 1);
+    assert_eq!(next["a"].id, "a-next");
+    assert_eq!(store.next_round("a").unwrap().unwrap().id, "a-next");
+    assert_eq!(store.next_round("b").unwrap(), None);
+
+    // A round under way (started a minute ago, an hour long when its length isn't known) is next until it ends.
+    let started = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 60;
+    store
+        .put_round(&Round {
+            minutes: None,
+            ..round("c-now", "c", Some(&rfc3339_secs(started)))
+        })
+        .unwrap();
+    assert_eq!(store.next_rounds().unwrap()["c"].id, "c-now");
+}
+
+/// RFC 3339 UTC for seconds since the Unix epoch (Howard Hinnant's civil-from-days).
+fn rfc3339_secs(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let day_secs = secs % 86_400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        day_secs / 3600,
+        day_secs / 60 % 60,
+        day_secs % 60
+    )
+}
+
+/// Applications from before rounds (schema version 8) open with none and take new ones.
+#[test]
+fn migrating_to_rounds_keeps_the_applications() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v8-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    Store::open(&path)
+        .unwrap()
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("DROP TABLE rounds; PRAGMA user_version = 8;")
+        .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.applications().unwrap()[0].company, "Acme");
+    assert!(store.rounds("a").unwrap().is_empty());
+    store.put_round(&round("r", "a", None)).unwrap();
+    assert_eq!(store.rounds("a").unwrap().len(), 1);
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 9);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

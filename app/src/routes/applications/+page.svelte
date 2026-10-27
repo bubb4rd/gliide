@@ -1,9 +1,10 @@
 <!--
   Applications: every posting, newest first. A posting you sent a resume for (exported here, or imported from ATS
-  Fit's applications.csv) shows its scores, file, posting link and status; the status menu saves at once and rewrites
-  applications.csv. A posting not sent yet shows "Not sent", its fit score and the day it was added; its trash (shown on
-  hover or focus) deletes it, with Undo in the toast. V (or ⌘V) reads the clipboard: a link or the posting's text
-  becomes a posting, and its review opens.
+  Fit's applications.csv) shows its scores, file, posting link, status and next round; the status menu saves at once
+  and rewrites applications.csv (a move to Interviewing with no round yet offers to add the interview). A posting not
+  sent yet shows "Not sent", its fit score and the day it was added; its trash (shown on hover or focus) deletes it,
+  with Undo in the toast. V (or ⌘V) reads the clipboard: a link or the posting's text becomes a posting, and its review
+  opens.
 
   Above the table: a filter on company or role (/ or ⌘F focuses it, Esc clears it) and a status filter. A column
   header sorts by its column; a second click reverses it. Filters and sort stay as you left them when you come back
@@ -28,18 +29,27 @@
 
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { appError, type AppStatus as Status, type ApplicationRow, type JobRow, type SalaryRange } from "$lib/api";
+  import {
+    appError,
+    type AppStatus as Status,
+    type ApplicationRow,
+    type JobRow,
+    type Round,
+    type SalaryRange,
+  } from "$lib/api";
   import { applicationFit, scoreFit, type Fit } from "$lib/fit";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
   import { app } from "$lib/stores/app.svelte";
   import { perYear, salaryText } from "$lib/salary";
   import { STATUS, STATUS_OPTIONS, STATUS_ORDER } from "$lib/status";
+  import { roundLine, when } from "$lib/rounds";
   import {
     Badge,
     Button,
@@ -89,6 +99,8 @@
       width: "148px",
       sortBy: (r) => (r.application ? STATUS_ORDER.indexOf(r.application.status) + 1 : 0),
     },
+    // The next round, by when it starts: soonest first.
+    { key: "next", label: "Next", width: "148px", sortBy: (r) => r.next?.at },
     {
       key: "resume",
       label: "Resume",
@@ -98,6 +110,8 @@
     { key: "link", label: "Link", align: "end", width: "68px" },
     { key: "delete", label: "", align: "end", width: "64px" },
   ];
+  /** The table's width (px) under which Resume gives its room to Job, which would otherwise shrink to its mark. */
+  const RESUME_FROM = 1260;
 
   /** One row: an application, or a posting without one yet (`posting`). */
   interface Row {
@@ -116,6 +130,8 @@
     salary: SalaryRange | null;
     /** The scores the Fit bar draws; none before a posting's requirements are read. */
     fit: Fit | null;
+    /** An application's next round: when it starts (ms, to sort by), in words, and its kind with it for the tooltip. */
+    next: { at: number; when: string; line: string } | null;
   }
 
   let loaded = $state(false);
@@ -123,6 +139,11 @@
   /** The checked rows' keys (applications only). */
   let picked = $state(new Set<string>());
   let statusOpen = $state(false);
+  /** The table's width, once laid out. */
+  let tableWidth = $state(0);
+  const columns = $derived(
+    tableWidth && tableWidth < RESUME_FROM ? COLUMNS.filter((c) => c.key !== "resume") : COLUMNS,
+  );
 
   onMount(async () => {
     await Promise.all([app.refreshApplications(), app.refreshJobs(), app.settings ? null : app.loadSettings()]);
@@ -160,8 +181,13 @@
   );
 
   const jobsById = $derived(new Map(app.jobs.map((j) => [j.id, j])));
-  const rows = $derived<Row[]>(
-    [
+  const rows = $derived.by<Row[]>(() => {
+    const now = new Date();
+    const next = (round: Round | null): Row["next"] =>
+      round?.startsAt
+        ? { at: new Date(round.startsAt).getTime(), when: when(round.startsAt, now), line: roundLine(round, now) }
+        : null;
+    return [
       ...app.applications.map(
         (a): Row => ({
           key: `application-${a.id}`,
@@ -175,6 +201,7 @@
           posting: null,
           salary: (a.job && jobsById.get(a.job)?.salary) || null,
           fit: applicationFit(a),
+          next: next(a.nextRound),
         }),
       ),
       ...app.unsent.map(
@@ -190,10 +217,11 @@
           posting: j,
           salary: j.salary,
           fit: scoreFit(j.score),
+          next: null,
         }),
       ),
-    ].sort((a, b) => b.date.localeCompare(a.date)),
-  );
+    ].sort((a, b) => b.date.localeCompare(a.date));
+  });
   const terms = $derived(view.query.toLocaleLowerCase().split(/\s+/).filter(Boolean));
   const filtered = $derived(terms.length > 0 || view.show !== "all");
   const shown = $derived(
@@ -233,6 +261,27 @@
     if (!rows.length || !(await app.setStatus(rows, status))) return;
     toast(`${applicationsText(rows.length)} set to ${STATUS[status].label}`, {
       action: { label: "Undo", run: () => restore(rows) },
+    });
+    offerRound(rows, status);
+  }
+
+  /** Sets one application's status from its menu. */
+  async function setOne(application: ApplicationRow, status: Status) {
+    const moved = application.status !== status;
+    if ((await app.setStatus([application], status)) && moved) offerRound([application], status);
+  }
+
+  /**
+   * After a move to Interviewing: when exactly one of the applications moved has a job and no round yet, the toast
+   * offers to add the interview (its job opens on the Interview tab with the form open). Several: no toast.
+   */
+  function offerRound(rows: ApplicationRow[], status: Status) {
+    if (status !== "interviewing") return;
+    const due = rows.filter((a) => a.job && !a.nextRound);
+    const job = due.length === 1 ? due[0].job : null;
+    if (!job) return;
+    toast("Moved to Interviewing", {
+      action: { label: "Add the interview", run: () => goto(`/jobs/${job}?add=round`) },
     });
   }
 
@@ -315,9 +364,9 @@
     {/if}
   </div>
   {#if shown.length}
-    <div class="table">
+    <div class="table" bind:clientWidth={tableWidth}>
       <Table
-        columns={COLUMNS}
+        {columns}
         rows={shown}
         bind:sort={view.sort}
         key={(r) => r.key}
@@ -361,12 +410,16 @@
                 label="Status for {row.company}"
                 variant="ghost"
                 size="sm"
-                onchange={(s) => app.setStatus([application], s)}
+                onchange={(s) => setOne(application, s)}
               >
                 {#snippet trigger(current)}<Badge tone={STATUS[application.status].tone}>{current?.label}</Badge>{/snippet}
               </Menu>
             {:else}
               <span class="unsent"><Badge>Not sent</Badge></span>
+            {/if}
+          {:else if column.key === "next"}
+            {#if row.next}
+              <span class="num" {@attach tip(row.next.line)}>{row.next.when}</span>
             {/if}
           {:else if column.key === "resume"}
             {#if row.application?.resume}

@@ -1,0 +1,11 @@
+You read an interview invite the candidate pasted (an email, a calendar notice, a scheduling message) into the fields of one interview round. <invite> is the text as pasted. <today> is the candidate's date, weekday, UTC offset and time zone now. <job> is the company and role the candidate applied for.
+
+Rules
+- Copy only what the invite says. Never invent or guess a field: when the invite doesn't state it, `kind`, `starts_at` and `minutes` are null and the text fields are "".
+- Never invent a time. `starts_at` needs both a date and a time of day in the invite; a date alone, a time alone, a range of days to pick from, or a "please send your availability" is null. When the invite offers several slots and names none as chosen, null.
+- `starts_at`: RFC 3339 with seconds and an offset (`2026-11-03T14:00:00-05:00`). Resolve relative dates ("tomorrow", "next Tuesday", "Thursday the 5th") against <today>. When the invite names a time zone (ET, PST, CET, GMT+1, "London time", a city), keep that zone's offset on that date (daylight saving included); don't convert to the candidate's. When it names none, use the candidate's offset from <today>.
+- `minutes`: the length when the invite states it ("45 minutes", "1 hour", "2:00–2:45 PM"); null otherwise.
+- `kind`: the round the invite describes: `recruiter-screen` (recruiter, talent or phone screen, intro call), `hiring-manager` (with the hiring manager), `technical` (technical or coding interview, pair programming, live coding), `take-home` (an assignment done on your own), `system-design`, `behavioral`, `onsite` (on-site or a virtual onsite loop), `final` (named the final round), `other` (an interview of another kind). Null when the text isn't about an interview round.
+- `with`: who the candidate meets, as the invite names them, with their title when given ("Priya Shah, Senior Engineer"); several people joined with ", ". Not the sender, unless the sender is the interviewer.
+- `place`: the meeting link (Zoom, Google Meet, Teams, a phone number to call) or the street address, exactly as written; the link when both are given for a video call. "" when none.
+- `notes`: what to prepare or bring, only when the invite says (topics, "bring your laptop", "a shared CoderPad"), in one or two short plain sentences. "" when it says nothing of the kind. No greetings, no logistics already in the other fields.

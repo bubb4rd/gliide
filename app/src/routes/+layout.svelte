@@ -25,6 +25,7 @@
   import { shell } from "$lib/stores/shell.svelte";
   import { jobFit } from "$lib/fit";
   import { STATUS } from "$lib/status";
+  import { when } from "$lib/rounds";
   import { AgentMark, CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
 
   let { children }: { children: Snippet } = $props();
@@ -39,7 +40,29 @@
     revising: "Rewriting…",
     importing: "Importing…",
     instructing: "Working…",
+    inviting: "Reading…",
   };
+
+  /**
+   * Each job's next round, as its row in Recent says it, by job id: "Tue 2 PM" within the week, else the day alone
+   * ("Nov 5"), so the status keeps to the line.
+   */
+  const nextRounds = $derived.by(() => {
+    const now = new Date();
+    const today = new Date(now).setHours(0, 0, 0, 0);
+    const by = new Map<string, string>();
+    for (const a of app.applications) {
+      const startsAt = a.nextRound?.startsAt;
+      if (!a.job || !startsAt) continue;
+      const start = new Date(startsAt);
+      const days = Math.round((new Date(start).setHours(0, 0, 0, 0) - today) / 86_400_000);
+      by.set(
+        a.job,
+        days < 7 ? when(startsAt, now, true) : start.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      );
+    }
+    return by;
+  });
 
   /** Settings and the library are in: the first screen can draw. */
   let ready = $state(false);
@@ -131,16 +154,22 @@
           <h2 class="label" id="recent-label">Recent</h2>
           <Nav label="Recent jobs">
             {#each app.jobs.slice(0, RECENT) as job (job.id)}
-              {@const status = job.status ? STATUS[job.status] : null}
+              {@const round = nextRounds.get(job.id)}
+              {@const status = job.status
+                ? round
+                  ? { ...STATUS[job.status], label: `${STATUS[job.status].label} · ${round}` }
+                  : STATUS[job.status]
+                : null}
               {@const fit = jobFit(job, app.applications)}
               {@const call = app.calls.find((c) => c.job === job.id)}
               {@const busy = call ? BUSY[call.stage] : null}
               {@const word = busy ?? status?.label}
+              <!-- A status with a time leaves the role too little room at 232px: it takes the line alone. -->
               <NavItem
                 href="/jobs/{job.id}"
                 quiet
                 current={path === `/jobs/${job.id}`}
-                sub={job.role}
+                sub={round && !busy ? "" : job.role}
                 {status}
                 {busy}
                 {@attach tip(`${job.company} · ${job.role}${word ? ` · ${word}` : ""}`)}

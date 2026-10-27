@@ -1,13 +1,16 @@
 <!--
   One job: its requirements (Extract), then the review (Suggest, then the fit check on every edit). On the resume tab
-  the column is the chat with the tailoring agent (`Chat`); on the cover letter tab, the job header over the letter.
-  The desk shows the pages live, under the job's map when the posting names a place.
+  the column is the chat with the tailoring agent (`Chat`); on the cover letter tab, the job header over the letter;
+  once the posting is applied to, the Interview tab holds its rounds (`Interview`) over the resume you sent. The desk
+  shows the pages live, under the job's map when the posting names a place.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
   import Banknote from "@lucide/svelte/icons/banknote";
+  import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
@@ -16,7 +19,15 @@
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { appError, places as findPlaces, setSalary, type Place, type SalaryRange } from "$lib/api";
+  import {
+    appError,
+    places as findPlaces,
+    sentResume,
+    setSalary,
+    type Place,
+    type SalaryRange,
+    type SentView,
+  } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { logo } from "$lib/logo.svelte";
   import { salaryText } from "$lib/salary";
@@ -44,6 +55,7 @@
     WorkingRing,
   } from "$lib/ui";
   import Chat from "./Chat.svelte";
+  import Interview from "./Interview.svelte";
   import SalaryEdit from "./SalaryEdit.svelte";
   import Letter from "./Letter.svelte";
   import { sessionFor } from "./session.svelte";
@@ -77,6 +89,7 @@
     revising: "Rewriting the paragraph…",
     importing: "Copying your resume…",
     instructing: "Working on your request…",
+    inviting: "Reading the invite…",
   } as const;
   /** A finished stage in the status's trail. */
   const DONE = {
@@ -87,6 +100,7 @@
     revising: "Rewrote the paragraph",
     importing: "Copied your resume",
     instructing: "Worked on your request",
+    inviting: "Read the invite",
   } as const;
   const TABS: { value: Tab; label: string }[] = [
     { value: "resume", label: "Resume" },
@@ -122,11 +136,23 @@
   let pane = $state<"changes" | "preview">("changes");
 
   // ── Resume | Cover letter ──
-  type Tab = "resume" | "cover";
+  type Tab = "resume" | "cover" | "interview";
   let tab = $state<Tab>("resume");
   const onCover = $derived(tab === "cover" && review !== null);
+  /** The Interview tab shows once the posting is applied to, whatever comes after (not while Saved). */
+  const interviewable = $derived(
+    application !== undefined && ["applied", "interviewing", "offer", "rejected"].includes(application.status),
+  );
+  const onInterview = $derived(tab === "interview" && interviewable);
+  const tabs = $derived(
+    interviewable ? [...TABS, { value: "interview" as const, label: "Interview" }] : review ? TABS : [],
+  );
+  /** Open the Interview tab's add form (the status just moved to Interviewing, or `?add=round`). */
+  let addRound = $state(false);
   /** The column is the chat: on the resume tab, once there's a review to talk about. */
-  const chatting = $derived(!onCover && review !== null && (s.phase === "ready" || s.phase === "suggesting"));
+  const chatting = $derived(
+    !onCover && !onInterview && review !== null && (s.phase === "ready" || s.phase === "suggesting"),
+  );
   const letter = $derived(s.cover && s.cover.review === review?.id ? s.cover : null);
   const letterFits = $derived(letter ? letter.pageCount <= 1 : true);
   /**
@@ -151,9 +177,45 @@
     void s.loadCover();
   });
 
+  /** The next tab, in order, among those shown (`Tab`). */
   function switchTab() {
-    if (review) tab = tab === "resume" ? "cover" : "resume";
+    if (!tabs.length) return;
+    const at = tabs.findIndex((t) => t.value === tab);
+    tab = tabs[(at + 1) % tabs.length].value;
   }
+  const nextTab = $derived(tabs[(tabs.findIndex((t) => t.value === tab) + 1) % Math.max(tabs.length, 1)]?.label ?? "");
+
+  // An Interviewing posting opens on its Interview tab; `?add=round` opens the add form there too. Moving it to
+  // Interviewing here, with no round to come, goes there and opens the form.
+  let opened = false;
+  let lastStatus: string | null = null;
+  $effect(() => {
+    if (!application) return;
+    const was = lastStatus;
+    lastStatus = application.status;
+    if (!opened) {
+      opened = true;
+      const add = page.url.searchParams.get("add") === "round";
+      if (application.status === "interviewing" || (add && interviewable)) tab = "interview";
+      if (add && interviewable) addRound = true;
+    } else if (was !== null && was !== "interviewing" && application.status === "interviewing") {
+      tab = "interview";
+      if (!application.nextRound) addRound = true;
+    }
+    if (tab === "interview" && !interviewable) tab = "resume";
+  });
+
+  // The resume the application sent, for the Interview tab's desk.
+  let sent = $state<SentView | null>(null);
+  let sentFor: string | null = null;
+  $effect(() => {
+    const id = application?.id;
+    if (!onInterview || !id || sentFor === id) return;
+    sentFor = id;
+    sentResume(id)
+      .then((v) => sentFor === id && (sent = v))
+      .catch(() => (sent = null));
+  });
 
   function writeLetter() {
     if (ready && s.drafting === null) void s.writeCover();
@@ -283,7 +345,12 @@
     { keys: [], label: "Salary range", run: openSalary, disabled: !row },
     { keys: [], label: "Open in Maps", run: openMap, disabled: !places.length },
     { keys: ["⌘⌫"], label: "Delete posting", run: () => void removeJob(), disabled: !row },
-    { keys: ["Tab"], label: "Cover letter", run: switchTab, disabled: !review },
+    { keys: ["Tab"], label: nextTab, run: switchTab, disabled: tabs.length < 2 },
+  ]);
+  /** The Interview tab's commands that the review owns; the tab lists its own before them. */
+  const INTERVIEW_KEYS: KeyCommand[] = $derived([
+    { keys: ["⌘⌫"], label: "Delete posting", run: () => void removeJob(), disabled: !row },
+    { keys: ["Tab"], label: nextTab, run: switchTab, disabled: tabs.length < 2 },
   ]);
   /** The letter tab's commands that the review owns; the letter lists its own rows' commands before them. */
   const LETTER_KEYS: KeyCommand[] = $derived([
@@ -302,7 +369,7 @@
     { keys: ["$"], label: "Salary range", run: openSalary, disabled: !row },
     { keys: [], label: "Mark applied", run: markApplied, disabled: application?.status !== "saved" },
     { keys: ["M"], label: "Open in Maps", run: openMap, disabled: !places.length },
-    { keys: ["Tab"], label: "Resume", run: switchTab },
+    { keys: ["Tab"], label: nextTab, run: switchTab, disabled: tabs.length < 2 },
   ]);
 
   // ── Keys ──
@@ -314,7 +381,7 @@
   $effect(() =>
     bindKeys({
       Tab: (e) => {
-        if (interactive(e.target) || !review) return false;
+        if (interactive(e.target) || tabs.length < 2) return false;
         switchTab();
       },
       e: () => (onCover ? void exportLetter() : false),
@@ -322,11 +389,11 @@
       $: () => (onCover ? openSalary() : false),
       m: () => (onCover ? openMap() : false),
       "mod+z": (e) => {
-        if (interactive(e.target) || onCover) return false;
+        if (interactive(e.target) || onCover || onInterview) return false;
         void s.undo();
       },
       "shift+mod+z": (e) => {
-        if (interactive(e.target) || onCover) return false;
+        if (interactive(e.target) || onCover || onInterview) return false;
         void s.redo();
       },
       // In a field, ⌘⌫ deletes the line instead.
@@ -369,8 +436,8 @@
     {/if}
   {/snippet}
   <!-- What you're working on (the document, and its master or a rewrite), then a divider, then export and delete. -->
-  {#if review}
-    <Segmented options={TABS} bind:value={tab} label="Document" />
+  {#if tabs.length}
+    <Segmented options={tabs} bind:value={tab} label="Document" />
   {/if}
   {#if onCover}
     {#if letter?.letter}
@@ -378,7 +445,7 @@
         >Rewrite letter</Button
       >
     {/if}
-  {:else if masters.length}
+  {:else if masters.length && !onInterview}
     <Menu
       value={s.master ?? ""}
       options={masters}
@@ -388,7 +455,7 @@
       onchange={chooseMaster}
     />
   {/if}
-  {#if review || masters.length}<hr />{/if}
+  {#if tabs.length || masters.length}<hr />{/if}
   {#if onCover}
     <Button
       variant="primary"
@@ -397,6 +464,8 @@
       disabled={!ready || !letter?.letter || s.drafting !== null}
       onclick={exportLetter}>Export letter</Button
     >
+  {:else if onInterview}
+    <Button variant="primary" icon={CalendarPlus} kbd="A" onclick={() => (addRound = true)}>Add interview</Button>
   {:else}
     <Button variant="primary" icon={Download} disabled={!ready} onclick={exportNow}>Export</Button>
   {/if}
@@ -413,7 +482,7 @@
 
 <div class={["split", shell.compact && "split--compact"]}>
   <div
-    class={["column", chatting && "column--chat", working && "column--working"]}
+    class={["column", (chatting || onInterview) && "column--chat", working && "column--working"]}
     hidden={shell.compact && pane === "preview"}
   >
     {#if shell.compact}
@@ -429,6 +498,17 @@
       </div>
     {/if}
 
+    {#if onInterview && application}
+      <Interview
+        {job}
+        {application}
+        company={head?.company || application.company}
+        role={head?.role || application.role}
+        {logoSrc}
+        keys={INTERVIEW_KEYS}
+        bind:adding={addRound}
+      />
+    {:else}
     {#if head && !chatting}
       <div class="job">
         <div class="row">
@@ -606,6 +686,7 @@
         </div>
       {/if}
     {/if}
+    {/if}
   </div>
   <div class="ring" hidden={shell.compact && pane === "preview"}><WorkingRing on={working} /></div>
 
@@ -623,12 +704,22 @@
       </div>
     {/if}
     <Desk
-      pages={onCover ? (letter?.pages ?? []) : (review?.pages ?? [])}
+      pages={onInterview ? (sent?.pages ?? []) : onCover ? (letter?.pages ?? []) : (review?.pages ?? [])}
       bind:zoom
       above={places.length ? placeMap : undefined}
     >
       {#snippet status()}
-        {#if onCover}
+        {#if onInterview}
+          {#if sent && application}
+            {@const day = new Date(`${application.date}T12:00`).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })}
+            <Badge>{sent.from === "sent" ? "As sent" : "Exported PDF"} · {day}</Badge>
+          {:else}
+            <Badge>No resume sent</Badge>
+          {/if}
+        {:else if onCover}
           {#if !letter?.letter}
             <Badge>No letter yet</Badge>
           {:else if letterFits}
@@ -644,7 +735,8 @@
           <Badge tone="warn" dot>{review.pageCount} pages: over by {review.pageCount - review.pageLimit}</Badge>
         {/if}
       {/snippet}
-      {#if onCover}{#if letter?.letter}Dated today{/if}{:else if review}Highlights show what changed{/if}
+      {#if onInterview}{#if sent}The resume you sent{/if}{:else if onCover}{#if letter?.letter}Dated today{/if}{:else if review}Highlights
+        show what changed{/if}
     </Desk>
   </div>
 </div>
