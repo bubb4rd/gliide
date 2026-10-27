@@ -57,7 +57,8 @@ fn overlap(e: &BankEntry, req: &Requirements) -> f64 {
     skills + titles
 }
 
-/// What an entry says: its name, subtitle, notes, bullets with their variants, and the skills you tagged them with.
+/// What an entry says: its name, subtitle, notes, bullets with their variants, the skills you tagged them with, and its
+/// facts.
 fn entry_text(e: &BankEntry) -> String {
     let mut lines = vec![e.name.clone(), e.subtitle.clone()];
     lines.extend(e.notes.iter().map(|n| format!("{}: {}", n.label, n.text)));
@@ -66,5 +67,6 @@ fn entry_text(e: &BankEntry) -> String {
         lines.extend(b.variants.iter().cloned());
         lines.extend(b.skills.iter().cloned());
     }
+    lines.extend(e.fact_lines().map(str::to_owned));
     lines.join("\n")
 }

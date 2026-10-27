@@ -2,9 +2,9 @@
 import type { NoteLine } from "./NoteLine";
 
 /**
- * What heads a bank entry on the page; the editor sends them back whole (`set-facts`).
+ * What heads a bank entry on the page; the editor sends them back whole (`set-details`).
  */
-export type EntryFacts = { name: string, subtitle: string, place: string, 
+export type EntryDetails = { name: string, subtitle: string, place: string, 
 /**
  * As printed, e.g. `Aug 2022 – May 2026`.
  */

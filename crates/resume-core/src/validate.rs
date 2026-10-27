@@ -16,7 +16,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::apply::{bank_entry, note_ref};
+use crate::apply::{bank_entry, bank_fact, note_ref};
 use crate::bank::{Bank, BankEntry, SectionKind};
 use crate::matcher::{self, Page};
 use crate::requirements::{DegreeLevel, Requirements};
@@ -108,6 +108,9 @@ impl<'a> Grounding<'a> {
         {
             return elsewhere(e, Some(short(&b.text)));
         }
+        if let Some((e, f)) = bank_fact(self.bank_doc, source) {
+            return elsewhere(e, Some(short(&f.text)));
+        }
         if let Some((entry, i)) = note_ref(source) {
             let (_, e) = bank_entry(self.bank_doc, entry)?;
             let n = e.notes.get(i)?;
@@ -139,12 +142,12 @@ impl<'a> Grounding<'a> {
         None
     }
 
-    /// The bank entry holding bullet `id`, else the entry `id`.
+    /// The bank entry holding bullet or fact `id`, else the entry `id`.
     fn entry_of(&self, id: &str) -> Option<&'a BankEntry> {
         let entries = self.bank_doc.sections.iter().flat_map(|s| &s.entries);
         entries
             .clone()
-            .find(|e| e.bullets.iter().any(|b| b.id == id))
+            .find(|e| e.bullets.iter().any(|b| b.id == id) || e.facts.iter().any(|f| f.id == id))
             .or_else(|| entries.clone().find(|e| e.id == id))
     }
 
@@ -408,7 +411,7 @@ pub fn swap_warning(from: &str, to: &str) -> Option<String> {
 }
 
 /// Every line of the bank, one per line: name, contact, section titles, entry headers, notes, bullets with their
-/// variants and skills, skills lines with every item.
+/// variants and skills, facts with theirs, skills lines with every item.
 pub fn bank_text(bank: &Bank) -> String {
     let mut lines = vec![bank.name.clone()];
     lines.extend(bank.contact.iter().map(|c| c.text.clone()));
@@ -427,6 +430,7 @@ pub fn bank_text(bank: &Bank) -> String {
                 lines.extend(b.variants.iter().cloned());
                 lines.extend(b.skills.iter().cloned());
             }
+            lines.extend(e.fact_lines().map(str::to_owned));
         }
         for g in &s.groups {
             lines.push(format!("{}: {}", g.label, g.items.join(", ")));

@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::apply::{
-    appended, bank_bullet, bank_entry, find_phrase, note_ref, position_ci, summary_text,
+    appended, bank_bullet, bank_entry, bank_fact, find_phrase, note_ref, position_ci, summary_text,
     swap_phrase,
 };
 use crate::bank::{Bank, SectionKind};
@@ -798,13 +798,22 @@ impl Cx<'_> {
     }
 }
 
-/// The text of bank line `id`: a bullet (with its variants), a note line (`entry#n`), an entry (every line of it), a
-/// skills line (every item) or a section (everything in it).
+/// The text of bank line `id`: a bullet (with its variants), a fact (with its skills), a note line (`entry#n`), an
+/// entry (every line of it), a skills line (every item) or a section (everything in it).
 fn source_text(bank: &Bank, id: &str) -> Option<String> {
     if let Some(b) = bank_bullet(bank, id) {
         return Some(
             std::iter::once(&b.text)
                 .chain(&b.variants)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
+    if let Some((_, f)) = bank_fact(bank, id) {
+        return Some(
+            std::iter::once(&f.text)
+                .chain(&f.skills)
                 .cloned()
                 .collect::<Vec<_>>()
                 .join("\n"),
@@ -847,5 +856,6 @@ fn entry_text(e: &crate::bank::BankEntry) -> String {
         lines.push(b.text.clone());
         lines.extend(b.variants.iter().cloned());
     }
+    lines.extend(e.fact_lines().map(str::to_owned));
     lines.join("\n")
 }

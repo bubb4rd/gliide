@@ -1,17 +1,19 @@
-//! A bank entry's editor (DESIGN.md, Experience bank): its facts (`resume_core::facts`), its bullets with every wording
-//! and which master shows which, edits of the wordings (`resume_core::variants`: every master keeps the words it showed
-//! unless the edit is about what it shows), and the desk's preview: a master that shows the entry, or the entry alone
-//! in the default template.
+//! A bank entry's editor (DESIGN.md, Experience bank): its details (`resume_core::details`), its bullets with every
+//! wording and which master shows which, edits of the wordings (`resume_core::variants`: every master keeps the words
+//! it showed unless the edit is about what it shows), and the desk's preview: a master that shows the entry, or the
+//! entry alone in the default template.
 
 use resume_core::bank::Note;
-use resume_core::facts::{Facts, set_facts};
+use resume_core::details::{Details, set_details};
 use resume_core::master::{MasterBullet, MasterEntry, MasterSection};
 use resume_core::variants::{
     self, VariantError, add_variant, fold_into, make_main, remove_variant, set_wording,
 };
 use resume_core::{Bank, Master, Resume, resolve};
 
-use crate::dto::{BulletView, EntryEdit, EntryFacts, EntryView, MasterRef, NoteLine, WordingView};
+use crate::dto::{
+    BulletView, EntryDetails, EntryEdit, EntryView, MasterRef, NoteLine, WordingView,
+};
 use crate::error::{AppError, Result};
 use crate::state::{App, DEFAULT_TEMPLATE, lock};
 use crate::view::sentence_case;
@@ -35,7 +37,7 @@ pub fn edit_entry(
         find(bank, entry).is_some_and(|(_, e)| e.bullets.iter().any(|b| b.id == bullet))
     };
     let bullet = match &edit {
-        EntryEdit::SetFacts { .. } => None,
+        EntryEdit::SetDetails { .. } => None,
         EntryEdit::AddVariant { bullet, .. }
         | EntryEdit::SetWording { bullet, .. }
         | EntryEdit::RemoveVariant { bullet, .. }
@@ -63,8 +65,8 @@ pub fn edit_entry(
 
 fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) -> Result<()> {
     match edit {
-        EntryEdit::SetFacts { facts } => {
-            return set_facts(bank, entry, facts.into())
+        EntryEdit::SetDetails { details } => {
+            return set_details(bank, entry, details.into())
                 .map_err(|e| AppError::other(e.to_string()));
         }
         EntryEdit::AddVariant { bullet, text } => add_variant(bank, &bullet, &text).map(drop),
@@ -108,8 +110,8 @@ pub fn variant_error(e: VariantError) -> AppError {
     AppError::other(e.to_string())
 }
 
-impl From<EntryFacts> for Facts {
-    fn from(f: EntryFacts) -> Self {
+impl From<EntryDetails> for Details {
+    fn from(f: EntryDetails) -> Self {
         Self {
             name: f.name,
             subtitle: f.subtitle,
@@ -231,7 +233,7 @@ fn view(
     Ok(EntryView {
         id: e.id.clone(),
         section: sentence_case(&bank.sections[section].title),
-        facts: EntryFacts {
+        details: EntryDetails {
             name: e.name.clone(),
             subtitle: e.subtitle.clone(),
             place: e.place.clone(),

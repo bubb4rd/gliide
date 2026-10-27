@@ -81,6 +81,53 @@ pub struct BankEntry {
     pub notes: Vec<Note>,
     #[serde(default)]
     pub bullets: Vec<BankBullet>,
+    /// What you've said about this entry that its lines don't print. Never on a page; a source for this entry's lines,
+    /// as its bullets are. Left out of the JSON while empty, so banks without facts keep their revision hash.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub facts: Vec<Fact>,
+}
+
+impl BankEntry {
+    /// Each fact's text, then its skills: what the facts add to the lines this entry backs.
+    pub fn fact_lines(&self) -> impl Iterator<Item = &str> {
+        self.facts.iter().flat_map(|f| {
+            std::iter::once(f.text.as_str()).chain(f.skills.iter().map(String::as_str))
+        })
+    }
+}
+
+/// One claim about an entry, in your words: "The order API handled about 2,000 orders a day".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Fact {
+    /// `<entry>~<n>`, kept when other facts go, so what cites it still finds it.
+    pub id: String,
+    pub text: String,
+    /// Skills it shows, which back them in this entry as a bullet's `skills` do.
+    #[serde(default)]
+    pub skills: Vec<String>,
+    pub source: FactSource,
+}
+
+/// Where a fact came from and when.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FactSource {
+    pub kind: FactKind,
+    /// RFC 3339.
+    pub at: String,
+    /// The posting it was said for, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub posting: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum FactKind {
+    /// Answering the review's "Do you have … experience?".
+    Review,
+    /// Typed in the entry's editor.
+    Edit,
 }
 
 /// A line under an entry, `label: text` (or just `text` when the label is `""`).

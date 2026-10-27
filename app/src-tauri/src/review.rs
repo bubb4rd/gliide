@@ -1344,7 +1344,7 @@ fn new_terms(req: &Requirements, text: &str, before: &str) -> Vec<String> {
         .collect()
 }
 
-/// Every line of a bank entry: header, subtitle, notes, bullets with their variants and skills.
+/// Every line of a bank entry: header, subtitle, notes, bullets with their variants and skills, facts with theirs.
 fn entry_lines(e: &BankEntry) -> Vec<String> {
     let mut out = vec![
         format!("{}, {} · {}", e.name, e.place, e.dates),
@@ -1356,6 +1356,7 @@ fn entry_lines(e: &BankEntry) -> Vec<String> {
         out.extend(b.variants.iter().cloned());
         out.extend(b.skills.iter().cloned());
     }
+    out.extend(e.fact_lines().map(str::to_owned));
     out
 }
 

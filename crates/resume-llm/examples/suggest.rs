@@ -360,10 +360,18 @@ impl Lines {
                 s.entries.iter().map(|e| e.id.clone()).collect(),
             );
             for e in &s.entries {
+                let facts = bank
+                    .sections
+                    .iter()
+                    .flat_map(|s| &s.entries)
+                    .find(|b| b.id == e.id)
+                    .map(|b| b.facts.as_slice())
+                    .unwrap_or_default();
                 l.entry(
                     &e.id,
                     e.notes.iter().map(|n| n.text.as_str()),
                     e.bullets.iter().map(|b| (b.id.as_str(), b.text.as_str())),
+                    facts.iter().map(|f| (f.id.as_str(), f.text.as_str())),
                 );
             }
             for g in &s.groups {
@@ -377,17 +385,20 @@ impl Lines {
                     &e.id,
                     e.notes.iter().map(|n| n.text.as_str()),
                     e.bullets.iter().map(|b| (b.id.as_str(), b.text.as_str())),
+                    e.facts.iter().map(|f| (f.id.as_str(), f.text.as_str())),
                 );
             }
         }
         l
     }
 
+    /// Entry `id`'s lines: its notes, bullets and facts, each by its tag.
     fn entry<'a>(
         &mut self,
         id: &str,
         notes: impl Iterator<Item = &'a str>,
         bullets: impl Iterator<Item = (&'a str, &'a str)>,
+        facts: impl Iterator<Item = (&'a str, &'a str)>,
     ) {
         let mut put = |line: String, text: &str| {
             self.entry_of.insert(line.clone(), id.to_owned());
@@ -397,8 +408,8 @@ impl Lines {
         for (j, n) in notes.enumerate() {
             put(format!("{id}#{}", j + 1), n);
         }
-        for (b, text) in bullets {
-            put(b.to_owned(), text);
+        for (line, text) in bullets.chain(facts) {
+            put(line.to_owned(), text);
         }
     }
 }

@@ -35,6 +35,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("feed.sql"),
     include_str!("logos.sql"),
     include_str!("places.sql"),
+    include_str!("interviews.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -199,6 +200,13 @@ pub struct Application {
     pub cover_path: Option<String>,
     pub notes: String,
     pub updated_at: String,
+}
+
+/// An application's status from `at` (RFC 3339) on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StatusChange {
+    pub status: AppStatus,
+    pub at: String,
 }
 
 /// An analysis's cover letter: its parts as last written or edited.
@@ -1014,14 +1022,17 @@ impl Store {
         self.application_where("posting_id = ?1", posting_id)
     }
 
-    /// Inserts or updates the application by `a.id`; sets its `updated_at` (the one given is ignored). A posting has
-    /// at most one application.
+    /// Inserts or updates the application by `a.id`; sets its `updated_at` (the one given is ignored) and logs its
+    /// status when new or changed. A posting has at most one application.
     pub fn put_application(&self, a: &Application) -> Result<(), StoreError> {
-        insert_application(&self.conn, a)
+        let tx = self.conn.unchecked_transaction()?;
+        insert_application(&tx, a)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Stores applications listed newest first (as [`parse_ats_fit_csv`] returns them), so [`Store::applications`]
-    /// lists same-day rows in the same order.
+    /// lists same-day rows in the same order. Their statuses are logged as of the import.
     pub fn import_applications(&self, apps: &[Application]) -> Result<(), StoreError> {
         let tx = self.conn.unchecked_transaction()?;
         for a in apps.iter().rev() {
@@ -1031,8 +1042,8 @@ impl Store {
         Ok(())
     }
 
-    /// Sets every application in `ids` to `status`, in one transaction: an unknown id changes none of them. Returns
-    /// the applications as saved, in `ids`' order.
+    /// Sets every application in `ids` to `status`, in one transaction: an unknown id changes none of them. Logs the
+    /// change for each whose status differed. Returns the applications as saved, in `ids`' order.
     pub fn set_application_status(
         &self,
         ids: &[&str],
@@ -1041,12 +1052,13 @@ impl Store {
         let tx = self.conn.unchecked_transaction()?;
         let at = now();
         for id in ids {
-            let changed = tx.execute(
+            let was = stored_status(&tx, id)?.ok_or_else(|| not_found("application", id))?;
+            tx.execute(
                 "UPDATE applications SET status = ?2, updated_at = ?3 WHERE id = ?1",
                 params![id, status.as_str(), at],
             )?;
-            if changed == 0 {
-                return Err(not_found("application", id));
+            if was != status.as_str() {
+                log_status(&tx, id, status, &at)?;
             }
         }
         tx.commit()?;
@@ -1056,6 +1068,50 @@ impl Store {
                     .ok_or_else(|| not_found("application", id))
             })
             .collect()
+    }
+
+    /// The application's status changes, oldest first: the status it was first stored with, then each change.
+    pub fn status_history(&self, application_id: &str) -> Result<Vec<StatusChange>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT status, at FROM status_changes WHERE application_id = ?1 ORDER BY at, rowid",
+        )?;
+        let rows = stmt
+            .query_map([application_id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(status, at)| {
+                let status = serde_json::from_value(serde_json::Value::String(status))?;
+                Ok(StatusChange { status, at })
+            })
+            .collect()
+    }
+
+    /// Stores the tailored resume JSON as exported for the application, replacing any earlier one.
+    pub fn put_sent(&self, application_id: &str, resume_json: &str) -> Result<(), StoreError> {
+        let changed = self.conn.execute(
+            "UPDATE applications SET sent = ?2 WHERE id = ?1",
+            params![application_id, resume_json],
+        )?;
+        if changed == 0 {
+            return Err(not_found("application", application_id));
+        }
+        Ok(())
+    }
+
+    /// The tailored resume JSON as last exported for the application; `None` when it was never exported since
+    /// schema version 8 (or was imported from `applications.csv`).
+    pub fn sent(&self, application_id: &str) -> Result<Option<String>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT sent FROM applications WHERE id = ?1",
+                [application_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten())
     }
 
     fn application_where(
@@ -1393,7 +1449,10 @@ impl RawApplication {
     }
 }
 
+/// Upserts the application and logs its status when the row is new or its status changed. Run it in a transaction.
 fn insert_application(conn: &Connection, a: &Application) -> Result<(), StoreError> {
+    let at = now();
+    let was = stored_status(conn, &a.id)?;
     conn.execute(
         "INSERT INTO applications (id, posting_id, analysis_id, date, company, role, url, status, now, projected,
              on_file, resume_path, cover_path, notes, created_at, updated_at)
@@ -1418,8 +1477,28 @@ fn insert_application(conn: &Connection, a: &Application) -> Result<(), StoreErr
             a.resume_path,
             a.cover_path,
             a.notes,
-            now()
+            at
         ],
+    )?;
+    if was.as_deref() != Some(a.status.as_str()) {
+        log_status(conn, &a.id, a.status, &at)?;
+    }
+    Ok(())
+}
+
+/// The application's stored status name; `None` when there is no such application.
+fn stored_status(conn: &Connection, id: &str) -> Result<Option<String>, StoreError> {
+    Ok(conn
+        .query_row("SELECT status FROM applications WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .optional()?)
+}
+
+fn log_status(conn: &Connection, id: &str, status: AppStatus, at: &str) -> Result<(), StoreError> {
+    conn.execute(
+        "INSERT INTO status_changes (application_id, status, at) VALUES (?1, ?2, ?3)",
+        params![id, status.as_str(), at],
     )?;
     Ok(())
 }

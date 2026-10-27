@@ -2,7 +2,7 @@
 //! hand-made suggestions through `changes_of`, `draft_changes` and `apply`.
 
 use resume_core::apply::{ApplyError, apply};
-use resume_core::bank::{BankBullet, BankEntry};
+use resume_core::bank::{BankBullet, BankEntry, Fact, FactKind, FactSource};
 use resume_core::candidates::bank_candidates;
 use resume_core::change;
 use resume_core::change::{Change, Draft, Mode, Op, Origin};
@@ -47,6 +47,7 @@ fn bank_entry(id: &str, name: &str, subtitle: &str, bullets: &[&str]) -> BankEnt
                 skills: vec![],
             })
             .collect(),
+        facts: vec![],
     }
 }
 
@@ -688,6 +689,61 @@ fn sources_in_the_same_entry_pass() {
         &["acme.1", "acme"],
     )];
     assert!(flags_of(&s).is_empty());
+}
+
+#[test]
+fn facts_back_lines_of_their_own_entry_only() {
+    let (mut bank, master) = setup();
+    let fact = |id: &str, text: &str, skills: &[&str]| Fact {
+        id: id.into(),
+        text: text.into(),
+        skills: skills.iter().map(|&s| s.into()).collect(),
+        source: FactSource {
+            kind: FactKind::Review,
+            at: "2026-10-27T10:00:00Z".into(),
+            posting: None,
+        },
+    };
+    for e in bank.sections.iter_mut().flat_map(|s| &mut s.entries) {
+        match e.id.as_str() {
+            "acme" => {
+                e.facts = vec![fact(
+                    "acme~1",
+                    "The service took 2,000 events a second",
+                    &["Kafka"],
+                )]
+            }
+            "tidepool" => e.facts = vec![fact("tidepool~1", "300 people used it offline", &[])],
+            _ => {}
+        }
+    }
+    let flags = |after: &str, sources: &[&str]| {
+        let mut s = base();
+        s.bullets = vec![rewrite("acme.1", ACME_1, after, sources)];
+        let cs = changes_of(&s, &bank, &master, &req(), Mode::MasterOnly);
+        assert_eq!(cs.len(), 1, "{cs:#?}");
+        cs[0].flags.clone()
+    };
+    let after = "Built a Rust service taking 2,000 events a second through Kafka into Postgres across 40 lines";
+    // The entry's own fact backs its number and its skill.
+    assert!(flags(after, &["acme.1", "acme~1"]).is_empty());
+    assert!(
+        flags(after, &["acme.1", "acme"]).is_empty(),
+        "the entry as a source holds its facts"
+    );
+    // Uncited, the number has no source.
+    assert_eq!(
+        flags(after, &["acme.1"]),
+        ["“2,000” is not in the lines it draws on"]
+    );
+    // Another entry's fact is another entry's line.
+    assert_eq!(
+        flags(
+            "Built a Rust service that 300 people used, batching telemetry into Postgres across 40 lines",
+            &["acme.1", "tidepool~1"]
+        ),
+        ["draws on “300 people used it offline” from Tidepool, not this entry"]
+    );
 }
 
 #[test]

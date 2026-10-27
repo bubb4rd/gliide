@@ -91,6 +91,13 @@
           "default": null,
           "pattern": "^([0-9]{4}-(0[1-9]|1[0-2])|present)$"
         },
+        "facts": {
+          "description": "What you've said about this entry that its lines don't print. Never on a page; a source for this entry's lines,\nas its bullets are. Left out of the JSON while empty, so banks without facts keep their revision hash.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Fact"
+          }
+        },
         "id": {
           "type": "string"
         },
@@ -216,6 +223,75 @@
       "required": [
         "text",
         "url"
+      ]
+    },
+    "Fact": {
+      "description": "One claim about an entry, in your words: \"The order API handled about 2,000 orders a day\".",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`<entry>~<n>`, kept when other facts go, so what cites it still finds it.",
+          "type": "string"
+        },
+        "skills": {
+          "description": "Skills it shows, which back them in this entry as a bullet's `skills` do.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/FactSource"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text",
+        "source"
+      ]
+    },
+    "FactKind": {
+      "oneOf": [
+        {
+          "description": "Answering the review's \"Do you have … experience?\".",
+          "type": "string",
+          "const": "review"
+        },
+        {
+          "description": "Typed in the entry's editor.",
+          "type": "string",
+          "const": "edit"
+        }
+      ]
+    },
+    "FactSource": {
+      "description": "Where a fact came from and when.",
+      "type": "object",
+      "properties": {
+        "at": {
+          "description": "RFC 3339.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FactKind"
+        },
+        "posting": {
+          "description": "The posting it was said for, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "at"
       ]
     },
     "Note": {

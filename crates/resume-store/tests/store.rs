@@ -7,8 +7,8 @@ use resume_core::salary::{Period, Salary};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, FeedState, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Rev, Store,
-    StoreError, applications_csv, parse_ats_fit_csv,
+    AppStatus, Application, FeedState, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Rev,
+    StatusChange, Store, StoreError, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -424,6 +424,87 @@ fn applications_upsert_by_id_and_change_status() {
     );
 }
 
+#[test]
+fn status_changes_are_logged_with_their_time() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(store.status_history("a").unwrap().is_empty());
+    let mut a = app("a", "2026-10-01", "Acme");
+    store.put_application(&a).unwrap();
+    a.notes = "Recruiter call Tuesday".into();
+    store.put_application(&a).unwrap();
+    store
+        .set_application_status(&["a"], AppStatus::Saved)
+        .unwrap();
+    let first = store.status_history("a").unwrap();
+    assert_eq!(
+        first.iter().map(|c| c.status).collect::<Vec<_>>(),
+        [AppStatus::Saved],
+        "unchanged statuses log nothing"
+    );
+
+    let changed = store
+        .set_application_status(&["a"], AppStatus::Interviewing)
+        .unwrap();
+    a.status = AppStatus::Offer;
+    store.put_application(&a).unwrap();
+    let history = store.status_history("a").unwrap();
+    assert_eq!(
+        history.iter().map(|c| c.status).collect::<Vec<_>>(),
+        [AppStatus::Saved, AppStatus::Interviewing, AppStatus::Offer]
+    );
+    assert_eq!(history[1].at, changed[0].updated_at);
+    assert!(history.windows(2).all(|w| w[0].at < w[1].at));
+
+    // A failed batch logs nothing.
+    assert!(
+        store
+            .set_application_status(&["a", "missing"], AppStatus::Rejected)
+            .is_err()
+    );
+    assert_eq!(store.status_history("a").unwrap().len(), 3);
+}
+
+#[test]
+fn imported_applications_log_their_status() {
+    let store = Store::open_in_memory().unwrap();
+    let mut a = app("x", "2026-10-05", "Acme");
+    a.status = AppStatus::Applied;
+    store.import_applications(&[a]).unwrap();
+    let history = store.status_history("x").unwrap();
+    assert_eq!(
+        history,
+        [StatusChange {
+            status: AppStatus::Applied,
+            at: store.applications().unwrap()[0].updated_at.clone()
+        }]
+    );
+}
+
+#[test]
+fn sent_resumes_round_trip() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(matches!(
+        store.put_sent("a", "{}"),
+        Err(StoreError::NotFound { .. })
+    ));
+    assert_eq!(store.sent("a").unwrap(), None);
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    assert_eq!(store.sent("a").unwrap(), None);
+    store.put_sent("a", r#"{"name":"Jane"}"#).unwrap();
+    store.put_sent("a", r#"{"name":"Jane Doe"}"#).unwrap();
+    assert_eq!(
+        store.sent("a").unwrap().as_deref(),
+        Some(r#"{"name":"Jane Doe"}"#)
+    );
+    // Saving the application again keeps it.
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    assert!(store.sent("a").unwrap().is_some());
+}
+
 /// Synthetic legacy applications.csv rows, oldest first: quoted commas, an escaped quote, empty scores and files.
 const ATS_FIT: &str = "\
 date,company,role,fit_planned,fit_on_page,resume,cover_letter,posting
@@ -565,7 +646,8 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
+        "DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent;
+         DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
          ALTER TABLE postings DROP COLUMN salary; PRAGMA user_version = 1;",
     )
     .unwrap();
@@ -613,7 +695,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -722,7 +804,8 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
+        "DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent;
+         DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
     )
     .unwrap();
     drop(conn);
@@ -734,6 +817,34 @@ fn migrating_to_fetched_logos_keeps_yours() {
             .put_fetched_logo("acme", b"fh", "image/png", LogoSource::Freehire)
             .unwrap()
     );
+    drop(store);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Applications from before interview prep (schema version 7) have no history or sent resume until they change.
+#[test]
+fn migrating_to_status_changes_keeps_the_applications() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v7-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    Store::open(&path)
+        .unwrap()
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "DROP TABLE status_changes; ALTER TABLE applications DROP COLUMN sent; PRAGMA user_version = 7;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.applications().unwrap()[0].company, "Acme");
+    assert!(store.status_history("a").unwrap().is_empty());
+    assert_eq!(store.sent("a").unwrap(), None);
+    store
+        .set_application_status(&["a"], AppStatus::Applied)
+        .unwrap();
+    assert_eq!(store.status_history("a").unwrap().len(), 1);
     drop(store);
     std::fs::remove_dir_all(&dir).unwrap();
 }

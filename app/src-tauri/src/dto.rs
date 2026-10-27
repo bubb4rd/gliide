@@ -351,7 +351,7 @@ pub struct ImportChoices {
     pub title: String,
 }
 
-/// One bank entry in its editor: its facts, every bullet with its wordings (its text, then its variants) and which
+/// One bank entry in its editor: its details, every bullet with its wordings (its text, then its variants) and which
 /// master shows which, and the desk's preview.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -360,7 +360,7 @@ pub struct EntryView {
     pub id: String,
     /// The bank section's title.
     pub section: String,
-    pub facts: EntryFacts,
+    pub details: EntryDetails,
     pub bullets: Vec<BulletView>,
     /// The masters that show this entry, by title.
     pub masters: Vec<MasterRef>,
@@ -372,11 +372,11 @@ pub struct EntryView {
     pub page_limit: u32,
 }
 
-/// What heads a bank entry on the page; the editor sends them back whole (`set-facts`).
+/// What heads a bank entry on the page; the editor sends them back whole (`set-details`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
-pub struct EntryFacts {
+pub struct EntryDetails {
     pub name: String,
     pub subtitle: String,
     pub place: String,
@@ -425,16 +425,16 @@ pub struct WordingView {
     pub masters: Vec<String>,
 }
 
-/// An edit of a bank entry: its facts, or its bullets and their wordings. Every master keeps showing the words it
+/// An edit of a bank entry: its details, or its bullets and their wordings. Every master keeps showing the words it
 /// showed, except where the edit says otherwise (`show`, or editing the wording it shows); every master that shows the
-/// entry prints its facts.
+/// entry prints its details.
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[ts(export)]
 pub enum EntryEdit {
-    /// The entry's facts, whole.
-    SetFacts {
-        facts: EntryFacts,
+    /// The entry's details, whole.
+    SetDetails {
+        details: EntryDetails,
     },
     /// A new variant of a bullet.
     AddVariant {

@@ -72,6 +72,7 @@ pub fn migrate_v1(v1: &Resume) -> Migrated {
                                 skills: vec![],
                             })
                             .collect(),
+                        facts: vec![],
                     }
                 })
                 .collect(),

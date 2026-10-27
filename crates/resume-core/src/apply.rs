@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::bank::{Bank, BankBullet, BankEntry, BankSection, SectionKind};
+use crate::bank::{Bank, BankBullet, BankEntry, BankSection, Fact, SectionKind};
 use crate::change::{Change, Op};
 use crate::master::Master;
 use crate::resolve::{ResolveError, resolve};
@@ -417,6 +417,14 @@ pub(crate) fn bank_bullet<'a>(bank: &'a Bank, id: &str) -> Option<&'a BankBullet
         .flat_map(|s| &s.entries)
         .flat_map(|e| &e.bullets)
         .find(|b| b.id == id)
+}
+
+/// The bank fact `id` and the entry it belongs to.
+pub(crate) fn bank_fact<'a>(bank: &'a Bank, id: &str) -> Option<(&'a BankEntry, &'a Fact)> {
+    bank.sections
+        .iter()
+        .flat_map(|s| &s.entries)
+        .find_map(|e| e.facts.iter().find(|f| f.id == id).map(|f| (e, f)))
 }
 
 fn entry_at(r: &Resume, id: &str) -> Option<(usize, usize)> {

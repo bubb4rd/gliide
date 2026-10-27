@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use resume_core::bank::BankEntry;
 use serde::Deserialize;
 
-use crate::suggest::{LINE_CHARS, MAX_BULLET_CHARS};
+use crate::suggest::{LINE_CHARS, MAX_BULLET_CHARS, write_facts};
 use crate::{Call, Llm, LlmError, Schema, Structured};
 
 /// The Rewrite instructions (`prompts/rewrite.md`).
@@ -46,8 +46,8 @@ pub fn budget(before: &str) -> usize {
     (lines * LINE_CHARS).min(MAX_BULLET_CHARS)
 }
 
-/// A bank entry as Rewrite reads it: `[id] Name, place · dates`, the subtitle, `[id#n] Label: text` note lines, then
-/// every bullet `- [id] text` with its variants and skills.
+/// A bank entry as Rewrite reads it: `[id] Name, place · dates`, the subtitle, `[id#n] Label: text` note lines, every
+/// bullet `- [id] text` with its variants and skills, then its facts.
 pub fn entry_facts(e: &BankEntry) -> String {
     let mut s = String::new();
     let _ = write!(s, "[{}] {}", e.id, e.name);
@@ -79,6 +79,7 @@ pub fn entry_facts(e: &BankEntry) -> String {
             let _ = writeln!(s, "  (skills) {}", b.skills.join(", "));
         }
     }
+    write_facts(&mut s, e);
     s
 }
 
@@ -133,7 +134,7 @@ pub async fn rewrite(
 
 #[cfg(test)]
 mod tests {
-    use resume_core::bank::{BankBullet, BankEntry, Note};
+    use resume_core::bank::{BankBullet, BankEntry, Fact, FactKind, FactSource, Note};
 
     use super::{RewriteInput, budget, entry_facts, input};
 
@@ -171,12 +172,23 @@ mod tests {
                 variants: vec!["Wrote a service".into()],
                 skills: vec!["Rust".into()],
             }],
+            facts: vec![Fact {
+                id: "acme~1".into(),
+                text: "The service handled 2,000 orders a day".into(),
+                skills: vec!["Kafka".into()],
+                source: FactSource {
+                    kind: FactKind::Review,
+                    at: "2026-10-27T10:00:00Z".into(),
+                    posting: None,
+                },
+            }],
         };
         let facts = entry_facts(&e);
         assert_eq!(
             facts,
             "[acme] Acme, Springfield · 2025\nIntern\n[acme#1] Stack: Rust\n- [acme.1] Built a service\n  \
-             (variant 0) Wrote a service\n  (skills) Rust\n"
+             (variant 0) Wrote a service\n  (skills) Rust\n[acme~1] (fact) The service handled 2,000 orders a \
+             day\n  (skills) Kafka\n"
         );
         let terms = ["Rust".to_owned()];
         let text = input(&RewriteInput {

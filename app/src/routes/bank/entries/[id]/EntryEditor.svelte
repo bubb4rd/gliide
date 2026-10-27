@@ -21,7 +21,7 @@
     entry,
     type BulletView,
     type EntryEdit,
-    type EntryFacts,
+    type EntryDetails,
     type EntryView,
     type MasterRef,
     type NoteLine,
@@ -75,8 +75,8 @@
 
   // ── Rows: the entry's details, then every wording of every bullet, in order ──
   type Field = "name" | "subtitle" | "place" | "dates";
-  interface FactRow {
-    kind: "fact";
+  interface DetailRow {
+    kind: "detail";
     key: string;
     field: Field;
     label: string;
@@ -93,25 +93,25 @@
     bullet: BulletView;
     wording: WordingView;
   }
-  type Row = FactRow | NoteRow | WordingRow;
+  type Row = DetailRow | NoteRow | WordingRow;
 
-  const FACT_ROWS: FactRow[] = (
+  const DETAIL_ROWS: DetailRow[] = (
     [
       ["name", "Name"],
       ["subtitle", "Subtitle"],
       ["place", "Place"],
       ["dates", "Dates"],
     ] as const
-  ).map(([field, label]) => ({ kind: "fact", key: `fact:${field}`, field, label }));
+  ).map(([field, label]) => ({ kind: "detail", key: `detail:${field}`, field, label }));
   const noteKey = (index: number) => `note:${index}`;
   const keyOf = (bullet: string, variant: number | null) => `${bullet}:${variant ?? "text"}`;
   const noteRows = $derived<NoteRow[]>(
-    view?.facts.notes.map((note, index) => ({ kind: "note", key: noteKey(index), index, note })) ?? [],
+    view?.details.notes.map((note, index) => ({ kind: "note", key: noteKey(index), index, note })) ?? [],
   );
   const rows = $derived<Row[]>(
     view
       ? [
-          ...FACT_ROWS,
+          ...DETAIL_ROWS,
           ...noteRows,
           ...view.bullets.flatMap((bullet) =>
             bullet.wordings.map(
@@ -130,7 +130,7 @@
   /** The open editor: a detail, a line under the entry (`index` null: a new one), or a wording of `bullet`'s (a new
    *  variant when `adding`). */
   type Editing =
-    | { kind: "fact"; key: string; field: Field }
+    | { kind: "detail"; key: string; field: Field }
     | { kind: "note"; key: string; index: number | null }
     | { kind: "wording"; key: string; bullet: string; variant: number | null; adding: boolean };
   let editing = $state<Editing | null>(null);
@@ -173,7 +173,7 @@
   }
 
   const edit = (change: EntryEdit) => request(() => editEntry(id, change, view?.preview ?? null));
-  const setFacts = (facts: EntryFacts) => edit({ kind: "set-facts", facts });
+  const setDetails = (details: EntryDetails) => edit({ kind: "set-details", details });
 
   /** The masters that show `bullet` (in any wording). */
   const showing = (bullet: BulletView) => (master: MasterRef) => bullet.wordings.some((w) => w.masters.includes(master.id));
@@ -214,9 +214,9 @@
   function startEdit(row: Row | undefined) {
     if (!row || !view) return;
     selectedKey = row.key;
-    if (row.kind === "fact") {
-      editing = { kind: "fact", key: row.key, field: row.field };
-      draft = view.facts[row.field];
+    if (row.kind === "detail") {
+      editing = { kind: "detail", key: row.key, field: row.field };
+      draft = view.details[row.field];
     } else if (row.kind === "note") {
       editing = { kind: "note", key: row.key, index: row.index };
       draftLabel = row.note.label;
@@ -244,19 +244,19 @@
     const open = editing;
     if (!open || !view) return;
     const text = draft.trim();
-    const { facts } = view;
-    if (open.kind === "fact") {
+    const { details } = view;
+    if (open.kind === "detail") {
       // An entry keeps its name: emptied, the edit is dropped. The other details may be cleared.
-      if (text === facts[open.field] || (!text && open.field === "name")) return void (editing = null);
-      if (!(await setFacts({ ...facts, [open.field]: text }))) return;
+      if (text === details[open.field] || (!text && open.field === "name")) return void (editing = null);
+      if (!(await setDetails({ ...details, [open.field]: text }))) return;
     } else if (open.kind === "note") {
       const line = { label: draftLabel.trim(), text };
-      const was = open.index === null ? undefined : facts.notes[open.index];
+      const was = open.index === null ? undefined : details.notes[open.index];
       if (!text || (was && was.label === line.label && was.text === line.text)) return void (editing = null);
       const notes =
-        open.index === null ? [...facts.notes, line] : facts.notes.map((n, i) => (i === open.index ? line : n));
-      if (!(await setFacts({ ...facts, notes }))) return;
-      selectedKey = noteKey(open.index ?? facts.notes.length);
+        open.index === null ? [...details.notes, line] : details.notes.map((n, i) => (i === open.index ? line : n));
+      if (!(await setDetails({ ...details, notes }))) return;
+      selectedKey = noteKey(open.index ?? details.notes.length);
     } else if (open.adding) {
       if (!text) return void (editing = null);
       // The new variant comes last: after the text and every variant there is now.
@@ -300,17 +300,17 @@
   /** Removes a line under the entry; the toast's Undo puts it back where it was. */
   async function removeLine(row: NoteRow) {
     if (!view) return;
-    const { facts } = view;
-    if (!(await setFacts({ ...facts, notes: facts.notes.filter((_, i) => i !== row.index) }))) return;
-    selectedKey = row.index > 0 ? noteKey(row.index - 1) : "fact:dates";
+    const { details } = view;
+    if (!(await setDetails({ ...details, notes: details.notes.filter((_, i) => i !== row.index) }))) return;
+    selectedKey = row.index > 0 ? noteKey(row.index - 1) : "detail:dates";
     toast("Removed the line", {
       action: {
         label: "Undo",
         run: async () => {
           if (!view) return;
-          const now = view.facts;
+          const now = view.details;
           const notes = [...now.notes.slice(0, row.index), row.note, ...now.notes.slice(row.index)];
-          if (await setFacts({ ...now, notes })) selectedKey = row.key;
+          if (await setDetails({ ...now, notes })) selectedKey = row.key;
         },
       },
     });
@@ -430,7 +430,7 @@
 <Toolbar>
   {#snippet crumbs()}
     <a href="/bank">Experience</a><Icon icon={ChevronRight} size={14} weight="medium" /><b
-      >{view?.facts.name || "Entry"}</b
+      >{view?.details.name || "Entry"}</b
     >
   {/snippet}
 </Toolbar>
@@ -468,7 +468,7 @@
     {:else}
       <header class="head">
         <p class="meta">{view.section}</p>
-        <h1 class="title">{view.facts.name}</h1>
+        <h1 class="title">{view.details.name}</h1>
       </header>
 
       {#snippet where()}
@@ -500,11 +500,11 @@
         <section
           class="group"
           aria-label="Details"
-          data-current={selected?.kind === "fact" || selected?.kind === "note" || undefined}
+          data-current={selected?.kind === "detail" || selected?.kind === "note" || undefined}
         >
           <GroupHead label="Details" />
-          {#each FACT_ROWS as row (row.key)}
-            {@const value = view.facts[row.field]}
+          {#each DETAIL_ROWS as row (row.key)}
+            {@const value = view.details[row.field]}
             {#snippet editor()}
               <Input bind:value={draft} aria-label={row.label} {@attach focus} onkeydown={onEditorKey} />
               {@render where()}

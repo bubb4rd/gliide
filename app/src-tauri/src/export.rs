@@ -33,7 +33,8 @@ const APP_COLUMNS: [&str; 10] = [
 ];
 
 /// Saves the open review's tailored resume as a PDF in the export folder, reads its text back for the on-file score,
-/// records the posting's application and rewrites `applications.csv`. Refuses a resume over its page limit.
+/// records the posting's application with the resume as sent and rewrites `applications.csv`. Refuses a resume over
+/// its page limit.
 pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
     let slot = lock(&app.review);
     let r = slot
@@ -66,6 +67,7 @@ pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
         };
         score(&t.resume, &r.req, &facts, today()).total
     });
+    let sent = serde_json::to_string(&t.resume)?;
 
     let store = lock(&app.store);
     let previous = store.application_for_posting(&r.posting_id)?;
@@ -87,6 +89,7 @@ pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
         ..base
     };
     store.put_application(&a)?;
+    store.put_sent(&a.id, &sent)?;
     drop(store);
     recorded(app, r, a, &path, on_file)
 }

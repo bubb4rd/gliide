@@ -73,7 +73,7 @@ pub fn tagged_text(resume: &Resume) -> String {
 }
 
 /// `resume` tagged as Suggest's `<resume>` reads it: [`tagged_text`] with each bullet's line budget, then its other
-/// variants and its skills from `bank`.
+/// variants and its skills from `bank`, and after each entry's bullets its facts.
 pub fn tagged_with_bank(resume: &Resume, bank: &Bank) -> String {
     let mut s = String::new();
     write_resume(&mut s, resume, Some(bank));
@@ -109,7 +109,7 @@ pub async fn suggest(
 }
 
 /// The resume, tagged; with `bank` (the model's input), each bullet is followed by its line budget, then its other
-/// variants and its skills when the bank holds it.
+/// variants and its skills when the bank holds it, and each entry's bullets by its facts.
 fn write_resume(s: &mut String, resume: &Resume, bank: Option<&Bank>) {
     s.push_str(&resume.name);
     s.push('\n');
@@ -134,6 +134,9 @@ fn write_resume(s: &mut String, resume: &Resume, bank: Option<&Bank>) {
                 {
                     extras(s, bb, &b.text);
                 }
+            }
+            if let Some(be) = bank_entry {
+                write_facts(s, be);
             }
         }
         for g in &section.groups {
@@ -168,6 +171,7 @@ fn write_candidates(s: &mut String, bank: &Bank, ids: &[String]) {
                 let _ = writeln!(s, "- [{}] {}", b.id, b.text);
                 extras(s, b, &b.text);
             }
+            write_facts(s, e);
         }
     }
 }
@@ -220,6 +224,17 @@ fn extras(s: &mut String, b: &BankBullet, shown: &str) {
     }
     if !b.skills.is_empty() {
         let _ = writeln!(s, "  (skills) {}", b.skills.join(", "));
+    }
+}
+
+/// An entry's facts, `[acme~1] (fact) text`, each followed by its skills: what the candidate said about the entry that
+/// no line of it prints. Facts never print; a line cites one as a source as it cites a bullet.
+pub fn write_facts(s: &mut String, e: &BankEntry) {
+    for f in &e.facts {
+        let _ = writeln!(s, "[{}] (fact) {}", f.id, f.text);
+        if !f.skills.is_empty() {
+            let _ = writeln!(s, "  (skills) {}", f.skills.join(", "));
+        }
     }
 }
 
