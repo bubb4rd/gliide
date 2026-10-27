@@ -119,6 +119,9 @@ pub struct FactSource {
     /// The posting it was said for, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub posting: Option<String>,
+    /// That posting's company, as it was then: what the editor names the fact by, after the posting goes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub company: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

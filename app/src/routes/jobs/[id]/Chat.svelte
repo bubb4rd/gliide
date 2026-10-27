@@ -3,7 +3,8 @@
   Review's). The thread opens with the job (folding to a strip once it scrolls away) and the agent's plan for the
   master (its suggested edits, read live from the review); then each ask you sent, right-aligned, and what came back:
   the reply, a diff card per proposed edit (accept, reject, tweak, take back), what was left out and why (a skill your
-  resume doesn't show asks whether you have it: Yes sends the ask again with it confirmed), and where the page stands.
+  resume doesn't show asks whether you have it: Yes, at an entry, keeps it there as a fact and sends the ask again with
+  it confirmed; Yes, not on your resume, confirms it for this ask alone), and where the page stands.
   The composer at the foot sends the next ask. Every message has its actions on hover or focus: your ask Edit (in
   place, then sent again from there) and Copy, an answer Copy and Retry (asked again from its ask), the plan Suggest
   again; asking again from an ask takes it and every turn after it back, their edits off the page in one undo step,
@@ -29,7 +30,7 @@
   import { appError, editTargets, type EditTargets, type SalaryRange } from "$lib/api";
   import { modelName } from "$lib/models";
   import { app } from "$lib/stores/app.svelte";
-  import { Button, CompanyMark, Icon, type KeyCommand, Thinking, tip, toast } from "$lib/ui";
+  import { Button, CompanyMark, Icon, type KeyCommand, Menu, Thinking, tip, toast } from "$lib/ui";
   import ChatJob from "./ChatJob.svelte";
   import Composer from "./Composer.svelte";
   import DiffCard from "./DiffCard.svelte";
@@ -205,10 +206,24 @@
     }
   }
 
-  /** Yes to a skill the agent left out asks again with it confirmed; the thread follows the new turn. */
-  function answer(t: Turn, i: number, yes: boolean) {
+  /** Where "Yes, at…" can say you have a skill: each entry on the page, then nowhere on it (this ask alone). */
+  const NOWHERE = "";
+  const atOptions = $derived([
+    ...(targets?.entries ?? []).map((t) => {
+      const [name, ...rest] = t.label.split(" · ");
+      return { value: t.id, label: name || t.label, meta: rest.join(" · ") || undefined };
+    }),
+    { value: NOWHERE, label: "Not on my resume", meta: "This ask only" },
+  ]);
+
+  /**
+   * Your answer to a skill the agent left out: yes at an entry keeps it there as a fact, then asks again with it
+   * confirmed (the thread follows the new turn); yes nowhere on the page confirms it for that ask alone; no leaves it.
+   */
+  function answer(t: Turn, i: number, yes: boolean, entry: string = NOWHERE) {
     if (yes) follow();
-    void s.answer(t, i, yes);
+    const name = atOptions.find((o) => o.value === entry)?.label;
+    void s.answer(t, i, yes, entry && name ? { entry, name } : undefined);
   }
 
   // ── Moving between cards ──
@@ -491,9 +506,16 @@
                             {#if skip.why}<p class="left-out__why">{skip.why}</p>{/if}
                             <div class="left-out__ask">
                               <span class="left-out__question">Do you have {skip.term} experience?</span>
-                              <Button size="sm" icon={Check} disabled={!ready || busy} onclick={() => answer(turn, i, true)}
-                                >Yes</Button
+                              <Menu
+                                value={null as string | null}
+                                options={atOptions}
+                                label="Where you have {skip.term} experience"
+                                size="sm"
+                                disabled={!ready || busy || !targets}
+                                onchange={(entry) => answer(turn, i, true, entry ?? NOWHERE)}
                               >
+                                {#snippet trigger()}Yes, at…{/snippet}
+                              </Menu>
                               <Button variant="ghost" size="sm" disabled={!ready} onclick={() => answer(turn, i, false)}
                                 >No</Button
                               >
@@ -501,7 +523,10 @@
                           {:else}
                             <p class="left-out__what">{skip.what} <span>· left out</span></p>
                             {#if skip.answer === "yes"}
-                              <p class="left-out__why">You have {skip.term} experience: asked again with it below</p>
+                              <p class="left-out__why">
+                                You have {skip.term} experience{#if skip.at}{" "}at {skip.at}, kept in Experience{/if}:
+                                asked again with it below
+                              </p>
                             {:else}
                               {#if skip.why}<p class="left-out__why">{skip.why}</p>{/if}
                               {#if skip.answer === "no"}<p class="left-out__why">You don’t have {skip.term} experience</p>{/if}

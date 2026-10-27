@@ -12,6 +12,7 @@ import {
   exportCover,
   exportPdf,
   instruct,
+  keepFact,
   onProgress,
   openJob,
   prepareReview,
@@ -317,15 +318,24 @@ export class Session {
 
   /**
    * Your answer to whether you have a skill the agent left out (`turn.skipped[index].term`): yes asks the same again,
-   * with that skill confirmed (resolves with the new turn); no leaves it out. Either way the question is answered.
+   * with that skill confirmed (resolves with the new turn); no leaves it out. Either way the question is answered. With
+   * `at` (a bank entry, and its name), yes is kept there as a fact first, so no review asks about it there again.
    */
-  answer(turn: Turn, index: number, yes: boolean): Promise<Turn | null> {
+  async answer(
+    turn: Turn,
+    index: number,
+    yes: boolean,
+    at?: { entry: string; name: string },
+  ): Promise<Turn | null> {
     const skip = turn.skipped[index];
-    if (!skip?.term || skip.answer) return Promise.resolve(null);
+    if (!skip?.term || skip.answer) return null;
+    const term = skip.term;
+    if (yes && at && !(await this.#edit((id) => keepFact(id, at.entry, term)))) return null;
     skip.answer = yes ? "yes" : "no";
+    if (at) skip.at = at.name;
     this.#saveThread();
-    if (!yes) return Promise.resolve(null);
-    const confirmed = [...(turn.confirmed ?? []), skip.term];
+    if (!yes) return null;
+    const confirmed = [...(turn.confirmed ?? []), term];
     return this.instruct(turn.ask, turn.scope, [...new Map(confirmed.map((t) => [t.toLowerCase(), t])).values()]);
   }
 

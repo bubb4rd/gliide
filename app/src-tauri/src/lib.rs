@@ -107,6 +107,7 @@ pub fn run() {
             commands::rewrite,
             commands::rewrite_line,
             commands::save_variant,
+            commands::keep_fact,
             commands::instruct,
             commands::accept,
             commands::reject,

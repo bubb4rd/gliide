@@ -69,6 +69,8 @@ export type * from "./bindings/EntryRow";
 export type * from "./bindings/EntryView";
 export type * from "./bindings/ErrorKind";
 export type * from "./bindings/Exported";
+export type * from "./bindings/FactKind";
+export type * from "./bindings/FactLine";
 export type * from "./bindings/FeedAuto";
 export type * from "./bindings/FeedItem";
 export type * from "./bindings/FeedItemState";
@@ -227,6 +229,9 @@ export const rewriteLine = (review: string, line: string | null, note: string) =
   invoke<Rewritten>("rewrite_line", { review, line, note });
 /** Saves the change's line to the bank as a variant of its bullet (`ChangeView.savable`); the review goes on as it is. */
 export const saveVariant = (review: string, key: string) => invoke<ReviewView>("save_variant", { review, key });
+/** Keeps "I have `skill` experience" as a fact of bank entry `entry`: no review asks about it there again. */
+export const keepFact = (review: string, entry: string, skill: string) =>
+  invoke<ReviewView>("keep_fact", { review, entry, skill });
 /**
  * One model call: `instruction` carried out over the page (or only `scope`: entry, bullet or skills-line ids, or
  * `"summary"`), each edit added as your own and off: pending until `accept`. One undo step. Emits `progress`.

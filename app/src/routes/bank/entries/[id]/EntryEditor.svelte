@@ -2,9 +2,10 @@
   A bank entry's editor (DESIGN.md, Experience): the entry's details (its name, subtitle, place and dates, then the
   lines under it, each edited in place; masters hold none of them, so every master that shows the entry prints the
   new ones), then each bullet as rows, one per wording (its text, then the variants you wrote), with the masters that
-  show each. Every edit goes to the bank and the whole view comes back; the desk previews the entry, highlighted, in a
-  master that shows it (or alone in the default template when none does). One request at a time: its answer replaces
-  the view, a failure leaves it and says why.
+  show each, then its facts (what you've said about it that no line prints: never on a page, a source for its lines).
+  Every edit goes to the bank and the whole view comes back; the desk previews the entry, highlighted, in a master
+  that shows it (or alone in the default template when none does). One request at a time: its answer replaces the
+  view, a failure leaves it and says why.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -23,6 +24,7 @@
     type EntryEdit,
     type EntryDetails,
     type EntryView,
+    type FactLine,
     type MasterRef,
     type NoteLine,
     type WordingView,
@@ -73,7 +75,7 @@
   /** Every master that shows the entry: where its details print. */
   const showingEntry = $derived(view?.masters.map((m) => m.id) ?? []);
 
-  // ── Rows: the entry's details, then every wording of every bullet, in order ──
+  // ── Rows: the entry's details, then every wording of every bullet, then its facts, in order ──
   type Field = "name" | "subtitle" | "place" | "dates";
   interface DetailRow {
     kind: "detail";
@@ -93,7 +95,13 @@
     bullet: BulletView;
     wording: WordingView;
   }
-  type Row = DetailRow | NoteRow | WordingRow;
+  interface FactRow {
+    kind: "fact";
+    key: string;
+    index: number;
+    fact: FactLine;
+  }
+  type Row = DetailRow | NoteRow | WordingRow | FactRow;
 
   const DETAIL_ROWS: DetailRow[] = (
     [
@@ -108,6 +116,9 @@
   const noteRows = $derived<NoteRow[]>(
     view?.details.notes.map((note, index) => ({ kind: "note", key: noteKey(index), index, note })) ?? [],
   );
+  const factRows = $derived<FactRow[]>(
+    view?.facts.map((fact, index) => ({ kind: "fact", key: `fact:${fact.id}`, index, fact })) ?? [],
+  );
   const rows = $derived<Row[]>(
     view
       ? [
@@ -118,6 +129,7 @@
               (wording): WordingRow => ({ kind: "wording", key: keyOf(bullet.id, wording.variant), bullet, wording }),
             ),
           ),
+          ...factRows,
         ]
       : [],
   );
@@ -127,12 +139,13 @@
   /** The selected row when it's a bullet's wording: what the bullet keys act on. */
   const selectedWording = $derived(selected?.kind === "wording" ? selected : undefined);
 
-  /** The open editor: a detail, a line under the entry (`index` null: a new one), or a wording of `bullet`'s (a new
-   *  variant when `adding`). */
+  /** The open editor: a detail, a line under the entry (`index` null: a new one), a wording of `bullet`'s (a new
+   *  variant when `adding`), or a fact (`index` null: a new one). */
   type Editing =
     | { kind: "detail"; key: string; field: Field }
     | { kind: "note"; key: string; index: number | null }
-    | { kind: "wording"; key: string; bullet: string; variant: number | null; adding: boolean };
+    | { kind: "wording"; key: string; bullet: string; variant: number | null; adding: boolean }
+    | { kind: "fact"; key: string; index: number | null };
   let editing = $state<Editing | null>(null);
   let draft = $state("");
   /** The edited line's bold label. */
@@ -174,6 +187,7 @@
 
   const edit = (change: EntryEdit) => request(() => editEntry(id, change, view?.preview ?? null));
   const setDetails = (details: EntryDetails) => edit({ kind: "set-details", details });
+  const setFacts = (facts: FactLine[]) => edit({ kind: "set-facts", facts });
 
   /** The masters that show `bullet` (in any wording). */
   const showing = (bullet: BulletView) => (master: MasterRef) => bullet.wordings.some((w) => w.masters.includes(master.id));
@@ -203,6 +217,14 @@
 
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+  /** Where a fact came from, under it: its skills, then who said it for what, and when ("Kafka · Confirmed for
+   *  Globex · Oct 27"). */
+  function factMeta(fact: FactLine): string {
+    const day = new Date(fact.at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const from = fact.kind === "review" ? `Confirmed for ${fact.company ?? "a posting"}` : "Added here";
+    return [...fact.skills, from, ...(fact.at ? [day] : [])].join(" · ");
+  }
+
   // ── Edits ──
   const focus = (element: HTMLElement) => element.focus();
 
@@ -221,6 +243,9 @@
       editing = { kind: "note", key: row.key, index: row.index };
       draftLabel = row.note.label;
       draft = row.note.text;
+    } else if (row.kind === "fact") {
+      editing = { kind: "fact", key: row.key, index: row.index };
+      draft = row.fact.text;
     } else {
       editing = { kind: "wording", key: row.key, bullet: row.bullet.id, variant: row.wording.variant, adding: false };
       draft = row.wording.text;
@@ -237,6 +262,12 @@
     if (!view) return;
     editing = { kind: "note", key: "note:new", index: null };
     draftLabel = "";
+    draft = "";
+  }
+
+  function startFact() {
+    if (!view) return;
+    editing = { kind: "fact", key: "fact:new", index: null };
     draft = "";
   }
 
@@ -257,6 +288,15 @@
         open.index === null ? [...details.notes, line] : details.notes.map((n, i) => (i === open.index ? line : n));
       if (!(await setDetails({ ...details, notes }))) return;
       selectedKey = noteKey(open.index ?? details.notes.length);
+    } else if (open.kind === "fact") {
+      const was = open.index === null ? undefined : view.facts[open.index];
+      if (!text || text === was?.text) return void (editing = null);
+      const fresh: FactLine = { id: "", text, skills: [], kind: "edit", at: "", posting: null, company: null };
+      const facts =
+        open.index === null ? [...view.facts, fresh] : view.facts.map((f, i) => (i === open.index ? { ...f, text } : f));
+      if (!(await setFacts(facts))) return;
+      const at = view.facts[open.index ?? view.facts.length - 1];
+      if (at) selectedKey = `fact:${at.id}`;
     } else if (open.adding) {
       if (!text) return void (editing = null);
       // The new variant comes last: after the text and every variant there is now.
@@ -288,13 +328,32 @@
       selectedKey = keyOf(row.bullet.id, null);
   }
 
-  /** What ⌫ removes: a line under the entry, or a variant (a bullet's text stays). */
+  /** What ⌫ removes: a line under the entry, a variant (a bullet's text stays) or a fact. */
   const removable = (row: Row | undefined) =>
-    row?.kind === "note" || (row?.kind === "wording" && row.wording.variant !== null);
+    row?.kind === "note" || row?.kind === "fact" || (row?.kind === "wording" && row.wording.variant !== null);
 
   function remove(row: Row | undefined) {
     if (row?.kind === "note") return removeLine(row);
     if (row?.kind === "wording") return removeVariant(row);
+    if (row?.kind === "fact") return removeFact(row);
+  }
+
+  /** Removes a fact; the toast's Undo puts it back where it was, as it was (its id and where it came from). */
+  async function removeFact(row: FactRow) {
+    if (!view) return;
+    if (!(await setFacts(view.facts.filter((_, i) => i !== row.index)))) return;
+    const before = view.facts[row.index - 1] ?? view.facts[0];
+    selectedKey = before ? `fact:${before.id}` : null;
+    toast("Removed the fact", {
+      action: {
+        label: "Undo",
+        run: async () => {
+          if (!view) return;
+          const facts = [...view.facts.slice(0, row.index), row.fact, ...view.facts.slice(row.index)];
+          if (await setFacts(facts)) selectedKey = row.key;
+        },
+      },
+    });
   }
 
   /** Removes a line under the entry; the toast's Undo puts it back where it was. */
@@ -359,6 +418,7 @@
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["⏎"], label: "Edit", run: () => startEdit(selected), disabled: !selected },
     { keys: ["L"], label: "Add a line", run: startLine, disabled: !view },
+    { keys: ["A"], label: "Add a fact", run: startFact, disabled: !view },
     {
       keys: ["V"],
       label: "Add a variant",
@@ -374,7 +434,7 @@
     ...(view?.masters.length ? [{ keys: [view.masters.length > 1 ? "1–9" : "1"], label: "Show in a master" }] : []),
     {
       keys: ["⌫"],
-      label: selected?.kind === "note" ? "Remove line" : "Remove variant",
+      label: selected?.kind === "note" ? "Remove line" : selected?.kind === "fact" ? "Remove fact" : "Remove variant",
       run: () => void remove(selected),
       disabled: !removable(selected),
     },
@@ -407,6 +467,7 @@
         startEdit(selected);
       },
       l: startLine,
+      a: startFact,
       v: () => startAdd(selectedWording?.bullet),
       m: () => void makeMain(selectedWording),
       Backspace: () => void remove(selected),
@@ -673,6 +734,69 @@
             </div>
           </section>
         {/each}
+
+        <section class="group" aria-label="Facts" data-current={selected?.kind === "fact" || undefined}>
+          <GroupHead label="Facts" meta="Never printed · they back this entry’s lines" />
+          {#each factRows as row (row.key)}
+            {#snippet editor()}
+              <Textarea
+                size="lg"
+                bind:value={draft}
+                aria-label="Fact {row.index + 1}"
+                {@attach focus}
+                onkeydown={onEditorKey}
+              />
+            {/snippet}
+            <PartRow
+              label="Fact {row.index + 1}"
+              selected={row.key === selected?.key}
+              onselect={() => (selectedKey = row.key)}
+              editor={editing?.key === row.key ? editor : undefined}
+            >
+              {#snippet text()}
+                <p class="words">{row.fact.text}</p>
+                <p class="meta from">{factMeta(row.fact)}</p>
+              {/snippet}
+              {#snippet actions()}
+                <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(row)}>Edit</Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  square
+                  icon={Trash2}
+                  aria-label="Remove this fact"
+                  {@attach tip("Remove this fact (⌫)")}
+                  onclick={() => removeFact(row)}
+                />
+              {/snippet}
+            </PartRow>
+          {:else}
+            {#if editing?.kind !== "fact"}
+              <p class="meta empty">
+                Nothing yet. Say yes to “Do you have … experience?” in a review, or add what this entry’s lines leave
+                out.
+              </p>
+            {/if}
+          {/each}
+
+          {#if editing?.kind === "fact" && editing.index === null}
+            <div class="adding">
+              <Textarea
+                size="lg"
+                bind:value={draft}
+                placeholder="Something true about this entry, like “The API handled 2,000 orders a day”"
+                aria-label="New fact"
+                {@attach focus}
+                onkeydown={onEditorKey}
+              />
+              <p class="meta hint">Never printed. Suggestions and the chat may use it in this entry’s lines.</p>
+            </div>
+          {/if}
+
+          <div class="foot">
+            <Button variant="ghost" size="sm" icon={Plus} kbd="A" onclick={startFact}>Add a fact</Button>
+          </div>
+        </section>
       </div>
 
       <div class="keys-wrap"><KeyFooter keys={KEYS} /></div>
@@ -814,6 +938,14 @@
   }
   .adding {
     padding: var(--space-2) var(--space-3);
+  }
+  .from {
+    margin: var(--space-1) 0 0;
+  }
+  .empty {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    text-wrap: pretty;
   }
   /* A group's own actions show, like a row's, on hover, focus or when one of its rows is selected. */
   .foot {

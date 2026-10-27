@@ -702,6 +702,7 @@ fn facts_back_lines_of_their_own_entry_only() {
             kind: FactKind::Review,
             at: "2026-10-27T10:00:00Z".into(),
             posting: None,
+            company: None,
         },
     };
     for e in bank.sections.iter_mut().flat_map(|s| &mut s.entries) {

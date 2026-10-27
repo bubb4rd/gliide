@@ -184,7 +184,7 @@ sections, entries, bullets and skills lines), plus:
 | `variants[]` per bullet | Phrasings you wrote and approved; the model prefers choosing one over writing new text |
 | `skills[]` per bullet | Skills you say the bullet demonstrates: evidence without the model guessing |
 | `tags[]` per entry (`swe`, `design`, `it`…) | Filters in the editor; a hint for candidates |
-| `facts[]` per entry | What you've said about the entry that its lines don't print, each `{ id: "acme~1", text, skills[], source: { kind: review \| edit, at, posting? } }`. Never on a page; in the model's input as `[acme~1] (fact) …` after the entry's bullets, and a source for that entry's lines as its bullets are. Left out of the JSON while empty, so banks without facts keep their revision hash |
+| `facts[]` per entry | What you've said about the entry that its lines don't print, each `{ id: "acme~1", text, skills[], source: { kind: review \| edit, at, posting?, company? } }` (`resume_core::facts`: an id is never renumbered; a new fact takes the number after the highest held). Never on a page; in the model's input as `[acme~1] (fact) …` after the entry's bullets, and a source for that entry's lines as its bullets are. Edited in the entry's editor (Facts) and kept from the review's **Yes, at…**. Left out of the JSON while empty, so banks without facts keep their revision hash |
 
 ```json
 {
@@ -334,9 +334,11 @@ Its honesty rules add to Suggest's, because you are in the conversation. Three s
 skills you confirmed (the chat's "Do you have Bash experience?"), and your own word in the instruction ("I ran the
 weekly status meeting there", "add that I managed the status meetings"). Hard claims (tools, numbers, names, titles,
 dates, specific duties) need one of them and stay in the entry they happened in, or where you say they did; a tool
-you only name in a request ("add Bash") is asked about rather than added. The grounding validator takes the
-instruction and the confirmed skills as sources for that call's names and numbers. `cargo run -p resume-llm --example
-instruct` runs a list of asks against a bank and master through `claude -p` to see what the prompt does.
+you only name in a request ("add Bash") is asked about rather than added. **Yes, at…** an entry keeps the answer as
+a fact of that entry ("Used Bash", `source.kind` review, the posting and its company), so no later review asks again
+there; **Not on my resume** confirms it for that ask alone. The grounding validator takes the instruction and the
+confirmed skills as sources for that call's names and numbers. `cargo run -p resume-llm --example instruct` runs a
+list of asks against a bank and master through `claude -p` to see what the prompt does.
 
 Suggest and Instruct share two rules. Soft skills (time management, communication, documentation…) are how the work
 was done, not claims of their own: backed wherever a line's work plainly exercises them, written into that work as a
@@ -824,7 +826,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; second template (design track), the mode experiment's report | Decision on the default mode |
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (`prompts/cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Cover letters and application tracking |
 | M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search (opt-in), the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: a live pull checks jobs within the daily cap, per-place copies folded; a five-board watchlist pull kept 84 of 693 jobs, every board's first job read from its API |
-| M6.7 Interviews | The interviewer: you prepare for and practice a job's interviews, and gliide asks about your experience to deepen the bank. Data ✓ (facts per bank entry as sources for every model call and the validator; each application's status changes with their time; the resume as exported); then the review's "Do you have Bash experience?" kept as a fact; rounds and the job's Interview tab; prep and typed practice; Dig on an entry, and stories; debriefs and opt-in notifications; spoken practice, then a live interviewer | A practiced round's prep, practice and debrief, grounded in the bank like a tailored resume |
+| M6.7 Interviews | The interviewer: you prepare for and practice a job's interviews, and gliide asks about your experience to deepen the bank. Data ✓ (facts per bank entry as sources for every model call and the validator; each application's status changes with their time; the resume as exported); the review's "Do you have Bash experience?" kept as a fact (**Yes, at…**) and the entry editor's Facts ✓; then rounds and the job's Interview tab; prep and typed practice; Dig on an entry, and stories; debriefs and opt-in notifications; spoken practice, then a live interviewer | A practiced round's prep, practice and debrief, grounded in the bank like a tailored resume |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
 | M8 Distribution | Signing and notarization ✓ (`pnpm release:mac`); updates ✓ (§1 Updates: signed bundle and `latest.json` on each GitHub release, checked daily, installed on Restart to update) | Installable by someone else |
 

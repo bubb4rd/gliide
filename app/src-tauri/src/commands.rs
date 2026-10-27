@@ -269,6 +269,16 @@ pub async fn save_variant(app: St<'_>, review: String, key: String) -> Res<Revie
 }
 
 #[tauri::command]
+pub async fn keep_fact(
+    app: St<'_>,
+    review: String,
+    entry: String,
+    skill: String,
+) -> Res<ReviewView> {
+    review::keep_fact(&app, &review, entry, skill).await
+}
+
+#[tauri::command]
 pub async fn instruct(
     app: St<'_>,
     review: String,

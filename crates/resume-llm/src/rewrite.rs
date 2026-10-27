@@ -180,6 +180,7 @@ mod tests {
                     kind: FactKind::Review,
                     at: "2026-10-27T10:00:00Z".into(),
                     posting: None,
+                    company: None,
                 },
             }],
         };

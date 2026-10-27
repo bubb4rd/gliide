@@ -1,10 +1,12 @@
-//! A bank entry's editor (DESIGN.md, Experience bank): its details (`resume_core::details`), its bullets with every
-//! wording and which master shows which, edits of the wordings (`resume_core::variants`: every master keeps the words
-//! it showed unless the edit is about what it shows), and the desk's preview: a master that shows the entry, or the
-//! entry alone in the default template.
+//! A bank entry's editor (DESIGN.md, Experience bank): its details (`resume_core::details`), its facts
+//! (`resume_core::facts`), its bullets with every wording and which master shows which, edits of the wordings
+//! (`resume_core::variants`: every master keeps the words it showed unless the edit is about what it shows), and the
+//! desk's preview: a master that shows the entry, or the entry alone in the default template.
 
-use resume_core::bank::Note;
+use chrono::{SecondsFormat, Utc};
+use resume_core::bank::{Fact, FactSource, Note};
 use resume_core::details::{Details, set_details};
+use resume_core::facts::{FactDraft, set_facts};
 use resume_core::master::{MasterBullet, MasterEntry, MasterSection};
 use resume_core::variants::{
     self, VariantError, add_variant, fold_into, make_main, remove_variant, set_wording,
@@ -12,7 +14,8 @@ use resume_core::variants::{
 use resume_core::{Bank, Master, Resume, resolve};
 
 use crate::dto::{
-    BulletView, EntryDetails, EntryEdit, EntryView, MasterRef, NoteLine, WordingView,
+    BulletView, EntryDetails, EntryEdit, EntryView, FactKind, FactLine, MasterRef, NoteLine,
+    WordingView,
 };
 use crate::error::{AppError, Result};
 use crate::state::{App, DEFAULT_TEMPLATE, lock};
@@ -37,7 +40,7 @@ pub fn edit_entry(
         find(bank, entry).is_some_and(|(_, e)| e.bullets.iter().any(|b| b.id == bullet))
     };
     let bullet = match &edit {
-        EntryEdit::SetDetails { .. } => None,
+        EntryEdit::SetDetails { .. } | EntryEdit::SetFacts { .. } => None,
         EntryEdit::AddVariant { bullet, .. }
         | EntryEdit::SetWording { bullet, .. }
         | EntryEdit::RemoveVariant { bullet, .. }
@@ -67,6 +70,17 @@ fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) 
     match edit {
         EntryEdit::SetDetails { details } => {
             return set_details(bank, entry, details.into())
+                .map_err(|e| AppError::other(e.to_string()));
+        }
+        EntryEdit::SetFacts { facts } => {
+            let drafts = facts.into_iter().map(draft).collect();
+            let typed = FactSource {
+                kind: resume_core::bank::FactKind::Edit,
+                at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+                posting: None,
+                company: None,
+            };
+            return set_facts(bank, entry, drafts, typed)
                 .map_err(|e| AppError::other(e.to_string()));
         }
         EntryEdit::AddVariant { bullet, text } => add_variant(bank, &bullet, &text).map(drop),
@@ -108,6 +122,41 @@ fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) 
 
 pub fn variant_error(e: VariantError) -> AppError {
     AppError::other(e.to_string())
+}
+
+/// A fact as the editor shows it.
+fn fact_line(f: &Fact) -> FactLine {
+    FactLine {
+        id: f.id.clone(),
+        text: f.text.clone(),
+        skills: f.skills.clone(),
+        kind: match f.source.kind {
+            resume_core::bank::FactKind::Review => FactKind::Review,
+            resume_core::bank::FactKind::Edit => FactKind::Edit,
+        },
+        at: f.source.at.clone(),
+        posting: f.source.posting.clone(),
+        company: f.source.company.clone(),
+    }
+}
+
+/// A fact as the editor sends it back: an empty `id` is a new fact.
+fn draft(l: FactLine) -> FactDraft {
+    let source = FactSource {
+        kind: match l.kind {
+            FactKind::Review => resume_core::bank::FactKind::Review,
+            FactKind::Edit => resume_core::bank::FactKind::Edit,
+        },
+        at: l.at,
+        posting: l.posting,
+        company: l.company,
+    };
+    FactDraft {
+        id: (!l.id.is_empty()).then_some(l.id),
+        text: l.text,
+        skills: l.skills,
+        source: Some(source),
+    }
 }
 
 impl From<EntryDetails> for Details {
@@ -247,6 +296,7 @@ fn view(
                 })
                 .collect(),
         },
+        facts: e.facts.iter().map(fact_line).collect(),
         bullets,
         masters: showing
             .iter()

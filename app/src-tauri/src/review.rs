@@ -5,9 +5,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use resume_core::bank::{Bank, BankEntry};
+use chrono::{SecondsFormat, Utc};
+use resume_core::bank::{Bank, BankEntry, FactKind, FactSource};
 use resume_core::change::{Change, Draft, DraftEvent, Mode as CoreMode, Op, Origin, State};
 use resume_core::changes::{changes_of, draft_changes};
+use resume_core::facts::{FactError, add_fact};
 use resume_core::matcher::{Page, find_literal};
 use resume_core::resume::SectionKind;
 use resume_core::suggestions::Suggestions;
@@ -340,6 +342,43 @@ pub async fn save_variant(app: &Arc<App>, review: &str, key: String) -> Result<R
             store.put_bank(&bank)?;
         }
         add_variant(&mut r.bank, &bullet, &text).map_err(variant_error)?;
+        Ok(())
+    })
+    .await
+}
+
+/// Keeps "I have `skill` experience, at `entry`" (your answer to the chat's "Do you have … experience?") as a fact of
+/// that bank entry: every later review and call backs `skill` there without asking again. This review's copy of the
+/// bank holds it too, so the ask that goes again next can use it.
+pub async fn keep_fact(
+    app: &Arc<App>,
+    review: &str,
+    entry: String,
+    skill: String,
+) -> Result<ReviewView> {
+    edit(app, review, move |app, r| {
+        let skill = skill.trim().to_owned();
+        if skill.is_empty() {
+            return Err(AppError::other("Say which skill you have"));
+        }
+        let text = format!("Used {skill}");
+        let source = FactSource {
+            kind: FactKind::Review,
+            at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+            posting: Some(r.posting_id.clone()),
+            company: Some(crate::cover::company(r).trim())
+                .filter(|c| !c.is_empty())
+                .map(str::to_owned),
+        };
+        let skills = [skill];
+        let fact_error = |e: FactError| AppError::other(e.to_string());
+        {
+            let store = lock(&app.store);
+            let (_, mut bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
+            add_fact(&mut bank, &entry, &text, &skills, source.clone()).map_err(fact_error)?;
+            store.put_bank(&bank)?;
+        }
+        add_fact(&mut r.bank, &entry, &text, &skills, source).map_err(fact_error)?;
         Ok(())
     })
     .await

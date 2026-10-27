@@ -361,6 +361,8 @@ pub struct EntryView {
     /// The bank section's title.
     pub section: String,
     pub details: EntryDetails,
+    /// What you've said about the entry that its lines don't print.
+    pub facts: Vec<FactLine>,
     pub bullets: Vec<BulletView>,
     /// The masters that show this entry, by title.
     pub masters: Vec<MasterRef>,
@@ -393,6 +395,33 @@ pub struct EntryDetails {
 pub struct NoteLine {
     pub label: String,
     pub text: String,
+}
+
+/// One of an entry's facts. The editor sends the list back whole (`set-facts`): a line with an empty `id` is new and
+/// gets one, the others keep theirs and where they came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FactLine {
+    pub id: String,
+    pub text: String,
+    /// Skills it shows ("Kafka", from the review's "Do you have Kafka experience?").
+    pub skills: Vec<String>,
+    pub kind: FactKind,
+    /// When it was said, RFC 3339.
+    pub at: String,
+    /// The posting it was said for, and its company then.
+    pub posting: Option<String>,
+    pub company: Option<String>,
+}
+
+/// Where a fact came from: the review's "Do you have … experience?", or the entry's editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum FactKind {
+    Review,
+    Edit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -466,6 +495,10 @@ pub enum EntryEdit {
         master: String,
         bullet: String,
         variant: Option<u32>,
+    },
+    /// The entry's facts, whole, in order.
+    SetFacts {
+        facts: Vec<FactLine>,
     },
 }
 

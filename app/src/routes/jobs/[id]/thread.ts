@@ -79,10 +79,11 @@ export interface TurnProposal {
 
 /**
  * A part the agent left undone. With a `term` (a skill your resume doesn't show), the chat asks whether you have it;
- * `answer` is what you said.
+ * `answer` is what you said, and `at` the entry you said you used it at (kept as a fact there), by name.
  */
 export interface TurnSkip extends Skipped {
   answer?: "yes" | "no";
+  at?: string;
 }
 
 export interface Turn {
