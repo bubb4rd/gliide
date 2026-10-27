@@ -415,13 +415,14 @@ pub struct FactLine {
     pub company: Option<String>,
 }
 
-/// Where a fact came from: the review's "Do you have … experience?", or the entry's editor.
+/// Where a fact came from: the review's "Do you have … experience?", the entry's editor, or a practiced answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum FactKind {
     Review,
     Edit,
+    Practice,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -1070,6 +1071,152 @@ pub struct SentView {
     /// `sent`: the tailored resume as exported, rendered again; `pdf`: the exported PDF itself (applications exported
     /// before the app kept what it sent).
     pub from: SentFrom,
+    /// The resume's lines (bullets, note lines, the summary) as sent, by id, so prep and practice can name them; empty
+    /// for `pdf`.
+    pub lines: Vec<SentLine>,
+}
+
+/// One line of the resume as sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SentLine {
+    /// `acme.2`, `state-u#1`, `summary`.
+    pub id: String,
+    /// The entry it sits under ("Acme Widgets Co."); empty for the summary.
+    pub entry: String,
+    pub text: String,
+}
+
+/// One round's prep (one model call, kept until what it was written from changes): what the round will likely test,
+/// the questions it will likely ask, the requirements the resume you sent doesn't show with an honest answer for
+/// each, and questions to ask them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PrepView {
+    pub round: String,
+    /// One sentence.
+    pub focus: String,
+    pub questions: Vec<PrepQuestion>,
+    pub gaps: Vec<PrepGap>,
+    pub ask_them: Vec<String>,
+    /// The model that wrote it, as the agent named it.
+    pub model: String,
+    /// When it was written, RFC 3339.
+    pub at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PrepQuestion {
+    /// `q1`, `q2`…: what practice names it by.
+    pub id: String,
+    pub group: QuestionGroup,
+    pub text: String,
+    /// Why it's likely, in a few words ("A number on the page invites a follow-up").
+    pub why: String,
+    /// The lines of the resume as sent it's about (`SentLine.id`), each one that exists.
+    pub lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum QuestionGroup {
+    /// About a line of the resume you sent.
+    Resume,
+    /// A skill the posting asks for.
+    Skills,
+    Behavioral,
+    /// Start date, pay, location, authorization.
+    Logistics,
+}
+
+/// A requirement the resume you sent doesn't show, and what you can truthfully say about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PrepGap {
+    /// The posting's term.
+    pub term: String,
+    pub required: bool,
+    /// Never claims the skill; draws only on the resume as sent and the bank's facts.
+    pub answer: String,
+    /// The lines it draws on (`SentLine.id`).
+    pub lines: Vec<String>,
+}
+
+/// One practiced answer and what came back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PracticeTurn {
+    pub id: String,
+    pub round: String,
+    /// The prep question's id.
+    pub question: String,
+    /// The question as asked.
+    pub asked: String,
+    pub answer: String,
+    pub feedback: Feedback,
+    /// RFC 3339.
+    pub at: String,
+}
+
+/// What an answer did, never a grade: the lines it drew on, which parts of situation, task, action and result it has,
+/// what it says differently from the resume you sent, what it says the bank doesn't have yet, a tighter telling
+/// grounded in the answer and the bank, and the follow-up they'd likely ask.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Feedback {
+    pub lines: Vec<String>,
+    pub situation: StarPart,
+    pub task: StarPart,
+    pub action: StarPart,
+    pub result: StarPart,
+    /// One short sentence on the part that's thin or missing, if one is.
+    pub star_note: Option<String>,
+    pub mismatches: Vec<Mismatch>,
+    pub new_claims: Vec<NewClaim>,
+    pub tighter: Option<String>,
+    pub follow_up: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum StarPart {
+    Yes,
+    Thin,
+    No,
+}
+
+/// A name, number or title the answer says differently from the resume you sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Mismatch {
+    /// What the answer said ("20 regressions").
+    pub said: String,
+    /// What the resume says ("14 regressions").
+    pub resume: String,
+    /// The line that says it (`SentLine.id`).
+    pub line: String,
+}
+
+/// Something the answer claims that the bank doesn't hold: offered as a fact of `entry`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NewClaim {
+    /// One claim, in your words as the answer put it.
+    pub text: String,
+    /// The bank entry it happened in, and its name.
+    pub entry: String,
+    pub entry_name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -1420,6 +1567,10 @@ pub enum Stage {
     Instructing,
     /// A pasted interview invite read into a round.
     Inviting,
+    /// A round's prep written.
+    Prepping,
+    /// A practiced answer read.
+    Practicing,
 }
 
 #[cfg(test)]

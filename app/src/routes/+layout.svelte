@@ -41,6 +41,8 @@
     importing: "Importing…",
     instructing: "Working…",
     inviting: "Reading…",
+    prepping: "Prepping…",
+    practicing: "Reading…",
   };
 
   /**

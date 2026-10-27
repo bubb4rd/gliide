@@ -10,14 +10,14 @@ use crate::dto::{
     Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
     Decision, EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView,
     FeedView, FolderPdf, FolderView, ImportChoices, ImportView, Instructed, JobRow, JobView,
-    KeyDecision, Library, LogoRow, LogoSource, Mode, Place, Progress, ReviewView, Rewritten, Round,
-    RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
-    StatusSet, UpdateStatus,
+    KeyDecision, Library, LogoRow, LogoSource, Mode, Place, PracticeTurn, PrepView, Progress,
+    ReviewView, Rewritten, Round, RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults,
+    SentView, Settings, StatusSet, UpdateStatus,
 };
 use crate::state::{App, blocking};
 use crate::{
-    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place, review,
-    rounds, settings, update,
+    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place, prep,
+    review, rounds, settings, update,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -375,8 +375,38 @@ pub async fn read_invite_file(app: St<'_>, path: String) -> Res<RoundDraft> {
 }
 
 #[tauri::command]
-pub async fn sent_resume(app: St<'_>, application: String) -> Res<SentView> {
-    blocking(&app, move |app| rounds::sent_resume(app, &application)).await
+pub async fn sent_resume(app: St<'_>, application: String, marked: Vec<String>) -> Res<SentView> {
+    blocking(&app, move |app| {
+        rounds::sent_resume(app, &application, &marked)
+    })
+    .await
+}
+
+// ── Prep and practice ──
+
+#[tauri::command]
+pub async fn prep(app: St<'_>, round: String, again: bool) -> Res<PrepView> {
+    prep::prep(&app, &round, again).await
+}
+
+#[tauri::command]
+pub async fn practice(
+    app: St<'_>,
+    round: String,
+    question: String,
+    answer: String,
+) -> Res<PracticeTurn> {
+    prep::practice(&app, &round, question, answer).await
+}
+
+#[tauri::command]
+pub async fn practice_turns(app: St<'_>, round: String) -> Res<Vec<PracticeTurn>> {
+    blocking(&app, move |app| prep::practice_turns(app, &round)).await
+}
+
+#[tauri::command]
+pub async fn keep_claim(app: St<'_>, round: String, entry: String, text: String) -> Res<()> {
+    blocking(&app, move |app| prep::keep_claim(app, &round, &entry, &text)).await
 }
 
 // ── Company logos ──

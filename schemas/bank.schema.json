@@ -266,6 +266,11 @@
           "description": "Typed in the entry's editor.",
           "type": "string",
           "const": "edit"
+        },
+        {
+          "description": "Said in a practiced interview answer and kept (\"Keep as fact\").",
+          "type": "string",
+          "const": "practice"
         }
       ]
     },
@@ -276,6 +281,13 @@
         "at": {
           "description": "RFC 3339.",
           "type": "string"
+        },
+        "company": {
+          "description": "That posting's company, as it was then: what the editor names the fact by, after the posting goes.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "kind": {
           "$ref": "#/$defs/FactKind"

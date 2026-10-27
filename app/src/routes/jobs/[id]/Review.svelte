@@ -11,6 +11,7 @@
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
   import Banknote from "@lucide/svelte/icons/banknote";
   import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
+  import Play from "@lucide/svelte/icons/play";
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
@@ -90,6 +91,8 @@
     importing: "Copying your resume…",
     instructing: "Working on your request…",
     inviting: "Reading the invite…",
+    prepping: "Writing the prep…",
+    practicing: "Reading your answer…",
   } as const;
   /** A finished stage in the status's trail. */
   const DONE = {
@@ -101,6 +104,8 @@
     importing: "Copied your resume",
     instructing: "Worked on your request",
     inviting: "Read the invite",
+    prepping: "Wrote the prep",
+    practicing: "Read your answer",
   } as const;
   const TABS: { value: Tab; label: string }[] = [
     { value: "resume", label: "Resume" },
@@ -149,6 +154,11 @@
   );
   /** Open the Interview tab's add form (the status just moved to Interviewing, or `?add=round`). */
   let addRound = $state(false);
+  /** The Interview tab is practicing a round, and whether it has a prep to practice (its toolbar action). */
+  let practicing = $state(false);
+  let canPractice = $state(false);
+  /** The lines of the resume you sent that the Interview tab's selected question is about. */
+  let marked = $state<string[]>([]);
   /** The column is the chat: on the resume tab, once there's a review to talk about. */
   const chatting = $derived(
     !onCover && !onInterview && review !== null && (s.phase === "ready" || s.phase === "suggesting"),
@@ -205,15 +215,16 @@
     if (tab === "interview" && !interviewable) tab = "resume";
   });
 
-  // The resume the application sent, for the Interview tab's desk.
+  // The resume the application sent, for the Interview tab's desk, the selected question's lines marked.
   let sent = $state<SentView | null>(null);
-  let sentFor: string | null = null;
+  let sentKey = "";
   $effect(() => {
     const id = application?.id;
-    if (!onInterview || !id || sentFor === id) return;
-    sentFor = id;
-    sentResume(id)
-      .then((v) => sentFor === id && (sent = v))
+    const key = `${id}:${marked.join(",")}`;
+    if (!onInterview || !id || sentKey === key) return;
+    sentKey = key;
+    sentResume(id, marked)
+      .then((v) => sentKey === key && (sent = v))
       .catch(() => (sent = null));
   });
 
@@ -464,6 +475,10 @@
       disabled={!ready || !letter?.letter || s.drafting !== null}
       onclick={exportLetter}>Export letter</Button
     >
+  {:else if onInterview && practicing}
+    <Button variant="ghost" kbd="Esc" onclick={() => (practicing = false)}>Back to prep</Button>
+  {:else if onInterview && canPractice}
+    <Button variant="primary" icon={Play} kbd="P" onclick={() => (practicing = true)}>Practice</Button>
   {:else if onInterview}
     <Button variant="primary" icon={CalendarPlus} kbd="A" onclick={() => (addRound = true)}>Add interview</Button>
   {:else}
@@ -507,6 +522,10 @@
         {logoSrc}
         keys={INTERVIEW_KEYS}
         bind:adding={addRound}
+        lines={sent?.lines ?? []}
+        bind:marked
+        bind:practicing
+        bind:canPractice
       />
     {:else}
     {#if head && !chatting}

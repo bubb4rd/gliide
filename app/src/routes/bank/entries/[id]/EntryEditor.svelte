@@ -221,7 +221,13 @@
    *  Globex · Oct 27"). */
   function factMeta(fact: FactLine): string {
     const day = new Date(fact.at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    const from = fact.kind === "review" ? `Confirmed for ${fact.company ?? "a posting"}` : "Added here";
+    const company = fact.company ?? "a posting";
+    const from =
+      fact.kind === "review"
+        ? `Confirmed for ${company}`
+        : fact.kind === "practice"
+          ? `Said in practice for ${company}`
+          : "Added here";
     return [...fact.skills, from, ...(fact.at ? [day] : [])].join(" · ");
   }
 

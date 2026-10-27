@@ -38,6 +38,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("places.sql"),
     include_str!("interviews.sql"),
     include_str!("rounds.sql"),
+    include_str!("practice.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -256,6 +257,34 @@ impl RoundState {
             _ => return None,
         })
     }
+}
+
+/// A round's prep as written: its JSON, the model that wrote it, when.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Prep {
+    /// What it was written from, hashed (the caller's).
+    pub key: String,
+    pub round_id: String,
+    pub json: String,
+    pub model: String,
+    /// Set by the store when written (the one given is ignored).
+    pub at: String,
+}
+
+/// One practiced answer and the feedback that came back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PracticeRow {
+    pub id: String,
+    pub round_id: String,
+    /// The prep question's id.
+    pub question: String,
+    /// The question as asked.
+    pub asked: String,
+    pub answer: String,
+    /// The feedback, JSON.
+    pub feedback: String,
+    /// Set by the store when added (the one given is ignored).
+    pub at: String,
 }
 
 /// An analysis's cover letter: its parts as last written or edited.
@@ -1307,6 +1336,89 @@ impl Store {
             )
             .optional()?;
         row.map(RawRound::parse).transpose()
+    }
+
+    // Preps and practice.
+
+    /// The prep stored under `key`.
+    pub fn prep(&self, key: &str) -> Result<Option<Prep>, StoreError> {
+        self.prep_where("key = ?1", key)
+    }
+
+    /// The round's prep written last, whatever it was written from.
+    pub fn latest_prep(&self, round_id: &str) -> Result<Option<Prep>, StoreError> {
+        self.prep_where("round_id = ?1 ORDER BY at DESC, rowid DESC LIMIT 1", round_id)
+    }
+
+    fn prep_where(&self, clause: &str, arg: &str) -> Result<Option<Prep>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                &format!("SELECT key, round_id, json, model, at FROM preps WHERE {clause}"),
+                [arg],
+                |r| {
+                    Ok(Prep {
+                        key: r.get(0)?,
+                        round_id: r.get(1)?,
+                        json: r.get(2)?,
+                        model: r.get(3)?,
+                        at: r.get(4)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Stores `p` under its key, written now; replaces any prep under the same key. Returns it as stored; errors
+    /// when its round doesn't exist.
+    pub fn put_prep(&self, p: &Prep) -> Result<Prep, StoreError> {
+        if round_by_id(&self.conn, &p.round_id)?.is_none() {
+            return Err(not_found("round", &p.round_id));
+        }
+        let at = now();
+        self.conn.execute(
+            "INSERT INTO preps (key, round_id, json, model, at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (key) DO UPDATE SET round_id = excluded.round_id, json = excluded.json,
+                 model = excluded.model, at = excluded.at",
+            params![p.key, p.round_id, p.json, p.model, at],
+        )?;
+        Ok(Prep { at, ..p.clone() })
+    }
+
+    /// Adds a practiced answer, at now; returns it as stored. Errors when its round doesn't exist.
+    pub fn add_practice(&self, p: &PracticeRow) -> Result<PracticeRow, StoreError> {
+        if round_by_id(&self.conn, &p.round_id)?.is_none() {
+            return Err(not_found("round", &p.round_id));
+        }
+        let at = now();
+        self.conn.execute(
+            "INSERT INTO practice (id, round_id, question, asked, answer, feedback, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![p.id, p.round_id, p.question, p.asked, p.answer, p.feedback, at],
+        )?;
+        Ok(PracticeRow { at, ..p.clone() })
+    }
+
+    /// The round's practiced answers, oldest first.
+    pub fn practice(&self, round_id: &str) -> Result<Vec<PracticeRow>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, round_id, question, asked, answer, feedback, at FROM practice
+             WHERE round_id = ?1 ORDER BY at, rowid",
+        )?;
+        let rows = stmt
+            .query_map([round_id], |r| {
+                Ok(PracticeRow {
+                    id: r.get(0)?,
+                    round_id: r.get(1)?,
+                    question: r.get(2)?,
+                    asked: r.get(3)?,
+                    answer: r.get(4)?,
+                    feedback: r.get(5)?,
+                    at: r.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// The application the round belongs to.

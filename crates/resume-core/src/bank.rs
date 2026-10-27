@@ -131,6 +131,8 @@ pub enum FactKind {
     Review,
     /// Typed in the entry's editor.
     Edit,
+    /// Said in a practiced interview answer and kept ("Keep as fact").
+    Practice,
 }
 
 /// A line under an entry, `label: text` (or just `text` when the label is `""`).

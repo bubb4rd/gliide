@@ -17,6 +17,7 @@ pub mod jobs;
 pub mod library;
 pub mod logo;
 pub mod place;
+pub mod prep;
 pub mod review;
 pub mod rounds;
 pub mod settings;
@@ -125,6 +126,10 @@ pub fn run() {
             commands::read_invite,
             commands::read_invite_file,
             commands::sent_resume,
+            commands::prep,
+            commands::practice,
+            commands::practice_turns,
+            commands::keep_claim,
             commands::logos,
             commands::set_logo,
             commands::remove_logo,

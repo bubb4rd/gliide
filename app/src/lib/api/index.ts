@@ -35,6 +35,8 @@ import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
 import type { Mode } from "./bindings/Mode";
 import type { Place } from "./bindings/Place";
+import type { PracticeTurn } from "./bindings/PracticeTurn";
+import type { PrepView } from "./bindings/PrepView";
 import type { Progress } from "./bindings/Progress";
 import type { ReviewView } from "./bindings/ReviewView";
 import type { Rewritten } from "./bindings/Rewritten";
@@ -76,6 +78,7 @@ export type * from "./bindings/ErrorKind";
 export type * from "./bindings/Exported";
 export type * from "./bindings/FactKind";
 export type * from "./bindings/FactLine";
+export type * from "./bindings/Feedback";
 export type * from "./bindings/FeedAuto";
 export type * from "./bindings/FeedItem";
 export type * from "./bindings/FeedItemState";
@@ -107,11 +110,18 @@ export type * from "./bindings/LogoSource";
 export type * from "./bindings/MasterChoice";
 export type * from "./bindings/MasterRef";
 export type * from "./bindings/MasterRow";
+export type * from "./bindings/Mismatch";
 export type * from "./bindings/Mode";
+export type * from "./bindings/NewClaim";
 export type * from "./bindings/NoteLine";
 export type * from "./bindings/Place";
+export type * from "./bindings/PracticeTurn";
+export type * from "./bindings/PrepGap";
+export type * from "./bindings/PrepQuestion";
+export type * from "./bindings/PrepView";
 export type * from "./bindings/Proposal";
 export type * from "./bindings/Progress";
+export type * from "./bindings/QuestionGroup";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
 export type * from "./bindings/Round";
@@ -127,11 +137,13 @@ export type * from "./bindings/SearchCursor";
 export type * from "./bindings/SearchResults";
 export type * from "./bindings/SectionRow";
 export type * from "./bindings/SentFrom";
+export type * from "./bindings/SentLine";
 export type * from "./bindings/SentView";
 export type * from "./bindings/Settings";
 export type * from "./bindings/SkillChip";
 export type * from "./bindings/Skipped";
 export type * from "./bindings/Stage";
+export type * from "./bindings/StarPart";
 export type * from "./bindings/StatusSet";
 export type * from "./bindings/Target";
 export type * from "./bindings/TemplateRow";
@@ -303,8 +315,20 @@ export const readInvite = (application: string, text: string) =>
   invoke<RoundDraft>("read_invite", { application, text });
 /** A calendar invite file (`.ics`) read into a round's fields; no model call. */
 export const readInviteFile = (path: string) => invoke<RoundDraft>("read_invite_file", { path });
-/** The resume the application sent: what it exported, rendered again, else the exported PDF. */
-export const sentResume = (application: string) => invoke<SentView>("sent_resume", { application });
+/** The resume the application sent: what it exported, rendered again (`marked` lines highlighted), else the exported
+ *  PDF. */
+export const sentResume = (application: string, marked: string[] = []) =>
+  invoke<SentView>("sent_resume", { application, marked });
+/** A round's prep: kept, else written now (one model call; emits `progress`, `prepping`). `again` writes it anew. */
+export const prep = (round: string, again = false) => invoke<PrepView>("prep", { round, again });
+/** A round's practiced answers, oldest first. */
+export const practiceTurns = (round: string) => invoke<PracticeTurn[]>("practice_turns", { round });
+/** One model call: your answer to prep question `question` read (emits `progress`, `practicing`), kept with it. */
+export const practice = (round: string, question: string, answer: string) =>
+  invoke<PracticeTurn>("practice", { round, question, answer });
+/** Keeps what an answer said as a fact of bank entry `entry` (from practice for `round`). */
+export const keepClaim = (round: string, entry: string, text: string) =>
+  invoke<void>("keep_claim", { round, entry, text });
 
 // ── Job feed (freehire) ──
 /** Every row but skipped and dismissed: fits first (best score first), then not fit, checking, waiting, new. */

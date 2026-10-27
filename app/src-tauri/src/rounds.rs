@@ -6,13 +6,15 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::{DateTime, Local, SecondsFormat};
-use resume_core::Master;
+use resume_core::resume::SectionKind;
+use resume_core::{Master, Resume};
 use resume_llm::invite::{self, Invite, InviteInput};
+use resume_llm::prep;
 use resume_store::{self as store, Application, RoundState as StoreState};
 
 use crate::dto::{
     AppStatus, ApplicationRow, Round, RoundDraft, RoundKind, RoundState, RoundsView, SentFrom,
-    SentView, Stage,
+    SentLine, SentView, Stage,
 };
 use crate::error::{AppError, Result};
 use crate::export;
@@ -109,7 +111,7 @@ fn view(app: &App, application: &str, moved_from: Option<AppStatus>) -> Result<R
     })
 }
 
-fn application_of(store: &store::Store, id: &str) -> Result<Application> {
+pub(crate) fn application_of(store: &store::Store, id: &str) -> Result<Application> {
     store
         .application(id)?
         .ok_or_else(|| AppError::missing("This application was deleted"))
@@ -172,9 +174,10 @@ pub fn read_invite_file(path: &str) -> Result<RoundDraft> {
         .ok_or_else(|| AppError::other("This file holds no calendar event"))
 }
 
-/// The resume the application sent: the tailored resume as exported, rendered again with its master's template (the
-/// default when the master is gone); else the exported PDF itself.
-pub fn sent_resume(app: &App, application: &str) -> Result<SentView> {
+/// The resume the application sent: the tagged resume as exported, rendered again with its master's template (the
+/// default when the master is gone), with its lines; else the exported PDF itself. `marked` lines (`SentLine.id`s)
+/// are highlighted as the review highlights a change, and only they.
+pub fn sent_resume(app: &App, application: &str, marked: &[String]) -> Result<SentView> {
     let store = lock(&app.store);
     let a = application_of(&store, application)?;
     if let Some(json) = store.sent(&a.id)? {
@@ -187,35 +190,85 @@ pub fn sent_resume(app: &App, application: &str) -> Result<SentView> {
         };
         drop(store);
         let master = master.unwrap_or_else(default_master);
-        let pages = app.with_renderer(&master, |r| Ok(r.render(&json, false)?.svgs()))?;
+        let mut resume: Resume = serde_json::from_str(&json)?;
+        let lines = prep::sent_lines(&resume)
+            .into_iter()
+            .map(|l| SentLine {
+                id: l.id,
+                entry: l.entry_name,
+                text: l.text,
+            })
+            .collect();
+        let pages = if marked.is_empty() {
+            app.with_renderer(&master, |r| Ok(r.render(&json, false)?.svgs()))?
+        } else {
+            mark(&mut resume, marked);
+            let json = serde_json::to_string(&resume)?;
+            app.with_renderer(&master, |r| Ok(r.render(&json, true)?.svgs()))?
+        };
         return Ok(SentView {
             pages,
             from: SentFrom::Sent,
+            lines,
         });
     }
     drop(store);
-    let Some(path) = a.resume_path else {
-        return Err(AppError::missing("No resume was sent for this application"));
-    };
-    let name = Path::new(&path)
-        .file_name()
-        .map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(AppError::missing(format!(
-                "{name} isn’t where it was exported anymore"
-            )));
-        }
-        Err(e) => return Err(e.into()),
-    };
+    let (name, bytes) = sent_pdf(&a)?;
     let pages = resume_render::pdf_svgs(bytes)
         .filter(|pages| !pages.is_empty())
         .ok_or_else(|| AppError::other(format!("{name} couldn’t be read as a PDF")))?;
     Ok(SentView {
         pages,
         from: SentFrom::Pdf,
+        lines: vec![],
     })
+}
+
+/// The PDF the application exported, by its file name and bytes.
+pub(crate) fn sent_pdf(a: &Application) -> Result<(String, Vec<u8>)> {
+    let Some(path) = a.resume_path.as_deref() else {
+        return Err(AppError::missing("No resume was sent for this application"));
+    };
+    let name = Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_owned(), |n| n.to_string_lossy().into_owned());
+    match std::fs::read(path) {
+        Ok(bytes) => Ok((name, bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(AppError::missing(format!(
+            "{name} isn’t where it was exported anymore"
+        ))),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Highlights exactly the lines `ids` names (`SentLine.id`s): every other mark the tailoring left is cleared.
+fn mark(resume: &mut Resume, ids: &[String]) {
+    let marked = |id: &str| ids.iter().any(|m| m == id);
+    for section in &mut resume.sections {
+        let summary = section.kind == Some(SectionKind::Summary);
+        for g in &mut section.groups {
+            g.added.clear();
+        }
+        for (i, e) in section.entries.iter_mut().enumerate() {
+            let summary_entry = summary && i == 0;
+            let has_notes = !e.notes.is_empty();
+            for (j, n) in e.notes.iter_mut().enumerate() {
+                n.changed = if summary_entry && j == 0 {
+                    marked(prep::SUMMARY)
+                } else {
+                    marked(&format!("{}#{}", e.id, j + 1))
+                };
+            }
+            for (j, b) in e.bullets.iter_mut().enumerate() {
+                b.new = false;
+                b.changed = if summary_entry && !has_notes && j == 0 {
+                    marked(prep::SUMMARY)
+                } else {
+                    marked(&b.id)
+                };
+            }
+        }
+    }
 }
 
 fn default_master() -> Master {
@@ -254,7 +307,7 @@ pub fn round(r: store::Round) -> Round {
 }
 
 /// The kind's name, as `RoundKind` serializes and the store keeps it.
-fn kind_name(kind: RoundKind) -> &'static str {
+pub(crate) fn kind_name(kind: RoundKind) -> &'static str {
     match kind {
         RoundKind::RecruiterScreen => "recruiter-screen",
         RoundKind::HiringManager => "hiring-manager",
@@ -274,9 +327,10 @@ fn parse_kind(name: &str) -> Option<RoundKind> {
 
 #[cfg(test)]
 mod tests {
+    use resume_core::Resume;
     use resume_llm::invite::Invite;
 
-    use super::{draft_of, kind_name, normalized, parse_kind};
+    use super::{draft_of, kind_name, mark, normalized, parse_kind};
     use crate::dto::RoundKind;
 
     #[test]
@@ -336,5 +390,40 @@ mod tests {
         assert_eq!(d.kind, Some(RoundKind::SystemDesign));
         assert_eq!(d.starts_at.as_deref(), Some("2026-11-03T14:00:00+01:00"));
         assert_eq!(d.minutes, Some(45));
+    }
+
+    #[test]
+    fn marking_highlights_only_the_lines_named() {
+        let mut r: Resume = serde_json::from_value(serde_json::json!({
+            "name": "Jane", "contact": [],
+            "sections": [
+                { "id": "summary", "title": "SUMMARY", "kind": "summary", "groups": [], "entries": [
+                    { "id": "summary", "name": "", "url": "", "place": "", "dates": "", "subtitle": "",
+                      "notes": [{ "label": "", "text": "Engineer", "changed": true }], "bullets": [] }
+                ]},
+                { "id": "work", "title": "WORK", "groups": [
+                    { "id": "tools", "label": "Tools", "items": ["Rust"], "added": ["Rust"] }
+                  ], "entries": [
+                    { "id": "acme", "name": "Acme", "url": "", "place": "", "dates": "", "subtitle": "",
+                      "notes": [{ "label": "Stack", "text": "Rust" }],
+                      "bullets": [
+                        { "id": "acme.1", "text": "Built", "changed": true, "new": true },
+                        { "id": "acme.2", "text": "Wrote" }
+                      ] }
+                ]}
+            ]
+        }))
+        .unwrap();
+        mark(&mut r, &["acme.2".into(), "acme#1".into()]);
+        let s = &r.sections;
+        assert!(!s[0].entries[0].notes[0].changed);
+        assert!(s[1].groups[0].added.is_empty());
+        let acme = &s[1].entries[0];
+        assert!(acme.notes[0].changed);
+        assert!(!acme.bullets[0].changed && !acme.bullets[0].new);
+        assert!(acme.bullets[1].changed);
+        mark(&mut r, &["summary".into()]);
+        assert!(r.sections[0].entries[0].notes[0].changed);
+        assert!(!r.sections[1].entries[0].bullets[1].changed);
     }
 }

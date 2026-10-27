@@ -133,6 +133,7 @@ fn fact_line(f: &Fact) -> FactLine {
         kind: match f.source.kind {
             resume_core::bank::FactKind::Review => FactKind::Review,
             resume_core::bank::FactKind::Edit => FactKind::Edit,
+            resume_core::bank::FactKind::Practice => FactKind::Practice,
         },
         at: f.source.at.clone(),
         posting: f.source.posting.clone(),
@@ -146,6 +147,7 @@ fn draft(l: FactLine) -> FactDraft {
         kind: match l.kind {
             FactKind::Review => resume_core::bank::FactKind::Review,
             FactKind::Edit => resume_core::bank::FactKind::Edit,
+            FactKind::Practice => resume_core::bank::FactKind::Practice,
         },
         at: l.at,
         posting: l.posting,
