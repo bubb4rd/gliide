@@ -14,6 +14,9 @@ import type { CoverPart } from "./bindings/CoverPart";
 import type { CoverView } from "./bindings/CoverView";
 import type { CustomEdit } from "./bindings/CustomEdit";
 import type { Decision } from "./bindings/Decision";
+import type { DigAnswer } from "./bindings/DigAnswer";
+import type { DigCapture } from "./bindings/DigCapture";
+import type { DigQuestions } from "./bindings/DigQuestions";
 import type { EditTargets } from "./bindings/EditTargets";
 import type { EntryEdit } from "./bindings/EntryEdit";
 import type { EntryView } from "./bindings/EntryView";
@@ -49,6 +52,9 @@ import type { SearchResults } from "./bindings/SearchResults";
 import type { SentView } from "./bindings/SentView";
 import type { Settings } from "./bindings/Settings";
 import type { StatusSet } from "./bindings/StatusSet";
+import type { StoriesView } from "./bindings/StoriesView";
+import type { StoryDraft } from "./bindings/StoryDraft";
+import type { StoryView } from "./bindings/StoryView";
 import type { UpdateStatus } from "./bindings/UpdateStatus";
 
 export type * from "./bindings/Accepted";
@@ -69,6 +75,12 @@ export type * from "./bindings/CoverView";
 export type * from "./bindings/CustomEdit";
 export type * from "./bindings/Decision";
 export type * from "./bindings/Displaced";
+export type * from "./bindings/DigAnswer";
+export type * from "./bindings/DigCapture";
+export type * from "./bindings/DigOp";
+export type * from "./bindings/DigQuestion";
+export type * from "./bindings/DigQuestions";
+export type * from "./bindings/DigSkip";
 export type * from "./bindings/EditTargets";
 export type * from "./bindings/EntryDetails";
 export type * from "./bindings/EntryEdit";
@@ -145,6 +157,13 @@ export type * from "./bindings/Skipped";
 export type * from "./bindings/Stage";
 export type * from "./bindings/StarPart";
 export type * from "./bindings/StatusSet";
+export type * from "./bindings/StoriesView";
+export type * from "./bindings/StoryDraft";
+export type * from "./bindings/StoryLink";
+export type * from "./bindings/StorySource";
+export type * from "./bindings/StoryTheme";
+export type * from "./bindings/StoryUse";
+export type * from "./bindings/StoryView";
 export type * from "./bindings/Target";
 export type * from "./bindings/TemplateRow";
 export type * from "./bindings/Theme";
@@ -326,9 +345,32 @@ export const practiceTurns = (round: string) => invoke<PracticeTurn[]>("practice
 /** One model call: your answer to prep question `question` read (emits `progress`, `practicing`), kept with it. */
 export const practice = (round: string, question: string, answer: string) =>
   invoke<PracticeTurn>("practice", { round, question, answer });
-/** Keeps what an answer said as a fact of bank entry `entry` (from practice for `round`). */
-export const keepClaim = (round: string, entry: string, text: string) =>
+/** Keeps what an answer said as a fact of bank entry `entry` (from practice for `round`; `null` for a story told
+ *  alone, which was said for no posting). */
+export const keepClaim = (round: string | null, entry: string, text: string) =>
   invoke<void>("keep_claim", { round, entry, text });
+/** One model call (emits `progress`, `practicing`): `answer` to `asked` (a question the story answers, from
+ *  `$lib/stories`), telling story `story` alone, read back and kept. */
+export const tellStory = (story: string, asked: string, answer: string) =>
+  invoke<PracticeTurn>("tell_story", { story, asked, answer });
+/** The story's practiced tellings (Tell it), oldest first. */
+export const storyTurns = (story: string) => invoke<PracticeTurn[]>("story_turns", { story });
+
+// ── Stories ──
+export const stories = () => invoke<StoriesView>("stories");
+export const story = (id: string) => invoke<StoryView>("story", { id });
+/** Saves a story (a new one when `draft.id` is null, or one Undo brings back by its id). Words drawn from an answer
+ *  (`draft.from`) are checked against it; words you typed are yours. */
+export const saveStory = (draft: StoryDraft) => invoke<StoryView>("save_story", { draft });
+export const removeStory = (id: string) => invoke<void>("remove_story", { id });
+
+// ── Dig: gliide asks about an entry ──
+/** One model call (emits `progress`, `digging`, keyed by the entry): the entry read and its questions; kept until the
+ *  entry changes, unless `again`. */
+export const digQuestions = (entry: string, again = false) => invoke<DigQuestions>("dig_questions", { entry, again });
+/** One model call: your answers read; the facts in them kept at once, additions proposed. */
+export const digCapture = (entry: string, answers: DigAnswer[], note: string) =>
+  invoke<DigCapture>("dig_capture", { entry, answers, note });
 
 // ── Job feed (freehire) ──
 /** Every row but skipped and dismissed: fits first (best score first), then not fit, checking, waiting, new. */

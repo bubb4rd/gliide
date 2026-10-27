@@ -40,7 +40,6 @@ pub struct Grounding<'a> {
 
 impl<'a> Grounding<'a> {
     pub fn new(bank: &'a Bank, s: &Suggestions, req: &Requirements) -> Self {
-        let bank_text = bank_text(bank);
         let backed = s
             .evidence
             .iter()
@@ -54,6 +53,15 @@ impl<'a> Grounding<'a> {
                 std::iter::once(r.term.clone()).chain(matcher::all_aliases(&r.term, &r.aliases))
             })
             .collect();
+        Self {
+            backed,
+            ..Self::of_bank(bank)
+        }
+    }
+
+    /// The bank alone, no requirement skill backed: what a line written outside a review (Dig) is checked against.
+    pub fn of_bank(bank: &'a Bank) -> Self {
+        let bank_text = bank_text(bank);
         let degrees = bank
             .sections
             .iter()
@@ -71,7 +79,7 @@ impl<'a> Grounding<'a> {
             bank_doc: bank,
             bank: Page::of_text(&bank_text),
             bank_text,
-            backed,
+            backed: Vec::new(),
             degrees,
             confirmed: Page::new(std::iter::empty()),
         }

@@ -13,4 +13,8 @@ why: string,
 /**
  * The lines of the resume as sent it's about (`SentLine.id`), each one that exists.
  */
-lines: Array<string>, };
+lines: Array<string>, 
+/**
+ * The story of yours that answers it, if one does (`StoryView.id`).
+ */
+story: string | null, };

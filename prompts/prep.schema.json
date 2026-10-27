@@ -11,12 +11,13 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["group", "text", "why", "lines"],
+        "required": ["group", "text", "why", "lines", "story"],
         "properties": {
           "group": { "enum": ["resume", "skills", "behavioral", "logistics"] },
           "text": { "type": "string", "minLength": 1, "maxLength": 300 },
           "why": { "type": "string", "maxLength": 90 },
-          "lines": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 80 } }
+          "lines": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 80 } },
+          "story": { "type": ["string", "null"], "maxLength": 80 }
         }
       }
     },

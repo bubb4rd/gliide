@@ -133,6 +133,8 @@ pub enum FactKind {
     Edit,
     /// Said in a practiced interview answer and kept ("Keep as fact").
     Practice,
+    /// Answering the questions Dig asks about an entry.
+    Dig,
 }
 
 /// A line under an entry, `label: text` (or just `text` when the label is `""`).

@@ -1,17 +1,20 @@
 //! Practice: one typed answer to a prep question read back, never graded (ARCHITECTURE.md §3): which lines of the
 //! resume it drew on, which parts of situation, task, action and result it has, what it says differently from the
-//! resume you sent, what it claims that the bank doesn't hold yet, a tighter telling, and the likely follow-up.
+//! resume you sent, what it claims that the bank doesn't hold yet, a tighter telling, the likely follow-up, and the
+//! answer as a story to keep.
 //!
-//! The model sees the question (its text, why it's likely, the lines it's about), the answer, the posting's
-//! requirement terms and the resume as sent, tagged with its facts as Prep reads it. [`checked`] holds the reply to
-//! what the resume, the bank and the answer back.
+//! The model sees the question (its text, why it's likely, the lines it's about, the story it means to tell), the
+//! answer, the posting's requirement terms and the resume as sent, tagged with its facts as Prep reads it. A story
+//! told alone (Tell it) reads the same way, against its entry as the bank holds it ([`SentResume::entry`]).
+//! [`checked`] holds the reply to what the resume, the bank and the answer back.
 
 use std::fmt::Write as _;
 
+use resume_core::story::{Story, StoryTheme};
 use resume_core::validate::unsourced_numbers;
 use serde::{Deserialize, Serialize};
 
-use crate::prep::SentResume;
+use crate::prep::{SUMMARY, SentResume};
 use crate::{Call, Llm, LlmError, Schema, Structured};
 
 /// The Practice instructions (`prompts/practice.md`).
@@ -40,10 +43,12 @@ pub struct PracticeInput<'a> {
     /// The posting's requirement terms, most important first.
     pub terms: &'a [String],
     pub sent: &'a SentResume,
+    /// The story the answer means to tell (Tell it, or the prep question's story), as you saved it.
+    pub story: Option<&'a Story>,
 }
 
-/// The Practice call's input: `<question>` (its text, why, and the lines it's about with their text), `<answer>` (at
-/// most [`MAX_ANSWER_CHARS`]), `<terms>` (one a line), `<resume>`.
+/// The Practice call's input: `<question>` (its text, why, the lines it's about with their text, and the story it
+/// means to tell), `<answer>` (at most [`MAX_ANSWER_CHARS`]), `<terms>` (one a line), `<resume>`.
 pub fn input(i: &PracticeInput<'_>) -> String {
     let answer = i.answer.trim();
     let answer = match answer.char_indices().nth(MAX_ANSWER_CHARS) {
@@ -58,6 +63,19 @@ pub fn input(i: &PracticeInput<'_>) -> String {
     for id in i.lines {
         if let Some(l) = i.sent.line(id) {
             let _ = writeln!(s, "(about) [{}] {}", l.id, l.text);
+        }
+    }
+    if let Some(story) = i.story {
+        let _ = writeln!(s, "(story) {}", story.title.trim());
+        for (part, text) in [
+            ("situation", &story.situation),
+            ("task", &story.task),
+            ("action", &story.action),
+            ("result", &story.result),
+        ] {
+            if !text.trim().is_empty() {
+                let _ = writeln!(s, "  ({part}) {}", text.trim());
+            }
         }
     }
     s.push_str("</question>\n");
@@ -106,6 +124,22 @@ pub struct NewClaim {
     pub entry_name: String,
 }
 
+/// The answer as a story to keep, in the candidate's words: `entry`, `bullets` and `facts` name what it happened in
+/// and draws on.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoryDraft {
+    pub title: String,
+    pub entry: Option<String>,
+    pub bullets: Vec<String>,
+    pub facts: Vec<String>,
+    pub situation: String,
+    pub task: String,
+    pub action: String,
+    pub result: String,
+    pub skills: Vec<String>,
+    pub themes: Vec<StoryTheme>,
+}
+
 /// What an answer did; never a grade.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Feedback {
@@ -119,6 +153,9 @@ pub struct Feedback {
     pub new_claims: Vec<NewClaim>,
     pub tighter: Option<String>,
     pub follow_up: Option<String>,
+    /// The answer as a story; `None` when it tells none (and in feedback from before stories).
+    #[serde(default)]
+    pub story: Option<StoryDraft>,
 }
 
 /// What [`checked`] took out, for the log.
@@ -133,6 +170,8 @@ pub struct Dropped {
     pub new_claims: Vec<NewClaim>,
     /// Why the tighter telling was dropped: the numbers neither the answer, the lines nor the facts state.
     pub tighter: Vec<String>,
+    /// Why the story was dropped: the numbers neither the answer, its bullets nor its facts state.
+    pub story: Vec<String>,
 }
 
 impl Dropped {
@@ -141,6 +180,7 @@ impl Dropped {
             && self.mismatches.is_empty()
             && self.new_claims.is_empty()
             && self.tighter.is_empty()
+            && self.story.is_empty()
     }
 }
 
@@ -148,12 +188,15 @@ impl Dropped {
 /// when it cites a line (or a fact) of the resume whose text states every number it quotes from the resume, and the
 /// answer states every number it says; a new claim only for one of the resume's bank entries (its name set); the
 /// tighter telling dropped when it states a number neither the answer, the lines it and the question cite, nor the
-/// facts state. `question_lines`: the ids of the lines the question was about.
+/// facts state; the story kept with only the resume's entries, bullets and facts it names, and dropped when it states
+/// a number neither the answer, those bullets and facts, nor the story told (`told`) state, or says nothing.
+/// `question_lines`: the ids of the lines the question was about.
 pub fn checked(
     f: Feedback,
     sent: &SentResume,
     question_lines: &[String],
     answer: &str,
+    told: Option<&Story>,
 ) -> (Feedback, Dropped) {
     let mut dropped = Dropped::default();
     let lines = sent.keep(f.lines, &mut dropped.lines);
@@ -205,6 +248,9 @@ pub fn checked(
         dropped.tighter = unsourced_numbers(t, &sources);
         dropped.tighter.is_empty()
     });
+    let story = f
+        .story
+        .and_then(|s| story_checked(s, sent, answer, told, &mut dropped.story));
     let all_there = [f.situation, f.task, f.action, f.result]
         .iter()
         .all(|p| *p == StarPart::Yes);
@@ -215,9 +261,103 @@ pub fn checked(
         new_claims,
         tighter,
         follow_up: some(f.follow_up),
+        story,
         ..f
     };
     (feedback, dropped)
+}
+
+/// `s` with only the entry, bullets and facts of the resume it names (its entry, when it names none, the one its first
+/// bullet sits under), every part trimmed; `None` when it says nothing, or states a number neither the answer, those
+/// bullets and facts, nor `told` (the saved story the answer told) state (the findings go on `dropped`).
+fn story_checked(
+    s: StoryDraft,
+    sent: &SentResume,
+    answer: &str,
+    told: Option<&Story>,
+    dropped: &mut Vec<String>,
+) -> Option<StoryDraft> {
+    let trim = |t: String| t.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut bullets: Vec<String> = Vec::new();
+    for b in s.bullets {
+        let b = b.trim();
+        let bullet = sent
+            .line(b)
+            .filter(|l| l.id != SUMMARY && !l.id.contains('#'));
+        if bullet.is_some() && !bullets.iter().any(|x| x == b) {
+            bullets.push(b.to_owned());
+        }
+    }
+    let mut facts: Vec<String> = Vec::new();
+    for f in s.facts {
+        let f = f.trim();
+        if sent.facts.iter().any(|(_, id, _)| id == f) && !facts.iter().any(|x| x == f) {
+            facts.push(f.to_owned());
+        }
+    }
+    let entry = s
+        .entry
+        .map(|e| e.trim().to_owned())
+        .filter(|e| sent.entry_name(e).is_some())
+        .or_else(|| {
+            bullets
+                .first()
+                .and_then(|b| sent.line(b))
+                .map(|l| l.entry.clone())
+        });
+    let mut themes: Vec<StoryTheme> = Vec::new();
+    for t in s.themes {
+        if !themes.contains(&t) {
+            themes.push(t);
+        }
+    }
+    let mut skills: Vec<String> = Vec::new();
+    for k in s.skills.into_iter().map(trim) {
+        if !k.is_empty() && !skills.iter().any(|x| x.eq_ignore_ascii_case(&k)) {
+            skills.push(k);
+        }
+    }
+    let story = StoryDraft {
+        title: trim(s.title),
+        entry,
+        bullets,
+        facts,
+        situation: trim(s.situation),
+        task: trim(s.task),
+        action: trim(s.action),
+        result: trim(s.result),
+        skills,
+        themes,
+    };
+    let parts = [
+        &story.title,
+        &story.situation,
+        &story.task,
+        &story.action,
+        &story.result,
+    ];
+    if parts[1..].iter().all(|p| p.is_empty()) {
+        return None;
+    }
+    let mut sources: Vec<&str> = vec![answer];
+    sources.extend(story.bullets.iter().filter_map(|b| sent.line(b)).map(|l| l.text.as_str()));
+    sources.extend(
+        sent.facts
+            .iter()
+            .filter(|(_, id, _)| story.facts.contains(id))
+            .map(|(_, _, t)| t.as_str()),
+    );
+    if let Some(t) = told {
+        sources.extend(t.parts());
+    }
+    for p in parts {
+        for finding in unsourced_numbers(p, &sources) {
+            if !dropped.contains(&finding) {
+                dropped.push(finding);
+            }
+        }
+    }
+    dropped.is_empty().then_some(story)
 }
 
 /// `s` trimmed; `None` when empty.
@@ -255,7 +395,10 @@ pub async fn read(
 
 #[cfg(test)]
 mod tests {
-    use super::{Feedback, Mismatch, NewClaim, PracticeInput, StarPart, checked, input};
+    use super::{
+        Feedback, Mismatch, NewClaim, PracticeInput, StarPart, StoryDraft, checked, input,
+    };
+    use resume_core::story::StoryTheme;
     use crate::prep::SentResume;
     use crate::prep::tests::jane;
 
@@ -277,6 +420,7 @@ mod tests {
             answer: "\n I caught 20 regressions. \n",
             terms: &terms,
             sent: &sent,
+            story: None,
         });
         assert!(text.starts_with(
             "<question>\nTell me about the regressions you caught.\n(why) A number invites a follow-up\n\
@@ -334,6 +478,7 @@ mod tests {
                     .into(),
             ),
             follow_up: Some("  ".into()),
+            story: None,
         }
     }
 
@@ -341,7 +486,7 @@ mod tests {
     fn checking_keeps_what_the_resume_and_bank_back() {
         let (bank, resume) = jane();
         let sent = SentResume::tagged(&resume, &bank);
-        let (f, dropped) = checked(feedback(), &sent, &[], ANSWER);
+        let (f, dropped) = checked(feedback(), &sent, &[], ANSWER, None);
         assert_eq!(f.lines, ["acme.2"]);
         assert_eq!(dropped.lines, ["acme.9"]);
         assert_eq!(f.mismatches.len(), 1);
@@ -365,7 +510,7 @@ mod tests {
             tighter: Some("I wrote tests that cut release bugs by 60%.".into()),
             ..feedback()
         };
-        let (f, dropped) = checked(f, &sent, &[], ANSWER);
+        let (f, dropped) = checked(f, &sent, &[], ANSWER, None);
         assert_eq!(f.tighter, None);
         assert_eq!(dropped.tighter.len(), 1);
         // A number from a fact of the resume's entries is grounded.
@@ -373,7 +518,7 @@ mod tests {
             tighter: Some("The suite ran on 3 services.".into()),
             ..feedback()
         };
-        assert!(checked(f, &sent, &[], ANSWER).0.tighter.is_some());
+        assert!(checked(f, &sent, &[], ANSWER, None).0.tighter.is_some());
     }
 
     #[test]
@@ -384,6 +529,93 @@ mod tests {
             situation: StarPart::Yes,
             ..feedback()
         };
-        assert_eq!(checked(f, &sent, &[], ANSWER).0.star_note, None);
+        assert_eq!(checked(f, &sent, &[], ANSWER, None).0.star_note, None);
+    }
+
+    fn draft() -> StoryDraft {
+        StoryDraft {
+            title: " Caught 20 regressions before release ".into(),
+            entry: Some("globex".into()),
+            bullets: vec!["acme.2".into(), "acme.9".into(), "acme.2".into()],
+            facts: vec!["acme~1".into(), "acme~7".into()],
+            situation: "Releases kept breaking the order API.".into(),
+            task: "I owned the  tests.".into(),
+            action: "I wrote integration tests across 3 services.".into(),
+            result: "They caught 20 regressions before release.".into(),
+            skills: vec!["GitHub Actions".into(), "github actions".into(), " ".into()],
+            themes: vec![StoryTheme::Impact, StoryTheme::Impact],
+        }
+    }
+
+    #[test]
+    fn a_story_keeps_what_the_resume_names_and_the_answer_grounds() {
+        let (bank, resume) = jane();
+        let sent = SentResume::tagged(&resume, &bank);
+        let f = Feedback {
+            story: Some(draft()),
+            ..feedback()
+        };
+        let (f, dropped) = checked(f, &sent, &[], ANSWER, None);
+        let s = f.story.unwrap();
+        assert_eq!(s.title, "Caught 20 regressions before release");
+        // globex isn't on the resume: the entry is the first bullet's.
+        assert_eq!(s.entry.as_deref(), Some("acme"));
+        assert_eq!(s.bullets, ["acme.2"]);
+        assert_eq!(s.facts, ["acme~1"]);
+        assert_eq!(s.task, "I owned the tests.");
+        assert_eq!(s.skills, ["GitHub Actions"]);
+        assert_eq!(s.themes, [StoryTheme::Impact]);
+        assert!(dropped.story.is_empty());
+    }
+
+    #[test]
+    fn an_unsourced_number_drops_the_story() {
+        let (bank, resume) = jane();
+        let sent = SentResume::tagged(&resume, &bank);
+        let f = Feedback {
+            story: Some(StoryDraft {
+                result: "Pages fell by 40%.".into(),
+                ..draft()
+            }),
+            ..feedback()
+        };
+        let (checked_f, dropped) = checked(f.clone(), &sent, &[], ANSWER, None);
+        assert_eq!(checked_f.story, None);
+        assert_eq!(dropped.story, ["“40%” is not in the lines it draws on"]);
+        // The story the answer told grounds it.
+        let mut told = crate::prep::tests::stories().remove(0);
+        told.result = "Pages fell by 40%.".into();
+        assert!(checked(f, &sent, &[], ANSWER, Some(&told)).0.story.is_some());
+        // A story that says nothing is none.
+        let empty = Feedback {
+            story: Some(StoryDraft {
+                title: "Tests".into(),
+                ..StoryDraft::default()
+            }),
+            ..feedback()
+        };
+        assert_eq!(checked(empty, &sent, &[], ANSWER, None).0.story, None);
+    }
+
+    #[test]
+    fn a_told_story_is_in_the_question() {
+        let (bank, _) = jane();
+        let sent = SentResume::entry(&bank, "acme");
+        let stories = crate::prep::tests::stories();
+        let lines = ["acme.2".to_owned()];
+        let text = input(&PracticeInput {
+            question: "Tell me about the work you're proudest of.",
+            why: "",
+            lines: &lines,
+            answer: "I wrote tests.",
+            terms: &[],
+            sent: &sent,
+            story: Some(&stories[0]),
+        });
+        assert!(text.contains(
+            "(story) Caught 14 regressions before release\n  (situation) Releases kept breaking the order API.\n"
+        ));
+        assert!(text.contains("(about) [acme.2] "));
+        assert!(text.contains("<resume>\n[acme] Acme Widgets Co."));
     }
 }

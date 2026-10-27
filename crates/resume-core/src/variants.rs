@@ -2,7 +2,8 @@
 //! of each bullet it holds, its text or a variant by index, and Suggest prefers choosing one of them over writing new
 //! words. These edits keep every master showing the words it showed, whatever moves: removing a variant or making one
 //! the bullet's text renumbers what masters point at, and folding a bullet into another moves the masters that showed
-//! it onto the same words, now a variant of the other.
+//! it onto the same words, now a variant of the other. A new bullet (Dig's add-bullet) joins its entry in no master, and
+//! a bullet's skills are set whole.
 
 use crate::bank::{Bank, BankBullet};
 use crate::master::{Master, MasterBullet};
@@ -25,6 +26,56 @@ pub enum VariantError {
     OtherEntry,
     #[error("{0} shows both bullets: take one of them out of it first")]
     BothShown(String),
+    #[error("Your bank has no entry `{0}`")]
+    Entry(String),
+}
+
+/// Adds a bullet reading `text` at the end of entry `entry`, in no master yet: its id, the next free `{entry}.{n}`
+/// in the bank (as an import numbers them). Refuses a text one of the entry's bullets already reads.
+pub fn add_bullet(bank: &mut Bank, entry: &str, text: &str) -> Result<String, VariantError> {
+    let text = wording_text(text)?;
+    let taken: std::collections::HashSet<String> = bank
+        .sections
+        .iter()
+        .flat_map(|s| &s.entries)
+        .flat_map(|e| &e.bullets)
+        .map(|b| b.id.clone())
+        .collect();
+    let e = bank
+        .sections
+        .iter_mut()
+        .flat_map(|s| &mut s.entries)
+        .find(|e| e.id == entry)
+        .ok_or_else(|| VariantError::Entry(entry.to_owned()))?;
+    if e.bullets.iter().flat_map(wordings).any(|w| same_text(w, &text)) {
+        return Err(VariantError::Duplicate);
+    }
+    let id = (1..)
+        .map(|n| format!("{entry}.{n}"))
+        .find(|id| !taken.contains(id))
+        .expect("some number is free");
+    e.bullets.push(BankBullet {
+        id: id.clone(),
+        text,
+        variants: vec![],
+        skills: vec![],
+    });
+    Ok(id)
+}
+
+/// Sets the skills `bullet` demonstrates to `skills`: each trimmed (inner spacing collapsed), empty ones dropped, each
+/// once ignoring case, in order.
+pub fn set_skills(bank: &mut Bank, bullet: &str, skills: &[String]) -> Result<(), VariantError> {
+    let b = bullet_mut(bank, bullet)?;
+    let mut out: Vec<String> = Vec::with_capacity(skills.len());
+    for s in skills {
+        let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !s.is_empty() && !out.iter().any(|x| x.eq_ignore_ascii_case(&s)) {
+            out.push(s);
+        }
+    }
+    b.skills = out;
+    Ok(())
 }
 
 /// Adds `text` as a variant of `bullet`: its index.

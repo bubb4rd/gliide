@@ -6,6 +6,7 @@
 
 mod claude;
 pub mod cover;
+pub mod dig;
 pub mod extract;
 pub mod import;
 pub mod instruct;

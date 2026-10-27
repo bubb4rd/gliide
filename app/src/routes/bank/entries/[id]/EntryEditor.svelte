@@ -2,7 +2,8 @@
   A bank entry's editor (DESIGN.md, Experience): the entry's details (its name, subtitle, place and dates, then the
   lines under it, each edited in place; masters hold none of them, so every master that shows the entry prints the
   new ones), then each bullet as rows, one per wording (its text, then the variants you wrote), with the masters that
-  show each, then its facts (what you've said about it that no line prints: never on a page, a source for its lines).
+  show each, then its facts (what you've said about it that no line prints: never on a page, a source for its lines),
+  then its stories. Details · Interview (`Tab`): the Interview tab is Dig (`Dig`), gliide asking about the entry.
   Every edit goes to the bank and the whole view comes back; the desk previews the entry, highlighted, in a master
   that shows it (or alone in the default template when none does). One request at a time: its answer replaces the
   view, a failure leaves it and says why.
@@ -16,10 +17,12 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Dig from "./Dig.svelte";
   import {
     appError,
     editEntry,
     entry,
+    stories as loadStories,
     type BulletView,
     type EntryEdit,
     type EntryDetails,
@@ -27,9 +30,11 @@
     type FactLine,
     type MasterRef,
     type NoteLine,
+    type StoryView,
     type WordingView,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
+  import { tellTime, themeLabel } from "$lib/stories";
   import { shell } from "$lib/stores/shell.svelte";
   import {
     Badge,
@@ -227,7 +232,9 @@
         ? `Confirmed for ${company}`
         : fact.kind === "practice"
           ? `Said in practice for ${company}`
-          : "Added here";
+          : fact.kind === "dig"
+            ? "Said in Dig"
+            : "Added here";
     return [...fact.skills, from, ...(fact.at ? [day] : [])].join(" · ");
   }
 
@@ -464,8 +471,9 @@
 
   const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
-  $effect(() =>
-    bindKeys({
+  $effect(() => {
+    if (tab !== "details") return;
+    return bindKeys({
       ArrowDown: () => move(1),
       ArrowUp: () => move(-1),
       Enter: (e) => {
@@ -490,8 +498,36 @@
           },
         ]),
       ),
+    });
+  });
+
+  // ── Details | Interview ──
+  const TABS = [
+    { value: "details", label: "Details" },
+    { value: "interview", label: "Interview" },
+  ] as const;
+  let tab = $state<"details" | "interview">("details");
+  const interactiveKey = (target: EventTarget | null) =>
+    target instanceof Element && target.closest("button, a, input, textarea, select, [contenteditable]") !== null;
+  $effect(() =>
+    bindKeys({
+      Tab: (e) => {
+        if (interactiveKey(e.target) || !view) return false;
+        tab = tab === "details" ? "interview" : "details";
+      },
     }),
   );
+  const TAB_KEYS: KeyCommand[] = $derived([
+    { keys: ["Tab"], label: tab === "details" ? "Interview" : "Details", run: () => (tab = tab === "details" ? "interview" : "details") },
+  ]);
+
+  // ── The entry's stories ──
+  let stories = $state<StoryView[] | null>(null);
+  onMount(() => {
+    loadStories()
+      .then((all) => (stories = all.stories.filter((s) => s.entry === id)))
+      .catch(() => (stories = []));
+  });
 </script>
 
 <Toolbar>
@@ -500,10 +536,15 @@
       >{view?.details.name || "Entry"}</b
     >
   {/snippet}
+  {#if view}<Segmented options={[...TABS]} bind:value={tab} label="Show" />{/if}
 </Toolbar>
 
 <div class={["split", shell.compact && "split--compact"]}>
-  <div class="column" hidden={shell.compact && pane === "preview"} aria-busy={busy || undefined}>
+  <div
+    class={["column", tab === "interview" && view && "column--dig"]}
+    hidden={shell.compact && pane === "preview"}
+    aria-busy={busy || undefined}
+  >
     {#if shell.compact}
       <div class="tabs"><Segmented options={[...PANES]} bind:value={pane} label="Show" /></div>
     {/if}
@@ -532,6 +573,8 @@
           </div>
         {/each}
       </div>
+    {:else if tab === "interview"}
+      <Dig entry={id} {view} onview={(v) => (view = v)} keys={TAB_KEYS} />
     {:else}
       <header class="head">
         <p class="meta">{view.section}</p>
@@ -803,9 +846,32 @@
             <Button variant="ghost" size="sm" icon={Plus} kbd="A" onclick={startFact}>Add a fact</Button>
           </div>
         </section>
+
+        <section class="group" aria-label="Stories">
+          <GroupHead label="Stories" meta={stories?.length ? String(stories.length) : ""} />
+          {#each stories ?? [] as story (story.id)}
+            <a class="story" href="/bank/stories/{story.id}">
+              <span class="story__title">{story.title || "Untitled story"}</span>
+              <span class="meta"
+                >{[...story.themes.map(themeLabel), tellTime(story.seconds)].join(" · ")}</span
+              >
+            </a>
+          {:else}
+            {#if stories}
+              <p class="meta empty">
+                None yet. Dig (the Interview tab) and practice can save one, or start one here.
+              </p>
+            {/if}
+          {/each}
+          <div class="foot">
+            <Button variant="ghost" size="sm" icon={Plus} onclick={() => goto(`/bank/stories/new?entry=${encodeURIComponent(id)}`)}
+              >New story</Button
+            >
+          </div>
+        </section>
       </div>
 
-      <div class="keys-wrap"><KeyFooter keys={KEYS} /></div>
+      <div class="keys-wrap"><KeyFooter keys={[...KEYS, ...TAB_KEYS]} /></div>
     {/if}
   </div>
 
@@ -866,6 +932,36 @@
     scroll-padding-block-end: var(--space-16);
     padding: var(--space-6) var(--space-5) 0;
     box-shadow: inset -1px 0 0 var(--line);
+  }
+  /* Dig scrolls its own thread over its answer box, as the review's chat does. */
+  .column--dig {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+  }
+  .story {
+    display: grid;
+    gap: var(--space-0-5);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    color: inherit;
+    text-decoration: none;
+    transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .story__title {
+    font-size: var(--text-md);
+    line-height: var(--leading-md);
+    font-weight: var(--weight-medium);
+  }
+  .story:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  @media (hover: hover) {
+    .story:hover {
+      background: var(--hover);
+    }
   }
   .desk {
     display: grid;

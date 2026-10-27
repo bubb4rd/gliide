@@ -4,12 +4,13 @@
 use resume_core::change::{Decision, DraftEvent, Mode};
 use resume_core::feed::FeedJob;
 use resume_core::salary::{Period, Salary};
+use resume_core::story::{Story, StoryKind, StorySource, StoryTheme};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, FeedState, LogoFound, LogoSource, NewAnalysis, NewFeedJob, PracticeRow,
-    Prep, Rev, Round, RoundState, StatusChange, Store, StoreError, applications_csv,
-    parse_ats_fit_csv,
+    AppStatus, Application, Dig, DigAnswers, FeedState, LogoFound, LogoSource, NewAnalysis,
+    NewFeedJob, PracticeRow, Prep, Rev, Round, RoundState, StatusChange, Store, StoreError,
+    applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -647,7 +648,8 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
+        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+         DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
          ALTER TABLE postings DROP COLUMN salary; PRAGMA user_version = 1;",
@@ -697,7 +699,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -806,7 +808,8 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
+        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+         DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
     )
@@ -835,7 +838,8 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
+        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+         DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent; PRAGMA user_version = 7;",
     )
     .unwrap();
@@ -1048,7 +1052,8 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; PRAGMA user_version = 8;",
+        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+         DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; PRAGMA user_version = 8;",
     )
     .unwrap();
     drop(conn);
@@ -1063,14 +1068,15 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
 fn practice_row(id: &str, round: &str, question: &str) -> PracticeRow {
     PracticeRow {
         id: id.into(),
-        round_id: round.into(),
+        round_id: Some(round.into()),
+        story_id: None,
         question: question.into(),
         asked: "Walk me through the regression suite.".into(),
         answer: "I wrote 14 tests.".into(),
@@ -1162,8 +1168,11 @@ fn migrating_to_practice_keeps_the_rounds() {
         store.put_round(&round("r", "a", None)).unwrap();
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE practice; DROP TABLE preps; PRAGMA user_version = 9;")
-        .unwrap();
+    conn.execute_batch(
+        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+         DROP TABLE practice; DROP TABLE preps; PRAGMA user_version = 9;",
+    )
+    .unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
@@ -1176,7 +1185,180 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn story(id: &str, updated_at: &str) -> Story {
+    Story {
+        id: id.into(),
+        title: "Caught 14 regressions before release".into(),
+        entry: Some("acme".into()),
+        bullets: vec!["acme.2".into()],
+        facts: vec![],
+        situation: "Releases kept breaking.".into(),
+        task: "I owned the tests.".into(),
+        action: "I wrote integration tests.".into(),
+        result: "They caught 14 regressions.".into(),
+        skills: vec![],
+        themes: vec![StoryTheme::Impact],
+        source: StorySource {
+            kind: StoryKind::Edit,
+            at: updated_at.into(),
+            from: None,
+        },
+        updated_at: updated_at.into(),
+    }
+}
+
+#[test]
+fn stories_list_newest_first_and_come_back_after_removal() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(store.stories().unwrap().is_empty());
+    store.put_story(&story("a", "2026-10-01T10:00:00Z")).unwrap();
+    store.put_story(&story("b", "2026-10-02T10:00:00Z")).unwrap();
+    let ids = |store: &Store| -> Vec<String> {
+        store.stories().unwrap().into_iter().map(|s| s.id).collect()
+    };
+    assert_eq!(ids(&store), ["b", "a"]);
+    // Editing one moves it first.
+    let edited = Story {
+        title: "Tests".into(),
+        ..story("a", "2026-10-03T10:00:00Z")
+    };
+    store.put_story(&edited).unwrap();
+    assert_eq!(ids(&store), ["a", "b"]);
+    assert_eq!(store.story("a").unwrap().unwrap(), edited);
+    // Removed, then put back by its id (Undo); its tellings find it again.
+    let mut told = practice_row("t", "", "a");
+    told.round_id = None;
+    told.story_id = Some("a".into());
+    store.add_practice(&told).unwrap();
+    assert_eq!(store.delete_story("a").unwrap(), Some(edited.clone()));
+    assert_eq!(store.delete_story("a").unwrap(), None);
+    assert_eq!(ids(&store), ["b"]);
+    assert_eq!(store.story_practice("a").unwrap().len(), 1);
+    store.put_story(&edited).unwrap();
+    assert_eq!(ids(&store), ["a", "b"]);
+}
+
+#[test]
+fn practice_can_tell_a_story_alone_or_for_a_round() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    store.put_round(&round("r", "a", None)).unwrap();
+    let mut alone = practice_row("p1", "", "s");
+    alone.round_id = None;
+    alone.story_id = Some("s".into());
+    let stored = store.add_practice(&alone).unwrap();
+    assert_eq!(stored.round_id, None);
+    let mut for_round = practice_row("p2", "r", "q1");
+    for_round.story_id = Some("s".into());
+    store.add_practice(&for_round).unwrap();
+    store.add_practice(&practice_row("p3", "r", "q2")).unwrap();
+    let ids = |rows: Vec<PracticeRow>| -> Vec<String> { rows.into_iter().map(|p| p.id).collect() };
+    assert_eq!(ids(store.story_practice("s").unwrap()), ["p1", "p2"]);
+    assert_eq!(ids(store.told_practice().unwrap()), ["p2", "p1"]);
+    assert_eq!(ids(store.practice("r").unwrap()), ["p2", "p3"]);
+    assert_eq!(store.practice_row("p1").unwrap().unwrap().story_id.as_deref(), Some("s"));
+    assert_eq!(store.practice_row("nope").unwrap(), None);
+    // A round removed takes its practice; a story told alone stays.
+    store.delete_round("r").unwrap();
+    assert_eq!(ids(store.story_practice("s").unwrap()), ["p1"]);
+}
+
+#[test]
+fn digs_replace_by_key_and_answers_are_kept() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.dig("k").unwrap(), None);
+    let d = Dig {
+        key: "k".into(),
+        entry: "acme".into(),
+        json: r#"{"read":"3 bullets"}"#.into(),
+        model: "claude-sonnet-5-5".into(),
+        at: String::new(),
+    };
+    let first = store.put_dig(&d).unwrap();
+    assert!(!first.at.is_empty());
+    assert_eq!(store.dig("k").unwrap().unwrap(), first);
+    let again = store
+        .put_dig(&Dig {
+            json: r#"{"read":"4 bullets"}"#.into(),
+            ..d
+        })
+        .unwrap();
+    assert_eq!(store.dig("k").unwrap().unwrap().json, again.json);
+    let a = store
+        .add_dig_answers(&DigAnswers {
+            id: "c".into(),
+            entry: "acme".into(),
+            json: "[]".into(),
+            at: String::new(),
+        })
+        .unwrap();
+    assert_eq!(store.dig_answers("c").unwrap().unwrap(), a);
+    assert_eq!(store.dig_answers("x").unwrap(), None);
+}
+
+/// Practice from before stories (schema version 10) keeps its rows, now with no story, and takes tellings alone.
+#[test]
+fn migrating_to_stories_keeps_the_practice() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v10-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    {
+        let store = Store::open(&path).unwrap();
+        store
+            .put_application(&app("a", "2026-10-01", "Acme"))
+            .unwrap();
+        store.put_round(&round("r", "a", None)).unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories; DROP TABLE practice;
+         CREATE TABLE practice (
+             id TEXT PRIMARY KEY,
+             round_id TEXT NOT NULL REFERENCES rounds (id) ON DELETE CASCADE,
+             question TEXT NOT NULL,
+             asked TEXT NOT NULL,
+             answer TEXT NOT NULL,
+             feedback TEXT NOT NULL,
+             at TEXT NOT NULL
+         );
+         CREATE INDEX practice_round ON practice (round_id);
+         INSERT INTO practice VALUES ('p1', 'r', 'q1', 'Why Acme?', 'I like widgets.', '{}', '2026-10-02T10:00:00Z');
+         INSERT INTO practice VALUES ('p2', 'r', 'q2', 'Tests?', 'I wrote 14.', '{}', '2026-10-02T10:00:00Z');
+         PRAGMA user_version = 10;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    let rows = store.practice("r").unwrap();
+    assert_eq!(
+        rows.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+        ["p1", "p2"]
+    );
+    assert_eq!(rows[1].answer, "I wrote 14.");
+    assert_eq!(rows[0].story_id, None);
+    assert_eq!(rows[0].round_id.as_deref(), Some("r"));
+    let mut alone = practice_row("p3", "", "s");
+    alone.round_id = None;
+    alone.story_id = Some("s".into());
+    store.add_practice(&alone).unwrap();
+    store.put_story(&story("s", "2026-10-03T10:00:00Z")).unwrap();
+    assert_eq!(store.stories().unwrap().len(), 1);
+    // Removing the round still removes its practice.
+    store.delete_round("r").unwrap();
+    assert!(store.practice("r").unwrap().is_empty());
+    assert_eq!(store.story_practice("s").unwrap().len(), 1);
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 11);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

@@ -689,6 +689,8 @@
                         <Chip state="missing">Kafka</Chip>
                         <Chip state="have">Git</Chip>
                         <Chip state="not-mine">.NET</Chip>
+                        <Chip state="on">Impact</Chip>
+                        <Chip state="off">Conflict</Chip>
                       </div>
                     {/if}
                   </div>

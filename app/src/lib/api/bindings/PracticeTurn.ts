@@ -4,7 +4,15 @@ import type { Feedback } from "./Feedback";
 /**
  * One practiced answer and what came back.
  */
-export type PracticeTurn = { id: string, round: string, 
+export type PracticeTurn = { id: string, 
+/**
+ * The round it was practiced for; `None` for a story told alone (Tell it).
+ */
+round: string | null, 
+/**
+ * The story it told, when it told one (Tell it, or a prep question's story).
+ */
+story: string | null, 
 /**
  * The prep question's id.
  */

@@ -11,7 +11,8 @@
     "mismatches",
     "new_claims",
     "tighter",
-    "follow_up"
+    "follow_up",
+    "story"
   ],
   "properties": {
     "lines": { "type": "array", "maxItems": 6, "items": { "type": "string", "maxLength": 80 } },
@@ -48,6 +49,39 @@
       }
     },
     "tighter": { "type": ["string", "null"], "maxLength": 900 },
-    "follow_up": { "type": ["string", "null"], "maxLength": 300 }
+    "follow_up": { "type": ["string", "null"], "maxLength": 300 },
+    "story": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["title", "entry", "bullets", "facts", "situation", "task", "action", "result", "skills", "themes"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 90 },
+        "entry": { "type": ["string", "null"], "maxLength": 80 },
+        "bullets": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 80 } },
+        "facts": { "type": "array", "maxItems": 6, "items": { "type": "string", "maxLength": 80 } },
+        "situation": { "type": "string", "maxLength": 400 },
+        "task": { "type": "string", "maxLength": 400 },
+        "action": { "type": "string", "maxLength": 600 },
+        "result": { "type": "string", "maxLength": 400 },
+        "skills": { "type": "array", "maxItems": 6, "items": { "type": "string", "maxLength": 60 } },
+        "themes": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "enum": [
+              "conflict",
+              "failure",
+              "leadership",
+              "ambiguity",
+              "deadline",
+              "impact",
+              "learning",
+              "teamwork",
+              "initiative"
+            ]
+          }
+        }
+      }
+    }
   }
 }

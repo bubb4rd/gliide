@@ -2,6 +2,7 @@
 import type { Mismatch } from "./Mismatch";
 import type { NewClaim } from "./NewClaim";
 import type { StarPart } from "./StarPart";
+import type { StoryDraft } from "./StoryDraft";
 
 /**
  * What an answer did, never a grade: the lines it drew on, which parts of situation, task, action and result it has,
@@ -12,4 +13,9 @@ export type Feedback = { lines: Array<string>, situation: StarPart, task: StarPa
 /**
  * One short sentence on the part that's thin or missing, if one is.
  */
-starNote: string | null, mismatches: Array<Mismatch>, newClaims: Array<NewClaim>, tighter: string | null, followUp: string | null, };
+starNote: string | null, mismatches: Array<Mismatch>, newClaims: Array<NewClaim>, tighter: string | null, followUp: string | null, 
+/**
+ * The answer as a story to keep (situation, task, action, result), drawn only from the answer and what it cites;
+ * `None` when it tells none.
+ */
+story: StoryDraft | null, };

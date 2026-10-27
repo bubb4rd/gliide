@@ -8,16 +8,17 @@ use tauri::{AppHandle, State};
 
 use crate::dto::{
     Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
-    Decision, EditTargets, EntryEdit, EntryView, Exported, FeedSettingsDto, FeedSettingsView,
-    FeedView, FolderPdf, FolderView, ImportChoices, ImportView, Instructed, JobRow, JobView,
-    KeyDecision, Library, LogoRow, LogoSource, Mode, Place, PracticeTurn, PrepView, Progress,
-    ReviewView, Rewritten, Round, RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults,
-    SentView, Settings, StatusSet, UpdateStatus,
+    Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit, EntryView, Exported,
+    FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView, ImportChoices, ImportView,
+    Instructed, JobRow, JobView, KeyDecision, Library, LogoRow, LogoSource, Mode, Place,
+    PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round, RoundDraft, RoundsView,
+    SalaryRange, SearchCursor, SearchResults, SentView, Settings, StatusSet, StoriesView,
+    StoryDraft, StoryView, UpdateStatus,
 };
 use crate::state::{App, blocking};
 use crate::{
-    cover, entry, export, feed, folder as files, import, jobs, library as lib, logo, place, prep,
-    review, rounds, settings, update,
+    cover, dig, entry, export, feed, folder as files, import, jobs, library as lib, logo, place,
+    prep, review, rounds, settings, stories, update,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -405,8 +406,70 @@ pub async fn practice_turns(app: St<'_>, round: String) -> Res<Vec<PracticeTurn>
 }
 
 #[tauri::command]
-pub async fn keep_claim(app: St<'_>, round: String, entry: String, text: String) -> Res<()> {
-    blocking(&app, move |app| prep::keep_claim(app, &round, &entry, &text)).await
+pub async fn keep_claim(
+    app: St<'_>,
+    round: Option<String>,
+    entry: String,
+    text: String,
+) -> Res<()> {
+    blocking(&app, move |app| {
+        prep::keep_claim(app, round.as_deref(), &entry, &text)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn tell_story(
+    app: St<'_>,
+    story: String,
+    asked: String,
+    answer: String,
+) -> Res<PracticeTurn> {
+    stories::tell_story(&app, &story, asked, answer).await
+}
+
+#[tauri::command]
+pub async fn story_turns(app: St<'_>, story: String) -> Res<Vec<PracticeTurn>> {
+    blocking(&app, move |app| stories::story_turns(app, &story)).await
+}
+
+// ── Stories ──
+
+#[tauri::command]
+pub async fn stories(app: St<'_>) -> Res<StoriesView> {
+    blocking(&app, stories::stories).await
+}
+
+#[tauri::command]
+pub async fn story(app: St<'_>, id: String) -> Res<StoryView> {
+    blocking(&app, move |app| stories::story(app, &id)).await
+}
+
+#[tauri::command]
+pub async fn save_story(app: St<'_>, draft: StoryDraft) -> Res<StoryView> {
+    blocking(&app, move |app| stories::save_story(app, draft)).await
+}
+
+#[tauri::command]
+pub async fn remove_story(app: St<'_>, id: String) -> Res<()> {
+    blocking(&app, move |app| stories::remove_story(app, &id)).await
+}
+
+// ── Dig ──
+
+#[tauri::command]
+pub async fn dig_questions(app: St<'_>, entry: String, again: bool) -> Res<DigQuestions> {
+    dig::dig_questions(&app, &entry, again).await
+}
+
+#[tauri::command]
+pub async fn dig_capture(
+    app: St<'_>,
+    entry: String,
+    answers: Vec<DigAnswer>,
+    note: String,
+) -> Res<DigCapture> {
+    dig::dig_capture(&app, &entry, answers, note).await
 }
 
 // ── Company logos ──

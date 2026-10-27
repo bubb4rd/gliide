@@ -5,6 +5,7 @@
 
 mod commands;
 pub mod cover;
+pub mod dig;
 pub mod dto;
 pub mod entry;
 pub mod error;
@@ -22,6 +23,7 @@ pub mod review;
 pub mod rounds;
 pub mod settings;
 pub mod state;
+pub mod stories;
 pub mod update;
 mod view;
 mod window;
@@ -130,6 +132,14 @@ pub fn run() {
             commands::practice,
             commands::practice_turns,
             commands::keep_claim,
+            commands::tell_story,
+            commands::story_turns,
+            commands::stories,
+            commands::story,
+            commands::save_story,
+            commands::remove_story,
+            commands::dig_questions,
+            commands::dig_capture,
             commands::logos,
             commands::set_logo,
             commands::remove_logo,

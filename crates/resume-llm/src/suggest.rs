@@ -163,17 +163,23 @@ fn write_candidates(s: &mut String, bank: &Bank, ids: &[String]) {
         first = false;
         let _ = writeln!(s, "## [{}] {}", section.id, section.title);
         for e in entries {
-            header(s, &e.id, &e.name, &e.place, &e.dates, &e.subtitle);
-            for (j, n) in e.notes.iter().enumerate() {
-                note(s, &e.id, j, &n.label, &n.text);
-            }
-            for b in &e.bullets {
-                let _ = writeln!(s, "- [{}] {}", b.id, b.text);
-                extras(s, b, &b.text);
-            }
-            write_facts(s, e);
+            write_entry(s, e);
         }
     }
+}
+
+/// A bank entry tagged as the model reads one: its header, note lines (`[acme#1]`), bullets (`- [acme.2]`) each with
+/// its variants and skills, then its facts.
+pub fn write_entry(s: &mut String, e: &BankEntry) {
+    header(s, &e.id, &e.name, &e.place, &e.dates, &e.subtitle);
+    for (j, n) in e.notes.iter().enumerate() {
+        note(s, &e.id, j, &n.label, &n.text);
+    }
+    for b in &e.bullets {
+        let _ = writeln!(s, "- [{}] {}", b.id, b.text);
+        extras(s, b, &b.text);
+    }
+    write_facts(s, e);
 }
 
 fn heading(s: &mut String, id: &str, title: &str) {

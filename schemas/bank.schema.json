@@ -271,6 +271,11 @@
           "description": "Said in a practiced interview answer and kept (\"Keep as fact\").",
           "type": "string",
           "const": "practice"
+        },
+        {
+          "description": "Answering the questions Dig asks about an entry.",
+          "type": "string",
+          "const": "dig"
         }
       ]
     },

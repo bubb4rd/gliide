@@ -1,6 +1,6 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
-//! cover letters, applications and their interview rounds, company logos, the job feed and settings (ARCHITECTURE.md
-//! §8).
+//! cover letters, applications and their interview rounds, preps and practice, stories, Dig's questions and answers,
+//! company logos, the job feed and settings (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -18,6 +18,7 @@ use resume_core::change::{Draft, DraftEvent, Mode};
 use resume_core::feed::FeedJob;
 use resume_core::posting::text_hash;
 use resume_core::salary::{self, Salary};
+use resume_core::story::Story;
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -39,6 +40,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("interviews.sql"),
     include_str!("rounds.sql"),
     include_str!("practice.sql"),
+    include_str!("stories.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -275,14 +277,39 @@ pub struct Prep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PracticeRow {
     pub id: String,
-    pub round_id: String,
-    /// The prep question's id.
+    /// The round it was practiced for; `None` for a story told alone.
+    pub round_id: Option<String>,
+    /// The story it told, if any.
+    pub story_id: Option<String>,
+    /// The prep question's id (a story told alone: the story's).
     pub question: String,
     /// The question as asked.
     pub asked: String,
     pub answer: String,
     /// The feedback, JSON.
     pub feedback: String,
+    /// Set by the store when added (the one given is ignored).
+    pub at: String,
+}
+
+/// An entry's Dig questions as written: keyed by what they were written from (the caller's hash).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Dig {
+    pub key: String,
+    pub entry: String,
+    pub json: String,
+    pub model: String,
+    /// Set by the store when written (the one given is ignored).
+    pub at: String,
+}
+
+/// The answers one Dig capture read, kept so what it proposes stays grounded in them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DigAnswers {
+    pub id: String,
+    pub entry: String,
+    /// The caller's JSON.
+    pub json: String,
     /// Set by the store when added (the one given is ignored).
     pub at: String,
 }
@@ -1385,40 +1412,168 @@ impl Store {
         Ok(Prep { at, ..p.clone() })
     }
 
-    /// Adds a practiced answer, at now; returns it as stored. Errors when its round doesn't exist.
+    /// Adds a practiced answer, at now; returns it as stored. Errors when it names a round that doesn't exist.
     pub fn add_practice(&self, p: &PracticeRow) -> Result<PracticeRow, StoreError> {
-        if round_by_id(&self.conn, &p.round_id)?.is_none() {
-            return Err(not_found("round", &p.round_id));
+        if let Some(round) = &p.round_id
+            && round_by_id(&self.conn, round)?.is_none()
+        {
+            return Err(not_found("round", round));
         }
         let at = now();
         self.conn.execute(
-            "INSERT INTO practice (id, round_id, question, asked, answer, feedback, at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![p.id, p.round_id, p.question, p.asked, p.answer, p.feedback, at],
+            "INSERT INTO practice (id, round_id, story_id, question, asked, answer, feedback, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![p.id, p.round_id, p.story_id, p.question, p.asked, p.answer, p.feedback, at],
         )?;
         Ok(PracticeRow { at, ..p.clone() })
     }
 
     /// The round's practiced answers, oldest first.
     pub fn practice(&self, round_id: &str) -> Result<Vec<PracticeRow>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, round_id, question, asked, answer, feedback, at FROM practice
-             WHERE round_id = ?1 ORDER BY at, rowid",
-        )?;
-        let rows = stmt
-            .query_map([round_id], |r| {
-                Ok(PracticeRow {
-                    id: r.get(0)?,
-                    round_id: r.get(1)?,
-                    question: r.get(2)?,
-                    asked: r.get(3)?,
-                    answer: r.get(4)?,
-                    feedback: r.get(5)?,
-                    at: r.get(6)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        self.practice_where("round_id = ?1 ORDER BY at, rowid", Some(round_id))
+    }
+
+    /// Every telling of the story (alone or answering a prep question), oldest first.
+    pub fn story_practice(&self, story_id: &str) -> Result<Vec<PracticeRow>, StoreError> {
+        self.practice_where("story_id = ?1 ORDER BY at, rowid", Some(story_id))
+    }
+
+    /// Every practiced answer that told a story, newest first.
+    pub fn told_practice(&self) -> Result<Vec<PracticeRow>, StoreError> {
+        self.practice_where("story_id IS NOT NULL ORDER BY at DESC, rowid DESC", None)
+    }
+
+    /// The practiced answer `id`.
+    pub fn practice_row(&self, id: &str) -> Result<Option<PracticeRow>, StoreError> {
+        Ok(self.practice_where("id = ?1", Some(id))?.pop())
+    }
+
+    fn practice_where(
+        &self,
+        clause: &str,
+        arg: Option<&str>,
+    ) -> Result<Vec<PracticeRow>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT id, round_id, story_id, question, asked, answer, feedback, at FROM practice WHERE {clause}"
+        ))?;
+        let row = |r: &Row| {
+            Ok(PracticeRow {
+                id: r.get(0)?,
+                round_id: r.get(1)?,
+                story_id: r.get(2)?,
+                question: r.get(3)?,
+                asked: r.get(4)?,
+                answer: r.get(5)?,
+                feedback: r.get(6)?,
+                at: r.get(7)?,
+            })
+        };
+        let rows = match arg {
+            Some(a) => stmt.query_map([a], row)?.collect::<Result<Vec<_>, _>>()?,
+            None => stmt.query_map([], row)?.collect::<Result<Vec<_>, _>>()?,
+        };
         Ok(rows)
+    }
+
+    // Stories.
+
+    /// Every story, the one changed last first.
+    pub fn stories(&self) -> Result<Vec<Story>, StoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT json FROM stories ORDER BY updated_at DESC, rowid DESC")?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.iter().map(|j| from_json(j)).collect()
+    }
+
+    pub fn story(&self, id: &str) -> Result<Option<Story>, StoreError> {
+        let json: Option<String> = self
+            .conn
+            .query_row("SELECT json FROM stories WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?;
+        json.map(|j| from_json(&j)).transpose()
+    }
+
+    /// Stores `story` under its id, inserting it or replacing the one there; its `updated_at` is the caller's.
+    pub fn put_story(&self, story: &Story) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO stories (id, json, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at",
+            params![story.id, serde_json::to_string(story)?, story.updated_at],
+        )?;
+        Ok(())
+    }
+
+    /// Removes story `id`, returning it (for Undo, which puts it back by its id); its tellings stay and find it again.
+    pub fn delete_story(&self, id: &str) -> Result<Option<Story>, StoreError> {
+        let story = self.story(id)?;
+        self.conn
+            .execute("DELETE FROM stories WHERE id = ?1", [id])?;
+        Ok(story)
+    }
+
+    // Dig.
+
+    /// The Dig questions stored under `key`.
+    pub fn dig(&self, key: &str) -> Result<Option<Dig>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT key, entry, json, model, at FROM digs WHERE key = ?1",
+                [key],
+                |r| {
+                    Ok(Dig {
+                        key: r.get(0)?,
+                        entry: r.get(1)?,
+                        json: r.get(2)?,
+                        model: r.get(3)?,
+                        at: r.get(4)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Stores `d` under its key, written now, replacing any there; returns it as stored.
+    pub fn put_dig(&self, d: &Dig) -> Result<Dig, StoreError> {
+        let at = now();
+        self.conn.execute(
+            "INSERT INTO digs (key, entry, json, model, at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (key) DO UPDATE SET entry = excluded.entry, json = excluded.json,
+                 model = excluded.model, at = excluded.at",
+            params![d.key, d.entry, d.json, d.model, at],
+        )?;
+        Ok(Dig { at, ..d.clone() })
+    }
+
+    /// Adds the answers a Dig capture read, at now; returns them as stored.
+    pub fn add_dig_answers(&self, a: &DigAnswers) -> Result<DigAnswers, StoreError> {
+        let at = now();
+        self.conn.execute(
+            "INSERT INTO dig_answers (id, entry, json, at) VALUES (?1, ?2, ?3, ?4)",
+            params![a.id, a.entry, a.json, at],
+        )?;
+        Ok(DigAnswers { at, ..a.clone() })
+    }
+
+    pub fn dig_answers(&self, id: &str) -> Result<Option<DigAnswers>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id, entry, json, at FROM dig_answers WHERE id = ?1",
+                [id],
+                |r| {
+                    Ok(DigAnswers {
+                        id: r.get(0)?,
+                        entry: r.get(1)?,
+                        json: r.get(2)?,
+                        at: r.get(3)?,
+                    })
+                },
+            )
+            .optional()?)
     }
 
     /// The application the round belongs to.

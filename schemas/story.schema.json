@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Story",
+  "description": "A story you tell in interviews: situation, task, action, result, in your words. Never printed.",
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string"
+    },
+    "bullets": {
+      "description": "The bank bullets it expands (`acme.2`).",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "entry": {
+      "description": "The bank entry it happened in; null when it's off the resume (a class project's conflict).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "facts": {
+      "description": "The facts it draws on (`acme~1`).",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "id": {
+      "description": "A UUID.",
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "situation": {
+      "type": "string"
+    },
+    "skills": {
+      "description": "Terms it shows, in requirement words (\"GitHub Actions\", \"Integration testing\").",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "$ref": "#/$defs/StorySource"
+    },
+    "task": {
+      "type": "string"
+    },
+    "themes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StoryTheme"
+      }
+    },
+    "title": {
+      "description": "\"Caught 14 regressions before release\".",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "Last changed, RFC 3339.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "situation",
+    "task",
+    "action",
+    "result",
+    "source",
+    "updated_at"
+  ],
+  "$defs": {
+    "StoryKind": {
+      "oneOf": [
+        {
+          "description": "Proposed by Dig from your answers about an entry.",
+          "type": "string",
+          "const": "dig"
+        },
+        {
+          "description": "Drawn from a practiced answer (\"Save as story\").",
+          "type": "string",
+          "const": "practice"
+        },
+        {
+          "description": "Typed in the story editor.",
+          "type": "string",
+          "const": "edit"
+        }
+      ]
+    },
+    "StorySource": {
+      "description": "Where a story came from and when.",
+      "type": "object",
+      "properties": {
+        "at": {
+          "description": "RFC 3339.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The answer it was drawn from: a practice turn's id or a Dig capture's id. Its words ground the story's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/StoryKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "at"
+      ]
+    },
+    "StoryTheme": {
+      "description": "What kind of question a story answers.",
+      "type": "string",
+      "enum": [
+        "conflict",
+        "failure",
+        "leadership",
+        "ambiguity",
+        "deadline",
+        "impact",
+        "learning",
+        "teamwork",
+        "initiative"
+      ]
+    }
+  }
+}

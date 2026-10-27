@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["read", "questions"],
+  "properties": {
+    "read": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["about", "text", "why"],
+        "properties": {
+          "about": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "why": { "type": "string", "maxLength": 60 }
+        }
+      }
+    }
+  }
+}

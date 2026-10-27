@@ -93,6 +93,7 @@
     inviting: "Reading the invite…",
     prepping: "Writing the prep…",
     practicing: "Reading your answer…",
+    digging: "Reading your answers…",
   } as const;
   /** A finished stage in the status's trail. */
   const DONE = {
@@ -106,6 +107,7 @@
     inviting: "Read the invite",
     prepping: "Wrote the prep",
     practicing: "Read your answer",
+    digging: "Read your answers",
   } as const;
   const TABS: { value: Tab; label: string }[] = [
     { value: "resume", label: "Resume" },

@@ -1,6 +1,7 @@
 //! A round's prep and typed practice (local/interviewer/SPEC.md §5, §9): the prep (one model call, kept until what it
-//! was written from changes), an answer to one of its questions read back, the answers practiced so far, and a claim
-//! an answer made kept as a fact of its bank entry.
+//! was written from changes; each likely question linked to the story of yours that answers it), an answer to one of
+//! its questions read back (with the question's story, and the answer as a story to keep), the answers practiced so
+//! far, and a claim an answer made kept as a fact of its bank entry.
 
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use chrono::{Local, SecondsFormat, Utc};
 use resume_core::bank::{Bank, FactKind, FactSource};
 use resume_core::facts::add_fact;
 use resume_core::posting::text_hash;
+use resume_core::story::Story;
 use resume_core::{Requirements, Resume};
 use resume_llm::practice::{self, PracticeInput};
 use resume_llm::prep::{self as written, PrepInput, SentResume};
@@ -15,11 +17,12 @@ use resume_store::{self as store, Application, PracticeRow};
 
 use crate::dto::{
     Feedback, Mismatch, NewClaim, PracticeTurn, PrepGap, PrepQuestion, PrepView, QuestionGroup,
-    Stage, StarPart,
+    Stage, StarPart, StorySource,
 };
 use crate::error::{AppError, Result};
 use crate::rounds::{application_of, sent_pdf};
 use crate::state::{App, blocking, lock, model_call};
+use crate::stories::draft_of;
 
 /// What a prep or a practiced answer is read against: the round, its application and posting, the resume as sent.
 struct Context {
@@ -29,6 +32,8 @@ struct Context {
     job: String,
     requirements: Option<Requirements>,
     sent: SentResume,
+    /// Your stories, newest first.
+    stories: Vec<Story>,
     /// What the prep was written from, hashed (the round included).
     key: String,
 }
@@ -49,6 +54,7 @@ fn context(app: &App, round: &str) -> Result<Context> {
     };
     let (_, bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
     let json = store.sent(&a.id)?;
+    let stories = store.stories()?;
     drop(store);
     let (sent, sent_hash) = match json {
         Some(json) => {
@@ -64,8 +70,9 @@ fn context(app: &App, round: &str) -> Result<Context> {
         }
     };
     let posting_hash = posting.map(|p| p.posting.hash).unwrap_or_default();
-    // Not the bank's revision: a fact kept from practice would otherwise rewrite the prep (and renumber its questions)
-    // the next time the tab opens. Write again takes the bank as it is now.
+    // Not the bank's revision, nor your stories: a fact kept or a story saved from practice would otherwise rewrite the
+    // prep (and renumber its questions) the next time the tab opens. Write again takes the bank and stories as they
+    // are now.
     let key = text_hash(&format!(
         "{}\n{}\n{}\n{posting_hash}\n{sent_hash}\n{}\n{}\n{}",
         written::PROMPT,
@@ -81,12 +88,13 @@ fn context(app: &App, round: &str) -> Result<Context> {
         application: a,
         requirements,
         sent,
+        stories,
         key,
     })
 }
 
 /// The round's prep: the one kept for what it would be written from now, unless `again`; else one model call,
-/// checked against the resume as sent and the bank, and kept.
+/// checked against the resume as sent, the bank and your stories, and kept.
 pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> {
     let id = round.to_owned();
     let (cx, kept) = blocking(app, move |app| {
@@ -100,7 +108,7 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
     })
     .await?;
     if let Some(p) = kept {
-        return view(&p);
+        return view(&p, &cx.stories);
     }
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
@@ -111,15 +119,17 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
         job,
         requirements,
         sent,
+        stories,
         key,
     } = cx;
-    let (m, kind, with, notes, req, s) = (
+    let (m, kind, with, notes, req, s, st) = (
         model.clone(),
         round.kind.clone(),
         round.with.clone(),
         round.notes.clone(),
         requirements.clone(),
         sent.clone(),
+        stories.clone(),
     );
     let (role, company) = (application.role.clone(), application.company.clone());
     let (reply, out) = model_call(app, &job, Stage::Prepping, async move {
@@ -131,13 +141,14 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
             company: &company,
             requirements: req.as_ref(),
             sent: &s,
+            stories: &st,
             today: &today,
         };
         written::write(&llm, &written::schema(), &input, &m).await
     })
     .await?;
     app.note_served(&model, &out);
-    let (p, dropped) = written::checked(reply, &sent, requirements.as_ref());
+    let (p, dropped) = written::checked(reply, &sent, requirements.as_ref(), &stories);
     if !dropped.is_empty() {
         eprintln!("gliide: prep for round {} dropped {dropped:?}", round.id);
     }
@@ -150,11 +161,11 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
         at: String::new(),
     };
     let stored = blocking(app, move |app| Ok(lock(&app.store).put_prep(&row)?)).await?;
-    view(&stored)
+    view(&stored, &stories)
 }
 
-/// A stored prep as the Interview tab shows it.
-fn view(p: &store::Prep) -> Result<PrepView> {
+/// A stored prep as the Interview tab shows it; a question's story you've removed since reads as none.
+fn view(p: &store::Prep, stories: &[Story]) -> Result<PrepView> {
     let w: written::Prep = serde_json::from_str(&p.json)?;
     Ok(PrepView {
         round: p.round_id.clone(),
@@ -173,6 +184,7 @@ fn view(p: &store::Prep) -> Result<PrepView> {
                 text: q.text,
                 why: q.why,
                 lines: q.lines,
+                story: q.story.filter(|id| stories.iter().any(|s| s.id == *id)),
             })
             .collect(),
         gaps: w
@@ -191,8 +203,8 @@ fn view(p: &store::Prep) -> Result<PrepView> {
     })
 }
 
-/// One model call: `answer` to the round's prep question `question` read back, checked against the resume as sent,
-/// the bank and the answer, and kept as a practice turn.
+/// One model call: `answer` to the round's prep question `question` read back (with the story the question links,
+/// when it links one), checked against the resume as sent, the bank and the answer, and kept as a practice turn.
 pub async fn practice(
     app: &Arc<App>,
     round: &str,
@@ -218,6 +230,11 @@ pub async fn practice(
         .into_iter()
         .find(|q| q.id == question)
         .ok_or_else(|| AppError::missing("This question is no longer in the prep"))?;
+    let told: Option<Story> = q
+        .story
+        .as_deref()
+        .and_then(|id| cx.stories.iter().find(|s| s.id == id))
+        .cloned();
     let terms: Vec<String> = cx
         .requirements
         .as_ref()
@@ -225,7 +242,13 @@ pub async fn practice(
         .unwrap_or_default();
     let llm = app.claude().await?;
     let model = app.settings().suggest_model;
-    let (m, s, a, qt) = (model.clone(), cx.sent.clone(), answer.clone(), q.clone());
+    let (m, s, a, qt, st) = (
+        model.clone(),
+        cx.sent.clone(),
+        answer.clone(),
+        q.clone(),
+        told.clone(),
+    );
     let (reply, out) = model_call(app, &cx.job, Stage::Practicing, async move {
         let input = PracticeInput {
             question: &qt.text,
@@ -234,12 +257,13 @@ pub async fn practice(
             answer: &a,
             terms: &terms,
             sent: &s,
+            story: st.as_ref(),
         };
         practice::read(&llm, &practice::schema(), &input, &m).await
     })
     .await?;
     app.note_served(&model, &out);
-    let (f, dropped) = practice::checked(reply, &cx.sent, &q.lines, &answer);
+    let (f, dropped) = practice::checked(reply, &cx.sent, &q.lines, &answer, told.as_ref());
     if !dropped.is_empty() {
         eprintln!(
             "gliide: practice on round {} dropped {dropped:?}",
@@ -248,7 +272,8 @@ pub async fn practice(
     }
     let row = PracticeRow {
         id: uuid::Uuid::new_v4().to_string(),
-        round_id: cx.round.id,
+        round_id: Some(cx.round.id),
+        story_id: told.map(|s| s.id),
         question: q.id,
         asked: q.text,
         answer,
@@ -268,16 +293,18 @@ pub fn practice_turns(app: &App, round: &str) -> Result<Vec<PracticeTurn>> {
         .collect()
 }
 
-fn turn(p: PracticeRow) -> Result<PracticeTurn> {
+/// A stored practice row as the thread shows it; its story draft is drawn from this turn (`from` its id).
+pub(crate) fn turn(p: PracticeRow) -> Result<PracticeTurn> {
     let f: practice::Feedback = serde_json::from_str(&p.feedback)?;
     let star = |s: practice::StarPart| match s {
         practice::StarPart::Yes => StarPart::Yes,
         practice::StarPart::Thin => StarPart::Thin,
         practice::StarPart::No => StarPart::No,
     };
+    let story = f.story.map(|s| draft_of(s, StorySource::Practice, &p.id));
     Ok(PracticeTurn {
-        id: p.id,
         round: p.round_id,
+        story: p.story_id,
         question: p.question,
         asked: p.asked,
         answer: p.answer,
@@ -308,25 +335,34 @@ fn turn(p: PracticeRow) -> Result<PracticeTurn> {
                 .collect(),
             tighter: f.tighter,
             follow_up: f.follow_up,
+            story,
         },
+        id: p.id,
         at: p.at,
     })
 }
 
 /// Keeps `text`, a claim a practiced answer made, as a fact of bank entry `entry` (your word is a source): said for
-/// the round's posting and company. Writes a new bank revision.
-pub fn keep_claim(app: &App, round: &str, entry: &str, text: &str) -> Result<()> {
+/// the round's posting and company; for a story told alone (`round` `None`), for none. Writes a new bank revision.
+pub fn keep_claim(app: &App, round: Option<&str>, entry: &str, text: &str) -> Result<()> {
     let store = lock(&app.store);
-    let r = store
-        .round(round)?
-        .ok_or_else(|| AppError::missing("This interview was removed"))?;
-    let a = application_of(&store, &r.application_id)?;
+    let a = match round {
+        Some(round) => {
+            let r = store
+                .round(round)?
+                .ok_or_else(|| AppError::missing("This interview was removed"))?;
+            Some(application_of(&store, &r.application_id)?)
+        }
+        None => None,
+    };
     let (_, mut bank): (_, Bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
     let source = FactSource {
         kind: FactKind::Practice,
         at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-        posting: a.posting_id.clone(),
-        company: Some(a.company.trim())
+        posting: a.as_ref().and_then(|a| a.posting_id.clone()),
+        company: a
+            .as_ref()
+            .map(|a| a.company.trim())
             .filter(|c| !c.is_empty())
             .map(str::to_owned),
     };

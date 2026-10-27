@@ -1,14 +1,18 @@
 <!--
   A round's prep on the Interview tab (DESIGN.md, Job → Interview): one model call, kept until what it was written
-  from changes. What the round will likely test, the questions it will likely ask (grouped, each with why and whether
-  you've practiced it; selecting one marks the lines it's about on the desk, ⏎ practices it), the requirements the
-  resume you sent doesn't show with an honest answer for each, and questions to ask them.
+  from changes. What the round will likely test, the questions it will likely ask (grouped, each with why, the story
+  it calls for (a chip that opens it; "No story yet" for a behavioral one without), and whether you've practiced it;
+  selecting one marks the lines it's about on the desk, ⏎ practices it), the requirements the resume you sent doesn't
+  show with an honest answer for each, and questions to ask them.
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
+  import BookOpen from "@lucide/svelte/icons/book-open";
   import Check from "@lucide/svelte/icons/check";
+  import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import Crosshair from "@lucide/svelte/icons/crosshair";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import type { PrepQuestion, PrepView, QuestionGroup, SentLine } from "$lib/api";
+  import { stories, type PrepQuestion, type PrepView, type QuestionGroup, type SentLine } from "$lib/api";
   import { Badge, Button, GroupHead, Icon, Thinking, tip } from "$lib/ui";
 
   interface Props {
@@ -50,6 +54,14 @@
   ];
 
   const byId = $derived(new Map(lines.map((l) => [l.id, l])));
+  /** Story titles by id, loaded once: a question's story chip names it. */
+  let titles = $state(new Map<string, string>());
+  onMount(() => {
+    stories()
+      .then((v) => (titles = new Map(v.stories.map((s) => [s.id, s.title]))))
+      // Without the titles the chips stay off; the questions read the same.
+      .catch(() => {});
+  });
   const groups = $derived(
     GROUPS.map((g) => ({ ...g, questions: prep?.questions.filter((q) => q.group === g.value) ?? [] })).filter(
       (g) => g.questions.length,
@@ -95,27 +107,35 @@
       <p class="label group">{group.label} <span class="num">{group.questions.length}</span></p>
       <ol class="questions">
         {#each group.questions as q (q.id)}
-          <li>
-            <button
-              type="button"
-              class={["question", q.id === selected && "question--selected"]}
-              aria-current={q.id === selected || undefined}
-              onclick={() => onselect(q)}
-              ondblclick={() => onpractice(q)}
-            >
+          {@const title = q.story ? titles.get(q.story) : undefined}
+          <!-- The row selects from anywhere on it; its button is what the keyboard reaches. -->
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+          <li
+            class={["question", q.id === selected && "question--selected"]}
+            onclick={() => onselect(q)}
+            ondblclick={() => onpractice(q)}
+          >
+            <button type="button" class="question__main" aria-current={q.id === selected || undefined}>
               <span class="question__n num">{prep.questions.indexOf(q) + 1}</span>
-              <span class="question__body">
-                <span class="question__text">{q.text}</span>
-                <span class="meta question__why"
-                  >{#if q.lines.length}<span class="question__lines" {@attach tip(lineTip(q.lines))}
-                      >{q.lines.length === 1 ? "1 line" : `${q.lines.length} lines`}</span
-                    >{" · "}{/if}{q.why}</span
-                >
-              </span>
+              <span class="question__text">{q.text}</span>
               {#if practiced.has(q.id)}
                 <span class="meta practiced"><Icon icon={Check} size={14} />Practiced</span>
               {/if}
             </button>
+            <p class="meta question__why">
+              {#if q.story && title}
+                <a class="story" href="/bank/stories/{encodeURIComponent(q.story)}" {@attach tip("Open the story")}
+                  ><Icon icon={BookOpen} size={12} weight="medium" /><span class="story__title">{title}</span></a
+                >
+              {:else if !q.story && q.group === "behavioral"}
+                <span class="nostory"><Icon icon={CircleDashed} size={12} />No story yet</span>
+              {/if}
+              <span
+                >{#if q.lines.length}<span class="question__lines" {@attach tip(lineTip(q.lines))}
+                    >{q.lines.length === 1 ? "1 line" : `${q.lines.length} lines`}</span
+                  >{" · "}{/if}{q.why}</span
+              >
+            </p>
           </li>
         {/each}
       </ol>
@@ -201,26 +221,33 @@
     list-style: none;
   }
   .question {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    width: 100%;
+    display: grid;
+    gap: var(--space-0-5);
     padding: var(--space-2) var(--space-3);
-    border: 0;
     border-radius: var(--radius-md);
-    background: none;
-    font: inherit;
-    color: inherit;
-    text-align: start;
     cursor: default;
     transition: background-color var(--dur-instant) var(--ease-out);
   }
   .question--selected {
     background: var(--selected);
   }
-  .question:focus-visible {
+  .question:has(.question__main:focus-visible) {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+  .question__main {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: start;
+    cursor: default;
+    outline: none;
   }
   .question__n {
     flex: none;
@@ -229,20 +256,58 @@
     font-size: var(--text-md);
     line-height: var(--leading-md);
   }
-  .question__body {
+  .question__text {
     flex: 1;
     min-width: 0;
-    display: grid;
-    gap: var(--space-0-5);
-  }
-  .question__text {
     font-size: var(--text-md);
     line-height: var(--leading-md);
     text-wrap: pretty;
   }
+  /* Under the text, past the number: the story, then why. */
+  .question__why {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    margin: 0;
+    padding-inline-start: calc(16px + var(--space-2));
+  }
   .question__lines {
     text-decoration: underline dotted var(--ink-4);
     text-underline-offset: 3px;
+  }
+  /* The story it calls for: a small neutral chip that opens it. */
+  .story {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    height: 20px;
+    padding-inline: calc(var(--space-2) - 2px) var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--sunken);
+    box-shadow: inset 0 0 0 1px var(--line);
+    font-weight: var(--weight-medium);
+    color: var(--ink-2);
+    text-decoration: none;
+    transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .story :global(.icon) {
+    flex: none;
+    color: var(--ink-3);
+  }
+  .story__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nostory {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--ink-3);
+    white-space: nowrap;
   }
   .practiced {
     display: inline-flex;
@@ -282,6 +347,10 @@
   @media (hover: hover) {
     .question:not(.question--selected):hover {
       background: var(--hover);
+    }
+    .story:hover {
+      background: var(--hover);
+      color: var(--ink);
     }
   }
 </style>

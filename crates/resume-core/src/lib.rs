@@ -21,6 +21,7 @@ pub mod resolve;
 pub mod resume;
 pub mod salary;
 pub mod score;
+pub mod story;
 pub mod suggestions;
 pub mod text;
 pub mod validate;
@@ -35,6 +36,7 @@ pub use requirements::Requirements;
 pub use resolve::{ResolveError, resolve};
 pub use resume::Resume;
 pub use score::{PageFacts, Score, score};
+pub use story::Story;
 pub use text::resume_text;
 
 /// JSON Schema of the bank document (`schemas/bank.schema.json`).
@@ -45,4 +47,9 @@ pub fn bank_schema() -> schemars::Schema {
 /// JSON Schema of a master document (`schemas/master.schema.json`).
 pub fn master_schema() -> schemars::Schema {
     schemars::schema_for!(Master)
+}
+
+/// JSON Schema of a story (`schemas/story.schema.json`).
+pub fn story_schema() -> schemars::Schema {
+    schemars::schema_for!(Story)
 }

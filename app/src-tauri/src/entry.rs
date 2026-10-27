@@ -1,7 +1,8 @@
 //! A bank entry's editor (DESIGN.md, Experience bank): its details (`resume_core::details`), its facts
-//! (`resume_core::facts`), its bullets with every wording and which master shows which, edits of the wordings
-//! (`resume_core::variants`: every master keeps the words it showed unless the edit is about what it shows), and the
-//! desk's preview: a master that shows the entry, or the entry alone in the default template.
+//! (`resume_core::facts`), its bullets with every wording, their skills and which master shows which, edits of the
+//! wordings (`resume_core::variants`: every master keeps the words it showed unless the edit is about what it shows; a
+//! new bullet joins the entry in no master; folding a bullet moves your stories' links onto the one it folds into),
+//! and the desk's preview: a master that shows the entry, or the entry alone in the default template.
 
 use chrono::{SecondsFormat, Utc};
 use resume_core::bank::{Fact, FactSource, Note};
@@ -9,7 +10,8 @@ use resume_core::details::{Details, set_details};
 use resume_core::facts::{FactDraft, set_facts};
 use resume_core::master::{MasterBullet, MasterEntry, MasterSection};
 use resume_core::variants::{
-    self, VariantError, add_variant, fold_into, make_main, remove_variant, set_wording,
+    self, VariantError, add_bullet, add_variant, fold_into, make_main, remove_variant, set_skills,
+    set_wording,
 };
 use resume_core::{Bank, Master, Resume, resolve};
 
@@ -40,12 +42,15 @@ pub fn edit_entry(
         find(bank, entry).is_some_and(|(_, e)| e.bullets.iter().any(|b| b.id == bullet))
     };
     let bullet = match &edit {
-        EntryEdit::SetDetails { .. } | EntryEdit::SetFacts { .. } => None,
+        EntryEdit::SetDetails { .. } | EntryEdit::SetFacts { .. } | EntryEdit::AddBullet { .. } => {
+            None
+        }
         EntryEdit::AddVariant { bullet, .. }
         | EntryEdit::SetWording { bullet, .. }
         | EntryEdit::RemoveVariant { bullet, .. }
         | EntryEdit::MakeMain { bullet, .. }
-        | EntryEdit::Show { bullet, .. } => Some(bullet),
+        | EntryEdit::Show { bullet, .. }
+        | EntryEdit::SetSkills { bullet, .. } => Some(bullet),
         EntryEdit::Fold { from, .. } => Some(from),
     };
     if bullet.is_some_and(|b| !owns(&bank, b)) {
@@ -53,6 +58,10 @@ pub fn edit_entry(
             "This bullet isn't in the entry any more; reopen it",
         ));
     }
+    let folded = match &edit {
+        EntryEdit::Fold { from, into } => Some((from.clone(), into.clone())),
+        _ => None,
+    };
     apply(&mut bank, &mut masters, entry, edit)?;
     {
         let store = lock(&app.store);
@@ -60,6 +69,16 @@ pub fn edit_entry(
         for (m, was) in masters.iter().zip(&before) {
             if m != was {
                 store.put_master(m)?;
+            }
+        }
+        // A story told from the folded bullet now tells the one it folded into.
+        if let Some((from, into)) = folded {
+            let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+            for mut s in store.stories()? {
+                if s.move_bullet(&from, &into) {
+                    s.updated_at.clone_from(&now);
+                    store.put_story(&s)?;
+                }
             }
         }
     }
@@ -84,6 +103,8 @@ fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) 
                 .map_err(|e| AppError::other(e.to_string()));
         }
         EntryEdit::AddVariant { bullet, text } => add_variant(bank, &bullet, &text).map(drop),
+        EntryEdit::AddBullet { text } => add_bullet(bank, entry, &text).map(drop),
+        EntryEdit::SetSkills { bullet, skills } => set_skills(bank, &bullet, &skills),
         EntryEdit::SetWording {
             bullet,
             variant,
@@ -125,7 +146,7 @@ pub fn variant_error(e: VariantError) -> AppError {
 }
 
 /// A fact as the editor shows it.
-fn fact_line(f: &Fact) -> FactLine {
+pub(crate) fn fact_line(f: &Fact) -> FactLine {
     FactLine {
         id: f.id.clone(),
         text: f.text.clone(),
@@ -134,6 +155,7 @@ fn fact_line(f: &Fact) -> FactLine {
             resume_core::bank::FactKind::Review => FactKind::Review,
             resume_core::bank::FactKind::Edit => FactKind::Edit,
             resume_core::bank::FactKind::Practice => FactKind::Practice,
+            resume_core::bank::FactKind::Dig => FactKind::Dig,
         },
         at: f.source.at.clone(),
         posting: f.source.posting.clone(),
@@ -148,6 +170,7 @@ fn draft(l: FactLine) -> FactDraft {
             FactKind::Review => resume_core::bank::FactKind::Review,
             FactKind::Edit => resume_core::bank::FactKind::Edit,
             FactKind::Practice => resume_core::bank::FactKind::Practice,
+            FactKind::Dig => resume_core::bank::FactKind::Dig,
         },
         at: l.at,
         posting: l.posting,

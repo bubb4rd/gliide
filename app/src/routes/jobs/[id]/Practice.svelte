@@ -1,39 +1,37 @@
 <!--
   Typed practice for one round (DESIGN.md, Job → Interview → Practice): the interviewer asks the prep's questions one
-  at a time; you answer in the box at the foot; each answer comes back (one model call) as a feedback card: the lines
-  it drew on, which of situation, task, action and result it has, what it says differently from the resume you sent
-  (amber), what it says the bank doesn't hold yet (Keep as fact), a tighter telling and the likely follow-up. Never a
-  grade. The strip at the top pins the question, with how many you've practiced. `N` next question, `R` again, `Esc`
-  back to the prep.
+  at a time; you answer in the box at the foot; each answer comes back (one model call) as a feedback card
+  (`FeedbackCard`): the lines it drew on, which of situation, task, action and result it has, what it says differently
+  from the resume you sent (amber), what it says the bank doesn't hold yet (Keep as fact), a tighter telling and the
+  likely follow-up. Never a grade. An answer that tells a story offers Save as story (`S`). The strip at the top pins
+  the question, with how many you've practiced. `N` next question, `R` again, `Esc` back to the prep.
 -->
 <script lang="ts">
   import { tick } from "svelte";
-  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+  import { goto } from "$app/navigation";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import BookOpen from "@lucide/svelte/icons/book-open";
   import Check from "@lucide/svelte/icons/check";
-  import CircleDashed from "@lucide/svelte/icons/circle-dashed";
-  import Copy from "@lucide/svelte/icons/copy";
-  import Plus from "@lucide/svelte/icons/plus";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import UserRound from "@lucide/svelte/icons/user-round";
   import {
     appError,
     cancel,
     keepClaim,
     practice,
+    saveStory,
     type NewClaim,
     type PracticeTurn,
     type PrepQuestion,
     type PrepView,
     type Round,
     type SentLine,
-    type StarPart,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { kindLabel } from "$lib/rounds";
   import { Button, Icon, KeyFooter, type KeyCommand, Textarea, Thinking, tip, toast } from "$lib/ui";
+  import FeedbackCard from "./FeedbackCard.svelte";
 
   interface Props {
     job: string;
@@ -118,12 +116,26 @@
     }
   }
 
-  async function copy(text: string) {
+  /** Turns saved as a story this visit: the turn's id → the story's. */
+  let saved = $state(new Map<string, string>());
+  /** The newest turn with a story to save that isn't saved yet: what `S` saves. */
+  const saveable = $derived(turns.findLast((t) => t.feedback.story && !saved.has(t.id)));
+  let saving = $state(false);
+
+  const storyHref = (id: string) => `/bank/stories/${encodeURIComponent(id)}`;
+
+  async function saveAsStory(turn: PracticeTurn | undefined) {
+    const draft = turn?.feedback.story;
+    if (!turn || !draft || saved.has(turn.id) || saving) return;
+    saving = true;
     try {
-      await writeText(text);
-      toast("Copied");
+      const story = await saveStory(draft);
+      saved = new Map([...saved, [turn.id, story.id]]);
+      toast("Saved as a story", { action: { label: "Open", run: () => goto(storyHref(story.id)) } });
     } catch (e) {
-      toast(`Couldn’t copy: ${appError(e).message}`, { tone: "danger" });
+      toast(appError(e).message, { tone: "danger" });
+    } finally {
+      saving = false;
     }
   }
 
@@ -137,15 +149,6 @@
     }
   }
 
-  const STAR: { key: "situation" | "task" | "action" | "result"; label: string }[] = [
-    { key: "situation", label: "Situation" },
-    { key: "task", label: "Task" },
-    { key: "action", label: "Action" },
-    { key: "result", label: "Result" },
-  ];
-  const partWord = (p: StarPart) => (p === "yes" ? "" : p === "thin" ? " thin" : " missing");
-  const clip = (text: string) => (text.length > 44 ? `${text.slice(0, 43).trimEnd()}…` : text);
-
   const interactive = (target: EventTarget | null) =>
     target instanceof HTMLElement && target.closest("button, a, input, textarea, select") !== null;
 
@@ -153,6 +156,7 @@
     { keys: ["⏎"], label: "Send your answer", run: () => void send(), disabled: !answer.trim() || reading !== null },
     { keys: ["N"], label: "Next question", run: () => void ask(next), disabled: reading !== null },
     { keys: ["R"], label: "Ask it again", run: () => void ask(asked, true), disabled: reading !== null },
+    ...(saveable ? [{ keys: ["S"], label: "Save as story", run: () => void saveAsStory(saveable), disabled: saving }] : []),
     { keys: ["Esc"], label: "Back to prep", run: onback },
     ...keys,
   ]);
@@ -161,6 +165,7 @@
     bindKeys({
       n: (e) => (interactive(e.target) ? false : void ask(next)),
       r: (e) => (interactive(e.target) ? false : void ask(asked, true)),
+      s: (e) => (interactive(e.target) || !saveable ? false : void saveAsStory(saveable)),
       Escape: (e) => {
         if (reading !== null) return void cancel(job);
         if (interactive(e.target)) return false;
@@ -191,88 +196,29 @@
       <p class="asked">{turn.asked}</p>
     </article>
     <p class="bubble">{turn.answer}</p>
-    {@const f = turn.feedback}
-    <article class="card" aria-label="Feedback on your answer">
-      {#if f.lines.length}
-        <div class="row">
-          <span class="row__label">Drew on</span>
-          <div class="chips">
-            {#each f.lines as id (id)}
-              {@const line = byId.get(id)}
-              {#if line}
-                <span class="chip" {@attach tip(line.entry ? `${line.entry}: ${line.text}` : line.text)}
-                  >{clip(line.text)}</span
-                >
-              {/if}
-            {/each}
-          </div>
-        </div>
+    {#snippet story()}
+      {@const id = saved.get(turn.id)}
+      {#if id}
+        <a class="meta saved" href={storyHref(id)}><Icon icon={Check} size={14} />Saved as a story</a>
+      {:else}
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={BookOpen}
+          kbd={turn === saveable ? "S" : undefined}
+          disabled={saving}
+          onclick={() => saveAsStory(turn)}>Save as story</Button
+        >
       {/if}
-      <div class="row">
-        <span class="row__label">STAR</span>
-        <div>
-          <p class="star">
-            {#each STAR as part (part.key)}
-              <span class={["star__part", f[part.key] !== "yes" && "star__part--short"]}
-                ><Icon icon={f[part.key] === "yes" ? Check : CircleDashed} size={14} weight="medium" />{part.label}{partWord(
-                  f[part.key],
-                )}</span
-              >
-            {/each}
-          </p>
-          {#if f.starNote}<p class="meta">{f.starNote}</p>{/if}
-        </div>
-      </div>
-      {#each f.mismatches as m (m.said + m.line)}
-        <div class="row row--warn">
-          <span class="row__label">Consistency</span>
-          <p class="warn">
-            <Icon icon={TriangleAlert} size={16} weight="medium" /><span
-              >You said {m.said}; the resume you sent says {m.resume}.</span
-            >
-          </p>
-        </div>
-      {/each}
-      {#if f.newClaims.length}
-        <div class="row">
-          <span class="row__label">New to gliide</span>
-          <div class="claims">
-            {#each f.newClaims as claim (claim.text)}
-              <div class="claim">
-                <p>“{claim.text}”</p>
-                {#if kept.has(claim.text)}
-                  <p class="meta kept"><Icon icon={Check} size={14} />Kept as a fact of {claim.entryName}</p>
-                {:else}
-                  <p class="claim__keep">
-                    <Button size="sm" icon={Plus} onclick={() => keep(claim)}>Keep as fact</Button>
-                    <span class="meta">On {claim.entryName}, your answer as its source</span>
-                  </p>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/if}
-      {#if f.tighter}
-        {@const tighter = f.tighter}
-        <div class="row">
-          <span class="row__label">Tighter</span>
-          <div>
-            <p class="tighter">{tighter}</p>
-            <p class="claim__keep">
-              <Button variant="ghost" size="sm" icon={Copy} onclick={() => copy(tighter)}>Copy</Button>
-              <span class="meta">Only your answer and what you sent</span>
-            </p>
-          </div>
-        </div>
-      {/if}
-      {#if f.followUp}
-        <div class="row">
-          <span class="row__label">Follow-up</span>
-          <p class="follow">“{f.followUp}”</p>
-        </div>
-      {/if}
-    </article>
+    {/snippet}
+    <FeedbackCard
+      feedback={turn.feedback}
+      line={(id) => byId.get(id)}
+      {kept}
+      onkeep={keep}
+      grounded="Only your answer and what you sent"
+      actions={turn.feedback.story ? story : undefined}
+    />
   {/each}
 
   {#if asked && !answered}
@@ -431,105 +377,21 @@
     white-space: pre-wrap;
     text-wrap: pretty;
   }
-  .card {
-    display: grid;
-    border-radius: var(--radius-lg);
-    border: 1px solid transparent;
-    background: var(--surface);
-    box-shadow: var(--shadow-border);
-    overflow: hidden;
-  }
-  .row {
-    display: grid;
-    grid-template-columns: 84px minmax(0, 1fr);
-    gap: var(--space-3);
-    padding: var(--space-2-5) var(--space-3);
-  }
-  .row + .row {
-    box-shadow: inset 0 1px 0 var(--line);
-  }
-  .row p {
-    margin: 0;
-  }
-  .row__label {
-    padding-top: 2px;
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--ink-3);
-  }
-  .row--warn {
-    background: var(--warn-soft);
-  }
-  .warn {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    font-weight: var(--weight-medium);
-  }
-  .warn :global(.icon) {
-    flex: none;
-    margin-top: 2px;
-    color: var(--warn);
-  }
-  .chips,
-  .star {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1-5) var(--space-3);
-  }
-  .chip {
+  /* Saved as a story: the row says so, a gain check, and opens it. */
+  .saved {
     display: inline-flex;
     align-items: center;
-    height: 22px;
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-full);
-    background: var(--sunken);
-    box-shadow: inset 0 0 0 1px var(--line);
-    font-size: var(--text-sm);
+    gap: var(--space-1);
     color: var(--ink-2);
+    text-decoration: none;
   }
-  .star__part {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .star__part :global(.icon) {
+  .saved :global(.icon) {
     color: var(--gain-text);
   }
-  .star__part--short {
-    color: var(--ink-3);
-  }
-  .star__part--short :global(.icon) {
-    color: var(--ink-3);
-  }
-  .claims {
-    display: grid;
-    gap: var(--space-3);
-  }
-  .claim {
-    display: grid;
-    gap: var(--space-1-5);
-  }
-  .row .claim__keep {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-top: var(--space-1-5);
-  }
-  .kept {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .kept :global(.icon) {
-    color: var(--gain-text);
-  }
-  .tighter,
-  .follow {
-    font-size: var(--text-md);
-    line-height: var(--leading-md);
-    text-wrap: pretty;
+  @media (hover: hover) {
+    .saved:hover {
+      color: var(--ink);
+    }
   }
   .reading {
     padding-inline: var(--space-1);

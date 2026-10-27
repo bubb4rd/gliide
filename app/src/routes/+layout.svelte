@@ -43,6 +43,7 @@
     inviting: "Reading…",
     prepping: "Prepping…",
     practicing: "Reading…",
+    digging: "Reading…",
   };
 
   /**

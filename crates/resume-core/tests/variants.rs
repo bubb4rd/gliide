@@ -1,6 +1,7 @@
 use resume_core::master::Master;
 use resume_core::variants::{
-    VariantError, add_variant, fold_into, make_main, remove_variant, set_wording, show,
+    VariantError, add_bullet, add_variant, fold_into, make_main, remove_variant, set_skills,
+    set_wording, show,
 };
 use resume_core::{Bank, Resume, migrate_v1, resolve};
 
@@ -202,5 +203,50 @@ fn folding_reuses_a_wording_the_target_already_has() {
             .last()
             .map(|b| (b.id.as_str(), b.variant)),
         Some(("acme.1", Some(1)))
+    );
+}
+
+#[test]
+fn a_new_bullet_takes_the_next_free_id_in_no_master() {
+    let (mut bank, masters) = jane();
+    let before = pages(&bank, &masters);
+    let id = add_bullet(&mut bank, "acme", "  Ran the on-call rotation ").unwrap();
+    assert_eq!(id, "acme.4");
+    let acme = &bank.sections[0].entries[0];
+    assert_eq!(acme.bullets.last().unwrap().text, "Ran the on-call rotation");
+    assert_eq!(pages(&bank, &masters), before, "no master shows it");
+    // A removed bullet's number is free again, as an import numbers them.
+    bank.sections[0].entries[0].bullets.retain(|b| b.id != "acme.2");
+    assert_eq!(add_bullet(&mut bank, "acme", "Mentored 2 interns").unwrap(), "acme.2");
+    assert_eq!(
+        add_bullet(&mut bank, "acme", "Ran the on-call  rotation"),
+        Err(VariantError::Duplicate)
+    );
+    assert_eq!(
+        add_bullet(&mut bank, "acme", "Batched telemetry into Postgres"),
+        Err(VariantError::Duplicate),
+        "a variant's words count"
+    );
+    assert_eq!(add_bullet(&mut bank, "acme", " "), Err(VariantError::Empty));
+    assert_eq!(
+        add_bullet(&mut bank, "nope", "x"),
+        Err(VariantError::Entry("nope".into()))
+    );
+}
+
+#[test]
+fn skills_are_set_whole_trimmed_and_once() {
+    let (mut bank, _) = jane();
+    let skills = [" GitHub  Actions ", "", "github actions", "Integration testing"].map(String::from);
+    set_skills(&mut bank, "acme.2", &skills).unwrap();
+    assert_eq!(
+        bank.sections[0].entries[0].bullets[1].skills,
+        ["GitHub Actions", "Integration testing"]
+    );
+    set_skills(&mut bank, "acme.2", &[]).unwrap();
+    assert!(bank.sections[0].entries[0].bullets[1].skills.is_empty());
+    assert_eq!(
+        set_skills(&mut bank, "acme.9", &[]),
+        Err(VariantError::Bullet("acme.9".into()))
     );
 }

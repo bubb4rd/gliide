@@ -423,6 +423,8 @@ pub enum FactKind {
     Review,
     Edit,
     Practice,
+    /// Answering an entry's Interview tab (Dig).
+    Dig,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -500,6 +502,15 @@ pub enum EntryEdit {
     /// The entry's facts, whole, in order.
     SetFacts {
         facts: Vec<FactLine>,
+    },
+    /// A new bullet at the entry's end, in no master yet.
+    AddBullet {
+        text: String,
+    },
+    /// The skills you say a bullet demonstrates, whole.
+    SetSkills {
+        bullet: String,
+        skills: Vec<String>,
     },
 }
 
@@ -1119,6 +1130,8 @@ pub struct PrepQuestion {
     pub why: String,
     /// The lines of the resume as sent it's about (`SentLine.id`), each one that exists.
     pub lines: Vec<String>,
+    /// The story of yours that answers it, if one does (`StoryView.id`).
+    pub story: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -1154,7 +1167,10 @@ pub struct PrepGap {
 #[ts(export)]
 pub struct PracticeTurn {
     pub id: String,
-    pub round: String,
+    /// The round it was practiced for; `None` for a story told alone (Tell it).
+    pub round: Option<String>,
+    /// The story it told, when it told one (Tell it, or a prep question's story).
+    pub story: Option<String>,
     /// The prep question's id.
     pub question: String,
     /// The question as asked.
@@ -1183,6 +1199,196 @@ pub struct Feedback {
     pub new_claims: Vec<NewClaim>,
     pub tighter: Option<String>,
     pub follow_up: Option<String>,
+    /// The answer as a story to keep (situation, task, action, result), drawn only from the answer and what it cites;
+    /// `None` when it tells none.
+    pub story: Option<StoryDraft>,
+}
+
+// ── Stories ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// A story you tell in interviews: situation, task, action, result, in your words. Never printed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StoryView {
+    pub id: String,
+    pub title: String,
+    /// The bank entry it happened in, and its name; `None` off the resume.
+    pub entry: Option<String>,
+    pub entry_name: Option<String>,
+    pub situation: String,
+    pub task: String,
+    pub action: String,
+    pub result: String,
+    pub skills: Vec<String>,
+    pub themes: Vec<StoryTheme>,
+    /// The bullets and facts it draws on, as they read now (a removed one reads `gone`).
+    pub links: Vec<StoryLink>,
+    pub source: StorySource,
+    /// Last changed, RFC 3339.
+    pub updated_at: String,
+    /// About how long it takes to tell, in seconds (its words at 150 a minute).
+    pub seconds: u32,
+    /// Where it was practiced or asked, newest first.
+    pub used: Vec<StoryUse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StoryLink {
+    /// A bullet (`acme.2`) or a fact (`acme~1`).
+    pub id: String,
+    pub fact: bool,
+    /// Its words now; empty when it's gone from the bank.
+    pub text: String,
+    pub gone: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StoryUse {
+    /// "Globex · Technical", or "Told alone".
+    pub label: String,
+    /// RFC 3339.
+    pub at: String,
+}
+
+/// A story as the editor, Dig or practice sends it: `id` `None` for a new one (or one Undo brings back by its id).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StoryDraft {
+    pub id: Option<String>,
+    pub title: String,
+    pub entry: Option<String>,
+    pub bullets: Vec<String>,
+    pub facts: Vec<String>,
+    pub situation: String,
+    pub task: String,
+    pub action: String,
+    pub result: String,
+    pub skills: Vec<String>,
+    pub themes: Vec<StoryTheme>,
+    /// Where it came from; `None` from the editor (typed by you).
+    pub source: Option<StorySource>,
+    /// The practice turn or Dig answer it was drawn from, which grounds its words.
+    pub from: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum StoryTheme {
+    Conflict,
+    Failure,
+    Leadership,
+    Ambiguity,
+    Deadline,
+    Impact,
+    Learning,
+    Teamwork,
+    Initiative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum StorySource {
+    Dig,
+    Practice,
+    Edit,
+}
+
+/// Every story, newest first, and the themes no story covers yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StoriesView {
+    pub stories: Vec<StoryView>,
+    pub uncovered: Vec<StoryTheme>,
+}
+
+// ── Dig: gliide asks about an entry ─────────────────────────────────────────────────────────────────────────────
+
+/// An entry's Interview tab opening: the agent's read of it and the questions it asks at once (one model call).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DigQuestions {
+    pub entry: String,
+    /// One or two sentences: what the entry shows and what it leaves out.
+    pub read: String,
+    pub questions: Vec<DigQuestion>,
+    /// The model that wrote them.
+    pub model: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DigQuestion {
+    /// `d1`, `d2`…
+    pub id: String,
+    /// The bullet it's about, or the entry's id for the entry as a whole.
+    pub about: String,
+    /// "Bullet 2", "The entry".
+    pub about_label: String,
+    pub text: String,
+    /// Why it asks, in a few words ("A number would make this bullet land").
+    pub why: String,
+}
+
+/// Your answer to one Dig question: `answer` `None` when you skipped it; `not_applicable` when it doesn't apply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DigAnswer {
+    pub question: DigQuestion,
+    pub answer: Option<String>,
+    pub not_applicable: bool,
+}
+
+/// What your answers became (one model call): facts kept at once (your words; each removable), additions proposed
+/// for you to accept (never a rewrite of a bullet's text), questions where an answer was vague, and what it couldn't
+/// use.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DigCapture {
+    pub reply: String,
+    /// The facts kept, as the entry now holds them.
+    pub facts: Vec<FactLine>,
+    pub ops: Vec<DigOp>,
+    pub follow_ups: Vec<DigQuestion>,
+    pub skipped: Vec<DigSkip>,
+    /// The entry with the facts kept.
+    pub entry: EntryView,
+    pub model: String,
+}
+
+/// An addition Dig proposes, pending until you accept it (`key` names it in the thread).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+#[ts(export)]
+pub enum DigOp {
+    /// Accept: `edit_entry` `add-variant`.
+    AddVariant { key: String, bullet: String, text: String, why: String },
+    /// Accept: `edit_entry` `add-bullet`.
+    AddBullet { key: String, text: String, why: String },
+    /// Accept: `edit_entry` `set-skills` (the bullet's skills with these added).
+    TagSkills { key: String, bullet: String, skills: Vec<String>, why: String },
+    /// Accept: `save_story`. (Boxed: a story is many times the size of the other ops; the JSON is the same.)
+    AddStory { key: String, story: Box<StoryDraft>, why: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DigSkip {
+    pub what: String,
+    pub why: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -1571,6 +1777,8 @@ pub enum Stage {
     Prepping,
     /// A practiced answer read.
     Practicing,
+    /// Dig's questions about an entry written, or your answers read.
+    Digging,
 }
 
 #[cfg(test)]

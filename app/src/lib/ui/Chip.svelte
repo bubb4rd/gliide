@@ -1,7 +1,8 @@
 <!--
-  A posting's skill. have: on the resume now (gain). add: the plan adds the posting's wording (dashed gain).
-  missing: not on the resume. not-mine: you said it isn't yours (struck). `p1`: the posting's priority-1 skills.
-  Pressing toggles it; the state is also its color and icon, so nothing relies on motion.
+  A chip you press. As a posting's skill: have: on the resume now (gain). add: the plan adds the posting's wording
+  (dashed gain). missing: not on the resume. not-mine: you said it isn't yours (struck). `p1`: the posting's
+  priority-1 skills. As a plain toggle (a story's themes): on, the selection wash with accent text and a check, never
+  green; off, neutral. Pressing toggles it; the state is also its color and icon, so nothing relies on motion.
 -->
 <script lang="ts">
   import type { HTMLButtonAttributes } from "svelte/elements";
@@ -11,7 +12,7 @@
   import Icon from "./Icon.svelte";
 
   interface Props extends HTMLButtonAttributes {
-    state: "have" | "add" | "missing" | "not-mine";
+    state: "have" | "add" | "missing" | "not-mine" | "on" | "off";
     p1?: boolean;
     children: Snippet;
   }
@@ -22,10 +23,10 @@
 <button
   type="button"
   class={["chip", `chip--${state}`, p1 && "chip--p1", className]}
-  aria-pressed={state === "have" || state === "add"}
+  aria-pressed={state === "have" || state === "add" || state === "on"}
   {...rest}
 >
-  {#if state === "have"}<Icon icon={Check} size={12} weight="medium" />{/if}
+  {#if state === "have" || state === "on"}<Icon icon={Check} size={12} weight="medium" />{/if}
   {#if state === "add"}<Icon icon={Plus} size={12} weight="medium" />{/if}
   {@render children()}
 </button>
@@ -53,7 +54,8 @@
   }
   /* Optical alignment: the icon side sits 2px tighter. */
   .chip--have,
-  .chip--add {
+  .chip--add,
+  .chip--on {
     padding-inline-start: calc(var(--space-2) - 2px);
   }
   .chip--p1 {
@@ -87,6 +89,12 @@
     box-shadow: none;
     background: transparent;
   }
+  /* A toggle that's on: selected, not a gain */
+  .chip--on {
+    color: var(--accent-text);
+    background: var(--selected);
+    box-shadow: none;
+  }
   .chip:disabled {
     opacity: 0.6;
   }
@@ -97,6 +105,9 @@
     }
     .chip--have:not(:disabled):hover {
       background: oklch(from var(--gain-soft) calc(l - 0.02) c h);
+    }
+    .chip--on:not(:disabled):hover {
+      background: oklch(from var(--selected) l c h / calc(alpha + 0.04));
     }
   }
 </style>

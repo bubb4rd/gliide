@@ -12,11 +12,12 @@ use std::fmt::Write as _;
 use resume_core::bank::{BankEntry, SectionKind};
 use resume_core::matcher::{Page, all_aliases, find_literal};
 use resume_core::resume::Section;
+use resume_core::story::Story;
 use resume_core::validate::unsourced_numbers;
 use resume_core::{Bank, Requirements, Resume};
 use serde::{Deserialize, Serialize};
 
-use crate::suggest::write_facts;
+use crate::suggest::{write_entry, write_facts};
 use crate::{Call, Llm, LlmError, Schema, Structured};
 
 /// The Prep instructions (`prompts/prep.md`).
@@ -134,6 +135,51 @@ impl SentResume {
             text: text.trim().to_owned(),
             printed: text.trim().to_owned(),
             ..Self::default()
+        }
+    }
+
+    /// Bank entry `id` alone, tagged as the bank holds it (its note lines, bullets with their variants and skills, and
+    /// facts): what a story told alone (Tell it) is read against. Empty when the bank has no such entry.
+    pub fn entry(bank: &Bank, id: &str) -> Self {
+        let Some(e) = find_entry(bank, id) else {
+            return Self::default();
+        };
+        let mut text = String::new();
+        write_entry(&mut text, e);
+        let line = |id: String, text: String| Line {
+            id,
+            entry: e.id.clone(),
+            entry_name: e.name.clone(),
+            text,
+        };
+        let mut lines: Vec<Line> = e
+            .notes
+            .iter()
+            .enumerate()
+            .map(|(j, n)| {
+                let shown = if n.label.is_empty() {
+                    n.text.clone()
+                } else {
+                    format!("{}: {}", n.label, n.text)
+                };
+                line(format!("{}#{}", e.id, j + 1), shown)
+            })
+            .collect();
+        lines.extend(e.bullets.iter().map(|b| line(b.id.clone(), b.text.clone())));
+        let mut printed = format!("{} {} {} {}\n", e.name, e.place, e.dates, e.subtitle);
+        for l in &lines {
+            let _ = writeln!(printed, "{}", l.text);
+        }
+        Self {
+            text,
+            lines,
+            printed,
+            entries: vec![(e.id.clone(), e.name.clone())],
+            facts: e
+                .facts
+                .iter()
+                .map(|f| (e.id.clone(), f.id.clone(), f.text.clone()))
+                .collect(),
         }
     }
 
@@ -258,12 +304,14 @@ pub struct PrepInput<'a> {
     /// The posting's requirements; `None` when the application has no posting read.
     pub requirements: Option<&'a Requirements>,
     pub sent: &'a SentResume,
+    /// Your stories, newest first; the model names one by its place (`s1` the first).
+    pub stories: &'a [Story],
     /// `YYYY-MM-DD`.
     pub today: &'a str,
 }
 
 /// The Prep call's input: `<today>`, `<round>`, `<job>`, `<requirements>` (one skill a line, most important first),
-/// `<resume>` (tagged; `ids="none"` for the PDF's text).
+/// `<resume>` (tagged; `ids="none"` for the PDF's text), `<stories>` (one a line, see [`write_stories`]).
 pub fn input(i: &PrepInput<'_>) -> String {
     let mut s = String::with_capacity(i.sent.text.len() + 2048);
     let _ = writeln!(s, "<today>{}</today>", i.today);
@@ -287,8 +335,43 @@ pub fn input(i: &PrepInput<'_>) -> String {
         s.push_str("<resume>\n");
     }
     s.push_str(i.sent.text.trim());
-    s.push_str("\n</resume>\n");
+    s.push_str("\n</resume>\n<stories>\n");
+    write_stories(&mut s, i.stories);
+    s.push_str("</stories>\n");
     s
+}
+
+/// `[s1] Title (themes: impact, conflict; entry: acme; bullets: acme.2)`, one a line, `s1` the first story.
+pub fn write_stories(s: &mut String, stories: &[Story]) {
+    for (n, story) in stories.iter().enumerate() {
+        let _ = write!(s, "[s{}] {}", n + 1, story.title.trim());
+        let mut about: Vec<String> = Vec::new();
+        if !story.themes.is_empty() {
+            let themes: Vec<&str> = story.themes.iter().map(|t| t.as_str()).collect();
+            about.push(format!("themes: {}", themes.join(", ")));
+        }
+        if let Some(e) = &story.entry {
+            about.push(format!("entry: {e}"));
+        }
+        if !story.bullets.is_empty() {
+            about.push(format!("bullets: {}", story.bullets.join(", ")));
+        }
+        if !about.is_empty() {
+            let _ = write!(s, " ({})", about.join("; "));
+        }
+        s.push('\n');
+    }
+}
+
+/// The story `named` names: `s1` the first of `stories` (as [`write_stories`] numbers them), or a story's own id.
+pub fn story_named<'s>(stories: &'s [Story], named: &str) -> Option<&'s Story> {
+    let named = named.trim().trim_matches(['[', ']']);
+    named
+        .strip_prefix('s')
+        .and_then(|n| n.parse::<usize>().ok())
+        .and_then(|n| n.checked_sub(1))
+        .and_then(|i| stories.get(i))
+        .or_else(|| stories.iter().find(|s| s.id == named))
 }
 
 /// `- term (kind; required|preferred|nice to have)`, one a line; then the years and degree asked for.
@@ -337,6 +420,10 @@ pub struct Question {
     pub text: String,
     pub why: String,
     pub lines: Vec<String>,
+    /// The story that answers it: as written, its place among the stories (`s1`); after [`checked`], its id. Preps
+    /// written before stories have none.
+    #[serde(default)]
+    pub story: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -365,19 +452,30 @@ pub struct Dropped {
     pub gaps: Vec<String>,
     /// Gap-answer sentences dropped for a number neither their lines nor those entries' facts state.
     pub sentences: Vec<String>,
+    /// Story names no story of yours has.
+    pub stories: Vec<String>,
 }
 
 impl Dropped {
     pub fn is_empty(&self) -> bool {
-        self.lines.is_empty() && self.gaps.is_empty() && self.sentences.is_empty()
+        self.lines.is_empty()
+            && self.gaps.is_empty()
+            && self.sentences.is_empty()
+            && self.stories.is_empty()
     }
 }
 
-/// `p` held to what the resume as sent and the bank back: unknown line ids dropped; a gap kept only for a required or
-/// priority-1 requirement skill the page doesn't show (named and weighed as the posting does), its answer without any
-/// sentence whose numbers neither its lines nor their entries' facts state (the gap dropped when none is left);
-/// questions numbered `q1`…; every list capped.
-pub fn checked(p: Prep, sent: &SentResume, req: Option<&Requirements>) -> (Prep, Dropped) {
+/// `p` held to what the resume as sent, the bank and your stories back: unknown line ids dropped; a question's story
+/// named by its place among `stories` (`s1`) turned into its id, one no story has dropped; a gap kept only for a
+/// required or priority-1 requirement skill the page doesn't show (named and weighed as the posting does), its answer
+/// without any sentence whose numbers neither its lines nor their entries' facts state (the gap dropped when none is
+/// left); questions numbered `q1`…; every list capped.
+pub fn checked(
+    p: Prep,
+    sent: &SentResume,
+    req: Option<&Requirements>,
+    stories: &[Story],
+) -> (Prep, Dropped) {
     let mut dropped = Dropped::default();
     let questions = p
         .questions
@@ -391,6 +489,16 @@ pub fn checked(p: Prep, sent: &SentResume, req: Option<&Requirements>) -> (Prep,
             text: q.text.trim().to_owned(),
             why: q.why.trim().to_owned(),
             lines: sent.keep(q.lines, &mut dropped.lines),
+            story: q
+                .story
+                .filter(|s| !s.trim().is_empty())
+                .and_then(|s| match story_named(stories, &s) {
+                    Some(story) => Some(story.id.clone()),
+                    None => {
+                        dropped.stories.push(s);
+                        None
+                    }
+                }),
         })
         .collect();
     let printed = Page::of_text(&sent.printed);
@@ -507,6 +615,7 @@ pub async fn write(
 pub(crate) mod tests {
     use resume_core::bank::{Fact, FactKind, FactSource};
     use resume_core::requirements::{Seniority, Skill, SkillKind};
+    use resume_core::story::{Story, StoryKind, StorySource, StoryTheme};
     use resume_core::{Bank, Requirements, Resume, migrate_v1, resolve};
 
     use super::{Gap, Group, Prep, PrepInput, Question, SentResume, checked, input, sentences};
@@ -601,6 +710,7 @@ pub(crate) mod tests {
             company: "Acme",
             requirements: Some(&req),
             sent: &sent,
+            stories: &[],
             today: "2026-10-27",
         });
         assert!(text.starts_with(
@@ -609,8 +719,9 @@ pub(crate) mod tests {
              - Terraform (tool; preferred)\n- Kotlin (tool; required)\nyears: 1+\n</requirements>\n<resume>\n"
         ));
         assert!(text.contains("[acme~1] (fact)"));
-        assert!(text.ends_with("\n</resume>\n"));
+        assert!(text.ends_with("\n</resume>\n<stories>\n</stories>\n"));
         let pdf = SentResume::pdf("Jane Doe\nAcme");
+        let stories = stories();
         let text = input(&PrepInput {
             kind: "recruiter-screen",
             with: "",
@@ -619,11 +730,16 @@ pub(crate) mod tests {
             company: "Acme",
             requirements: None,
             sent: &pdf,
+            stories: &stories,
             today: "2026-10-27",
         });
         assert!(text.contains(
             "kind: recruiter-screen\nnotes: Bring questions\n</round>\n<job>SWE at Acme</job>\n\
              <requirements>\n</requirements>\n<resume ids=\"none\">\nJane Doe\nAcme\n</resume>\n"
+        ));
+        assert!(text.ends_with(
+            "<stories>\n[s1] Caught 14 regressions before release (themes: impact, initiative; entry: acme; \
+             bullets: acme.2)\n[s2] Settled a grading dispute (themes: conflict)\n</stories>\n"
         ));
     }
 
@@ -642,7 +758,77 @@ pub(crate) mod tests {
             text: "Tell me about it".into(),
             why: "A number invites a follow-up".into(),
             lines: lines.iter().map(|l| (*l).to_owned()).collect(),
+            story: None,
         }
+    }
+
+    /// Two stories: a Dig one on `acme.2`, and one off the resume.
+    pub(crate) fn stories() -> Vec<Story> {
+        let story = |id: &str, title: &str, entry: Option<&str>, themes: Vec<StoryTheme>| Story {
+            id: id.into(),
+            title: title.into(),
+            entry: entry.map(str::to_owned),
+            bullets: entry.map(|_| vec!["acme.2".to_owned()]).unwrap_or_default(),
+            facts: vec![],
+            situation: "Releases kept breaking the order API.".into(),
+            task: "I owned the tests.".into(),
+            action: "I wrote integration tests in GitHub Actions.".into(),
+            result: "They caught 14 regressions before release.".into(),
+            skills: vec![],
+            themes,
+            source: StorySource {
+                kind: StoryKind::Edit,
+                at: "2026-10-27T10:00:00Z".into(),
+                from: None,
+            },
+            updated_at: "2026-10-27T10:00:00Z".into(),
+        };
+        vec![
+            story(
+                "7f3a",
+                "Caught 14 regressions before release",
+                Some("acme"),
+                vec![StoryTheme::Impact, StoryTheme::Initiative],
+            ),
+            story("9b1c", "Settled a grading dispute", None, vec![StoryTheme::Conflict]),
+        ]
+    }
+
+    #[test]
+    fn a_question_names_a_story_by_its_place() {
+        let (bank, resume) = jane();
+        let sent = SentResume::tagged(&resume, &bank);
+        let stories = stories();
+        let named = |s: &str| Question {
+            story: Some(s.into()),
+            ..question(&[])
+        };
+        let p = Prep {
+            focus: String::new(),
+            questions: vec![named("s2"), named("[s1]"), named("s3"), named("7f3a"), named(" ")],
+            gaps: vec![],
+            ask_them: vec![],
+        };
+        let (p, dropped) = checked(p, &sent, None, &stories);
+        let ids: Vec<Option<&str>> = p.questions.iter().map(|q| q.story.as_deref()).collect();
+        assert_eq!(ids, [Some("9b1c"), Some("7f3a"), None, Some("7f3a"), None]);
+        assert_eq!(dropped.stories, ["s3"]);
+    }
+
+    #[test]
+    fn an_entry_alone_reads_as_the_bank_holds_it() {
+        let (mut bank, _) = jane();
+        bank.sections[0].entries[0].bullets[1]
+            .variants
+            .push("Caught 14 regressions with tests".into());
+        let sent = SentResume::entry(&bank, "acme");
+        assert!(sent.text.starts_with("[acme] Acme Widgets Co."), "{}", sent.text);
+        assert!(sent.text.contains("  (variant 0) Caught 14 regressions with tests\n"));
+        assert!(sent.text.contains("[acme~1] (fact) The test suite ran on 3 services"));
+        assert_eq!(sent.line("acme.2").unwrap().entry, "acme");
+        assert_eq!(sent.entry_name("acme"), Some("Acme Widgets Co."));
+        assert_eq!(sent.facts.len(), 1);
+        assert_eq!(SentResume::entry(&bank, "nope"), SentResume::default());
     }
 
     #[test]
@@ -678,7 +864,7 @@ pub(crate) mod tests {
             ],
             ask_them: (0..7).map(|i| format!("Ask {i}")).collect(),
         };
-        let (p, dropped) = checked(p, &sent, Some(&req));
+        let (p, dropped) = checked(p, &sent, Some(&req), &[]);
         assert_eq!(p.focus, "Depth on testing");
         assert_eq!(p.questions.len(), 10);
         assert_eq!(p.questions[0].id, "q1");
@@ -724,7 +910,7 @@ pub(crate) mod tests {
             }],
             ask_them: vec![],
         };
-        let (p, _) = checked(p, &sent, Some(&req));
+        let (p, _) = checked(p, &sent, Some(&req), &[]);
         assert!(p.gaps.is_empty());
     }
 }

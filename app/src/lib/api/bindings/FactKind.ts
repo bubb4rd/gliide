@@ -3,4 +3,4 @@
 /**
  * Where a fact came from: the review's "Do you have … experience?", the entry's editor, or a practiced answer.
  */
-export type FactKind = "review" | "edit" | "practice";
+export type FactKind = "review" | "edit" | "practice" | "dig";
