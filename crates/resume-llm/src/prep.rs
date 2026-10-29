@@ -4,8 +4,9 @@
 //! The model sees the round (its kind, who you meet, its notes), the job, the posting's requirement skills, the resume
 //! as sent tagged with its line ids (the summary, note lines, bullets) with each entry's facts from the bank under it,
 //! and today's date. Without the sent resume's JSON (exported before the app kept it), it sees the exported PDF's text,
-//! which has no ids. [`checked`] holds the reply to what the resume and the bank back: the prompt asks for honesty,
-//! the code checks it.
+//! which has no ids. When earlier rounds of the application have debriefs, it sees them too (what they asked, what you
+//! got stuck on, your notes, notes for this prep), with instructions for them ([`DEBRIEFS_PROMPT`]). [`checked`] holds
+//! the reply to what the resume and the bank back: the prompt asks for honesty, the code checks it.
 
 use std::fmt::Write as _;
 
@@ -17,11 +18,14 @@ use resume_core::validate::unsourced_numbers;
 use resume_core::{Bank, Requirements, Resume};
 use serde::{Deserialize, Serialize};
 
+use crate::debrief::{Earlier, write_earlier};
 use crate::suggest::{write_entry, write_facts};
 use crate::{Call, Llm, LlmError, Schema, Structured};
 
 /// The Prep instructions (`prompts/prep.md`).
 pub const PROMPT: &str = include_str!("../../../prompts/prep.md");
+/// What the instructions gain when earlier rounds have debriefs (`prompts/prep-debriefs.md`).
+pub const DEBRIEFS_PROMPT: &str = include_str!("../../../prompts/prep-debriefs.md");
 /// The reply's schema (`prompts/prep.schema.json`): see [`Prep`].
 pub const SCHEMA: &str = include_str!("../../../prompts/prep.schema.json");
 /// The most likely questions a prep keeps.
@@ -304,14 +308,16 @@ pub struct PrepInput<'a> {
     /// The posting's requirements; `None` when the application has no posting read.
     pub requirements: Option<&'a Requirements>,
     pub sent: &'a SentResume,
-    /// Your stories, newest first; the model names one by its place (`s1` the first).
     pub stories: &'a [Story],
+    /// This application's earlier rounds' debriefs, oldest first.
+    pub debriefs: &'a [Earlier],
     /// `YYYY-MM-DD`.
     pub today: &'a str,
 }
 
 /// The Prep call's input: `<today>`, `<round>`, `<job>`, `<requirements>` (one skill a line, most important first),
-/// `<resume>` (tagged; `ids="none"` for the PDF's text), `<stories>` (one a line, see [`write_stories`]).
+/// `<resume>` (tagged; `ids="none"` for the PDF's text), `<stories>` (one a line, see [`write_stories`]), and
+/// `<debriefs>` (see [`write_earlier`]) only when there are some.
 pub fn input(i: &PrepInput<'_>) -> String {
     let mut s = String::with_capacity(i.sent.text.len() + 2048);
     let _ = writeln!(s, "<today>{}</today>", i.today);
@@ -338,7 +344,21 @@ pub fn input(i: &PrepInput<'_>) -> String {
     s.push_str("\n</resume>\n<stories>\n");
     write_stories(&mut s, i.stories);
     s.push_str("</stories>\n");
+    if !i.debriefs.is_empty() {
+        s.push_str("<debriefs>\n");
+        write_earlier(&mut s, i.debriefs);
+        s.push_str("</debriefs>\n");
+    }
     s
+}
+
+/// The instructions for `input`: [`PROMPT`], with [`DEBRIEFS_PROMPT`] when earlier rounds have debriefs.
+pub fn prompt(input: &PrepInput<'_>) -> std::borrow::Cow<'static, str> {
+    if input.debriefs.is_empty() {
+        PROMPT.into()
+    } else {
+        format!("{PROMPT}\n{DEBRIEFS_PROMPT}").into()
+    }
 }
 
 /// `[s1] Title (themes: impact, conflict; entry: acme; bullets: acme.2)`, one a line, `s1` the first story.
@@ -591,10 +611,11 @@ pub async fn write(
     model: &str,
 ) -> Result<(Prep, Structured), LlmError> {
     let text = self::input(input);
+    let system = prompt(input);
     let output = llm
         .structured(
             Call {
-                system: PROMPT,
+                system: &system,
                 input: &text,
                 model: Some(model),
             },
@@ -711,6 +732,7 @@ pub(crate) mod tests {
             requirements: Some(&req),
             sent: &sent,
             stories: &[],
+            debriefs: &[],
             today: "2026-10-27",
         });
         assert!(text.starts_with(
@@ -720,6 +742,32 @@ pub(crate) mod tests {
         ));
         assert!(text.contains("[acme~1] (fact)"));
         assert!(text.ends_with("\n</resume>\n<stories>\n</stories>\n"));
+        let none = PrepInput {
+            kind: "technical",
+            with: "",
+            notes: "",
+            role: "SWE",
+            company: "Acme",
+            requirements: None,
+            sent: &sent,
+            stories: &[],
+            debriefs: &[],
+            today: "2026-10-27",
+        };
+        assert_eq!(super::prompt(&none), super::PROMPT);
+        let earlier = [crate::debrief::Earlier {
+            kind: "recruiter-screen".into(),
+            stuck_on: vec!["Kafka".into()],
+            ..Default::default()
+        }];
+        let with = PrepInput {
+            debriefs: &earlier,
+            ..none
+        };
+        assert!(input(&with).ends_with(
+            "</stories>\n<debriefs>\n## recruiter-screen\nstuck on: Kafka\n</debriefs>\n"
+        ));
+        assert!(super::prompt(&with).ends_with(super::DEBRIEFS_PROMPT));
         let pdf = SentResume::pdf("Jane Doe\nAcme");
         let stories = stories();
         let text = input(&PrepInput {
@@ -731,6 +779,7 @@ pub(crate) mod tests {
             requirements: None,
             sent: &pdf,
             stories: &stories,
+            debriefs: &[],
             today: "2026-10-27",
         });
         assert!(text.contains(

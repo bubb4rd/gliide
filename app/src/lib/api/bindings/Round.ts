@@ -25,4 +25,8 @@ with: string,
 /**
  * A meeting link or an address; may be empty.
  */
-place: string, notes: string, state: RoundState, };
+place: string, notes: string, state: RoundState, 
+/**
+ * When its debrief was saved (RFC 3339); `None` while it has none.
+ */
+debriefedAt: string | null, };

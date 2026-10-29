@@ -11,6 +11,7 @@ use resume_core::facts::add_fact;
 use resume_core::posting::text_hash;
 use resume_core::story::Story;
 use resume_core::{Requirements, Resume};
+use resume_llm::debrief::Earlier;
 use resume_llm::practice::{self, PracticeInput};
 use resume_llm::prep::{self as written, PrepInput, SentResume};
 use resume_store::{self as store, Application, PracticeRow};
@@ -34,6 +35,8 @@ struct Context {
     sent: SentResume,
     /// Your stories, newest first.
     stories: Vec<Story>,
+    /// This application's earlier rounds' debriefs, oldest first.
+    debriefs: Vec<Earlier>,
     /// What the prep was written from, hashed (the round included).
     key: String,
 }
@@ -55,25 +58,14 @@ fn context(app: &App, round: &str) -> Result<Context> {
     let (_, bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
     let json = store.sent(&a.id)?;
     let stories = store.stories()?;
+    let debriefs = crate::debrief::earlier(&store, &r)?;
     drop(store);
-    let (sent, sent_hash) = match json {
-        Some(json) => {
-            let resume: Resume = serde_json::from_str(&json)?;
-            (SentResume::tagged(&resume, &bank), text_hash(&json))
-        }
-        None => {
-            let (name, bytes) = sent_pdf(&a)?;
-            let text = resume_render::pdf_text(bytes)
-                .filter(|t| !t.trim().is_empty())
-                .ok_or_else(|| AppError::other(format!("{name} couldn’t be read as a PDF")))?;
-            (SentResume::pdf(&text), text_hash(&text))
-        }
-    };
+    let (sent, sent_hash) = sent_of(&a, json, &bank)?;
     let posting_hash = posting.map(|p| p.posting.hash).unwrap_or_default();
     // Not the bank's revision, nor your stories: a fact kept or a story saved from practice would otherwise rewrite the
     // prep (and renumber its questions) the next time the tab opens. Write again takes the bank and stories as they
-    // are now.
-    let key = text_hash(&format!(
+    // are now. Earlier rounds' debriefs count when there are some: a debrief saved or read means a fresh prep.
+    let mut from = format!(
         "{}\n{}\n{}\n{posting_hash}\n{sent_hash}\n{}\n{}\n{}",
         written::PROMPT,
         written::SCHEMA,
@@ -81,7 +73,14 @@ fn context(app: &App, round: &str) -> Result<Context> {
         r.kind,
         r.with,
         r.notes
-    ));
+    );
+    if !debriefs.is_empty() {
+        from.push('\n');
+        from.push_str(written::DEBRIEFS_PROMPT);
+        from.push('\n');
+        from.push_str(&serde_json::to_string(&debriefs)?);
+    }
+    let key = text_hash(&from);
     Ok(Context {
         job: a.posting_id.clone().unwrap_or_else(|| a.id.clone()),
         round: r,
@@ -89,7 +88,30 @@ fn context(app: &App, round: &str) -> Result<Context> {
         requirements,
         sent,
         stories,
+        debriefs,
         key,
+    })
+}
+
+/// The resume the application sent as Prep, Practice and Debrief read it, and its hash: the tailored resume as
+/// exported (`json`) tagged with its entries' facts from `bank`; else the exported PDF's text.
+pub(crate) fn sent_of(
+    a: &Application,
+    json: Option<String>,
+    bank: &Bank,
+) -> Result<(SentResume, String)> {
+    Ok(match json {
+        Some(json) => {
+            let resume: Resume = serde_json::from_str(&json)?;
+            (SentResume::tagged(&resume, bank), text_hash(&json))
+        }
+        None => {
+            let (name, bytes) = sent_pdf(a)?;
+            let text = resume_render::pdf_text(bytes)
+                .filter(|t| !t.trim().is_empty())
+                .ok_or_else(|| AppError::other(format!("{name} couldn’t be read as a PDF")))?;
+            (SentResume::pdf(&text), text_hash(&text))
+        }
     })
 }
 
@@ -120,6 +142,7 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
         requirements,
         sent,
         stories,
+        debriefs,
         key,
     } = cx;
     let (m, kind, with, notes, req, s, st) = (
@@ -142,6 +165,7 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
             requirements: req.as_ref(),
             sent: &s,
             stories: &st,
+            debriefs: &debriefs,
             today: &today,
         };
         written::write(&llm, &written::schema(), &input, &m).await

@@ -17,11 +17,13 @@ use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
 use resume_llm::suggest::DEFAULT_SUGGEST_MODEL;
 use resume_llm::{ClaudeCli, LlmError, Structured};
 use resume_render::{FontOptions, Renderer};
-use resume_store::{Rev, Store};
+use resume_store::{Rev, Store, StoreError};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
 
-use crate::dto::{Backdrop, FeedStatus, Mode, Progress, Settings, Stage, Theme};
+use crate::dto::{
+    Backdrop, FeedStatus, Mode, Notifications, Progress, Settings, Stage, StartupKind, StartupProblem, Theme,
+};
 use crate::error::{AppError, Result};
 use crate::export;
 use crate::feed::FeedRun;
@@ -91,10 +93,26 @@ pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// What went wrong opening the data at launch, if anything (`tauri::State<Startup>`): set before the window opens.
+pub struct Startup(pub Option<StartupProblem>);
+
 impl App {
-    /// The app over the store in `dir` (created when missing).
-    pub fn open(dir: &Path, emit: Emit) -> Result<Self> {
-        Self::new(Store::open(&dir.join(STORE_FILE))?, emit)
+    /// The app over the store in `dir` (created when missing); else why it couldn't open.
+    pub fn open(dir: &Path, emit: Emit) -> std::result::Result<Self, StartupProblem> {
+        let file = dir.join(STORE_FILE);
+        let problem = |kind, detail| StartupProblem {
+            kind,
+            detail,
+            path: file.display().to_string(),
+        };
+        let store = Store::open(&file).map_err(|e| match e {
+            StoreError::TooNew { found, known } => problem(
+                StartupKind::Newer,
+                format!("Its data is in format {found}; this gliide reads up to format {known}."),
+            ),
+            e => problem(StartupKind::Unreadable, AppError::from(e).message),
+        })?;
+        Self::new(store, emit).map_err(|e| problem(StartupKind::Unreadable, e.message))
     }
 
     /// The app over `store`: settings loaded (defaults when none), and the rows of `applications.csv` in the export
@@ -382,6 +400,7 @@ fn default_settings() -> Settings {
         export_dir: home.join("Documents/Resumes").display().to_string(),
         claude_path: None,
         onboarded: false,
+        notifications: Notifications::default(),
         check_updates: true,
     }
 }

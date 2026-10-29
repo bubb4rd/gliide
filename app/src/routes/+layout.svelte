@@ -2,7 +2,8 @@
   The window: a 232px sidebar (native vibrancy behind a translucent --sidebar; the traffic lights sit in its top 52px)
   and the main area, where each screen draws its own Toolbar. Under 960px the sidebar becomes a sheet. A new install
   opens on the first-run setup (`/welcome`), which has no sidebar, nor has the import review it opens; until settings
-  and the library are in (and with them whether the setup is due), the window is paper.
+  and the library are in (and with them whether the setup is due), the window is paper. When gliide couldn't open its
+  data at launch, the window shows `Startup` alone, without the sidebar.
 -->
 <script lang="ts">
   import "../app.css";
@@ -18,7 +19,7 @@
   import Palette from "@lucide/svelte/icons/palette";
   import Rss from "@lucide/svelte/icons/rss";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import type { Stage } from "$lib/api";
+  import { onNotification, startupProblem, type Stage, type StartupProblem } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
@@ -27,6 +28,7 @@
   import { STATUS } from "$lib/status";
   import { when } from "$lib/rounds";
   import { AgentMark, CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
+  import Startup from "./Startup.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -44,6 +46,7 @@
     prepping: "Prepping…",
     practicing: "Reading…",
     digging: "Reading…",
+    debriefing: "Reading…",
   };
 
   /**
@@ -66,18 +69,30 @@
     }
     return by;
   });
+  /** Jobs whose application has a round awaiting its debrief: Recent says "Debrief" in the status's place. */
+  const debriefsDue = $derived(new Set(app.applications.filter((a) => a.job && a.debriefDue).map((a) => a.job!)));
 
   /** Settings and the library are in: the first screen can draw. */
   let ready = $state(false);
+  /** The data couldn't be opened at launch: only Startup shows, and nothing else asks the app for anything. */
+  let problem = $state<StartupProblem | null>(null);
 
   onMount(() => {
-    void app
-      .load()
-      .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
-      .finally(() => (ready = true));
-    void feed.refresh();
-    const listening = Promise.all([feed.listen(), app.listen()]);
-    return () => void listening.then((stops) => stops.forEach((stop) => stop()));
+    let stops: Promise<(() => void)[]> | null = null;
+    void startupProblem()
+      .catch(() => null)
+      .then((found) => {
+        problem = found;
+        if (found) return void (ready = true);
+        void app
+          .load()
+          .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
+          .finally(() => (ready = true));
+        void feed.refresh();
+        // A round's banner clicked: its job (or its debrief).
+        stops = Promise.all([feed.listen(), app.listen(), onNotification((to) => void goto(to))]);
+      });
+    return () => void stops?.then((all) => all.forEach((stop) => stop()));
   });
 
   // Leaving a screen closes the compact sheet.
@@ -101,7 +116,9 @@
   const within = (href: string) => path === href || path.startsWith(`${href}/`);
   const count = (n: number | undefined) => (n ? n : null);
   const bare = $derived(
-    path === SETUP || (path === "/bank/import" && !!page.url.searchParams.get("back")?.startsWith(SETUP)),
+    problem !== null ||
+      path === SETUP ||
+      (path === "/bank/import" && !!page.url.searchParams.get("back")?.startsWith(SETUP)),
   );
   $effect(() => {
     shell.bare = bare;
@@ -157,12 +174,15 @@
           <h2 class="label" id="recent-label">Recent</h2>
           <Nav label="Recent jobs">
             {#each app.jobs.slice(0, RECENT) as job (job.id)}
-              {@const round = nextRounds.get(job.id)}
-              {@const status = job.status
-                ? round
-                  ? { ...STATUS[job.status], label: `${STATUS[job.status].label} · ${round}` }
-                  : STATUS[job.status]
-                : null}
+              {@const due = debriefsDue.has(job.id)}
+              {@const round = due ? undefined : nextRounds.get(job.id)}
+              {@const status = due
+                ? { label: "Debrief", tone: "accent" as const }
+                : job.status
+                  ? round
+                    ? { ...STATUS[job.status], label: `${STATUS[job.status].label} · ${round}` }
+                    : STATUS[job.status]
+                  : null}
               {@const fit = jobFit(job, app.applications)}
               {@const call = app.calls.find((c) => c.job === job.id)}
               {@const busy = call ? BUSY[call.stage] : null}
@@ -207,7 +227,7 @@
   {/if}
 
   <main class="main">
-    {#if ready}{@render children()}{/if}
+    {#if problem}<Startup {problem} />{:else if ready}{@render children()}{/if}
     <Toaster />
     <Tooltips />
   </main>

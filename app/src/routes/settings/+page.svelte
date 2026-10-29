@@ -5,12 +5,16 @@
   yet. Feed holds the job feed's own settings (saved apart
   from the rest): each filter is Auto (worked out from your experience and masters, shown as it stands) or Custom;
   then its sources besides freehire: LinkedIn's search, a watchlist of careers boards and Fantastic.jobs through an
-  Apify token.
+  Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
+  while Interviews is off or macOS doesn't allow gliide's banners, read again whenever the window gains focus.
 -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import RotateCw from "@lucide/svelte/icons/rotate-cw";
@@ -23,6 +27,10 @@
     type FeedSettingsDto,
     type FeedSettingsView,
     type Mode,
+    type NotificationPermission,
+    notificationPermission,
+    openNotificationSettings,
+    requestNotifications,
     type Settings,
     type Theme,
   } from "$lib/api";
@@ -36,6 +44,7 @@
     Card,
     Checkbox,
     CompanyMark,
+    Icon,
     Input,
     Menu,
     type NavSection,
@@ -105,6 +114,7 @@
       (v) => (feedView = v),
       (e) => console.error(`feed settings: ${appError(e).message}`),
     );
+    readPermission();
   });
 
   // ── Feed ──
@@ -137,6 +147,7 @@
           { id: "feed-sources", label: "Sources", sub: true },
         ]
       : []),
+    { id: "notifications", label: "Notifications" },
     { id: "export", label: "Export folder" },
     { id: "appearance", label: "Appearance" },
     { id: "about", label: "About" },
@@ -284,6 +295,79 @@
     }
   }
 
+  // ── Notifications: off until Turn on, which alone asks macOS; what macOS allows read again on every focus ──
+  type NotifyKey = "dayBefore" | "hourBefore" | "debrief";
+  const NOTIFY_ROWS: { key: NotifyKey; label: string; example: string }[] = [
+    {
+      key: "dayBefore",
+      label: "Day before",
+      example: "“Globex technical tomorrow at 2:00 PM. 8 questions ready, 2 without a story.”",
+    },
+    { key: "hourBefore", label: "Hour before", example: "“Globex technical in 1 hour”" },
+    { key: "debrief", label: "Debrief", example: "An hour after it ends: “How did the Globex technical go?”" },
+  ];
+  const onDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+
+  let permission = $state<NotificationPermission | null>(null);
+  let turningOn = $state(false);
+  const notify = $derived(s?.notifications);
+  /** Turned on, but macOS doesn't allow the banners. */
+  const blocked = $derived(!!notify?.interviews && permission === "denied");
+  /** The three kinds can be checked. */
+  const notifyLive = $derived(!!notify?.interviews && !blocked);
+  /** "Rounds you’ve added. Turned on Oct 29, with Initech’s first round." */
+  const interviewsLine = $derived.by(() => {
+    if (!notify?.interviews) return "Rounds you’ve added. Off until you turn it on.";
+    const at = notify.turnedOn ? new Date(notify.turnedOn) : null;
+    if (!at || Number.isNaN(at.getTime())) return "Rounds you’ve added.";
+    const how = notify.turnedOnWith === "Settings" ? "in Settings" : `with ${notify.turnedOnWith ?? "Settings"}`;
+    return `Rounds you’ve added. Turned on ${onDay.format(at)}, ${how}.`;
+  });
+
+  function readPermission() {
+    notificationPermission().then(
+      (p) => (permission = p),
+      (e) => console.error(`notification permission: ${appError(e).message}`),
+    );
+  }
+
+  /** Asks macOS (its prompt shows the first time only), then turns Interviews on with Day before and Hour before. */
+  async function turnOnNotifications() {
+    if (!app.settings || turningOn) return;
+    turningOn = true;
+    try {
+      permission = await requestNotifications();
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+      turningOn = false;
+      return;
+    }
+    const n = app.settings.notifications;
+    await save({
+      notifications: {
+        ...n,
+        interviews: true,
+        dayBefore: true,
+        hourBefore: true,
+        debrief: false,
+        turnedOn: n.turnedOn ?? new Date().toISOString(),
+        turnedOnWith: n.turnedOnWith ?? "Settings",
+        // Turned on here, the offer under a first round has nothing left to offer.
+        offered: true,
+      },
+    });
+    turningOn = false;
+  }
+
+  /** The kinds keep their checks while Interviews is off; they show unchecked until it's back on. */
+  function setNotify(patch: Partial<Settings["notifications"]>) {
+    if (app.settings) save({ notifications: { ...app.settings.notifications, ...patch } });
+  }
+
+  function openMacSettings() {
+    openNotificationSettings().catch((e) => toast(appError(e).message, { tone: "danger" }));
+  }
+
   async function refreshAgent() {
     checking = true;
     await app.refreshAgent();
@@ -420,6 +504,9 @@
     return update.error ? `Last checked ${clock.format(at)}.` : `Up to date · checked ${clock.format(at)}.`;
   });
 </script>
+
+<!-- What macOS allows can change in System Settings while gliide is away. -->
+<svelte:window onfocus={readPermission} />
 
 <Toolbar>
   {#snippet crumbs()}<b>Settings</b>{/snippet}
@@ -815,6 +902,77 @@
                 </div>
               </Card>
             {/key}
+          {/if}
+
+          {#if notify}
+            <Card pad as="section" id="notifications" tabindex={-1} aria-labelledby="notifications-title">
+              <div class="card">
+                <h2 class="name" id="notifications-title">Notifications</h2>
+                <p class="lede">Banners from macOS, only for what you turn on.</p>
+                <ul class="notify">
+                  <li class="notify-row notify-row--lead">
+                    <span class="iconbox"><Icon icon={CalendarClock} /></span>
+                    <span>
+                      <span class="notify-name">Interviews</span>
+                      <span class="notify-sub">{interviewsLine}</span>
+                    </span>
+                    {#if notify.interviews}
+                      <span class="toggle">
+                        <Checkbox
+                          checked
+                          label="Interview notifications"
+                          onchange={(on) => setNotify({ interviews: on })}
+                        />
+                      </span>
+                    {:else}
+                      <Button size="sm" icon={Bell} disabled={turningOn} onclick={turnOnNotifications}>Turn on</Button>
+                    {/if}
+                  </li>
+                  {#each NOTIFY_ROWS as row (row.key)}
+                    <li class={["notify-row", "notify-row--sub", !notifyLive && "notify-row--off"]}>
+                      <span>
+                        <span class="notify-name">{row.label}</span>
+                        <span class="notify-sub">{row.example}</span>
+                      </span>
+                      <span class="toggle">
+                        <Checkbox
+                          checked={notifyLive && notify[row.key]}
+                          label="{row.label} notifications"
+                          disabled={!notifyLive}
+                          onchange={(on) => setNotify({ [row.key]: on })}
+                        />
+                      </span>
+                    </li>
+                  {/each}
+                  <li class="notify-row">
+                    {#if !notify.interviews}
+                      <p class="notify-foot">
+                        Nothing is on yet. Turn on asks macOS once for permission; Day before and Hour before start on.
+                      </p>
+                    {:else if blocked}
+                      <div class="notice">
+                        <Icon icon={BellOff} />
+                        <p class="notice__text">
+                          <span class="notify-name">macOS doesn’t allow gliide’s banners</span>
+                          <span class="notify-sub">
+                            Turned off in System Settings → Notifications. Up next still shows every round.
+                          </span>
+                        </p>
+                      </div>
+                      <Button size="sm" icon={ExternalLink} onclick={openMacSettings}>Open macOS settings</Button>
+                    {:else}
+                      <p class="notify-foot">
+                        {permission === "granted"
+                          ? "macOS allows banners from gliide."
+                          : "macOS hasn’t said yet whether gliide may show banners."}
+                        They fire while gliide is open; Up next shows anything you missed.
+                      </p>
+                      <Button variant="ghost" size="sm" icon={ExternalLink} onclick={openMacSettings}>macOS settings</Button>
+                    {/if}
+                  </li>
+                </ul>
+              </div>
+            </Card>
           {/if}
 
           <Card pad as="section" id="export" tabindex={-1} aria-labelledby="export-title">
@@ -1247,5 +1405,77 @@
     color: var(--ink-2);
     white-space: pre-line;
     text-wrap: pretty;
+  }
+  /* Notifications: Interviews (a 28px icon box in accent, its name over a meta line, Turn on or its checkbox at the
+     end), its three kinds indented to its name, then a foot saying what macOS allows; hairlines between, as the
+     agents'. While off or blocked, the kinds' names are ink 3 and their checkboxes disabled. Neutral ink throughout:
+     blocked is a setting, not an error. */
+  .notify {
+    display: grid;
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .notify-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-4);
+    padding-block: var(--space-3);
+    box-shadow: inset 0 1px 0 var(--line);
+  }
+  .notify-row:last-child {
+    padding-bottom: 0;
+  }
+  .notify-row--lead {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+  }
+  .notify-row--sub {
+    padding-inline-start: calc(28px + var(--space-3));
+  }
+  .iconbox {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+  .notify-name {
+    display: block;
+    font-weight: var(--weight-medium);
+  }
+  .notify-sub {
+    display: block;
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--ink-3);
+    text-wrap: pretty;
+  }
+  .notify-row--off .notify-name {
+    color: var(--ink-3);
+  }
+  .notify-foot {
+    margin: 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+  .notice {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-2-5);
+    min-width: 0;
+    color: var(--ink-2);
+  }
+  .notice__text {
+    margin: 0;
+  }
+  .notice .notify-name {
+    color: var(--ink);
   }
 </style>

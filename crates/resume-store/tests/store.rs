@@ -8,9 +8,9 @@ use resume_core::story::{Story, StoryKind, StorySource, StoryTheme};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, Dig, DigAnswers, FeedState, LogoFound, LogoSource, NewAnalysis,
-    NewFeedJob, PracticeRow, Prep, Rev, Round, RoundState, StatusChange, Store, StoreError,
-    applications_csv, parse_ats_fit_csv,
+    AppStatus, Application, DEBRIEF_DAYS, Dig, DigAnswers, FeedState, LogoFound, LogoSource,
+    NewAnalysis, NewFeedJob, Notified, PracticeRow, Prep, Rev, Round, RoundState, StatusChange,
+    Store, StoreError, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -648,7 +648,7 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
@@ -699,7 +699,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -808,7 +808,7 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
@@ -838,7 +838,7 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent; PRAGMA user_version = 7;",
     )
@@ -868,6 +868,7 @@ fn round(id: &str, application: &str, starts_at: Option<&str>) -> Round {
         place: "https://zoom.us/j/1".into(),
         notes: String::new(),
         state: RoundState::Upcoming,
+        debriefed_at: None,
         updated_at: String::new(),
     }
 }
@@ -1052,7 +1053,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; PRAGMA user_version = 8;",
     )
     .unwrap();
@@ -1068,7 +1069,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1169,7 +1170,7 @@ fn migrating_to_practice_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; PRAGMA user_version = 9;",
     )
     .unwrap();
@@ -1185,7 +1186,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1316,7 +1317,8 @@ fn migrating_to_stories_keeps_the_practice() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories; DROP TABLE practice;
+        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+         DROP TABLE practice;
          CREATE TABLE practice (
              id TEXT PRIMARY KEY,
              round_id TEXT NOT NULL REFERENCES rounds (id) ON DELETE CASCADE,
@@ -1358,7 +1360,235 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Seconds since the Unix epoch, now.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+/// A debrief is one per round: the same JSON again changes nothing, a new one clears its read; a read is kept only
+/// for the debrief it read; rounds carry when theirs was saved; removing the round removes it.
+#[test]
+fn debriefs_save_read_and_go_with_their_round() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    store
+        .put_round(&round("r1", "a", Some("2026-10-02T14:00:00Z")))
+        .unwrap();
+    store
+        .put_round(&round("r2", "a", Some("2026-10-01T14:00:00Z")))
+        .unwrap();
+    assert_eq!(store.debrief("r1").unwrap(), None);
+    assert!(matches!(
+        store.put_debrief("nope", "{}"),
+        Err(StoreError::NotFound { what: "round", .. })
+    ));
+
+    let saved = store.put_debrief("r1", r#"{"notes":"a"}"#).unwrap();
+    assert_eq!(saved.read, None);
+    assert_eq!(store.debrief("r1").unwrap().unwrap(), saved);
+    assert_eq!(
+        store.round("r1").unwrap().unwrap().debriefed_at.as_deref(),
+        Some(saved.at.as_str())
+    );
+    assert_eq!(store.rounds("a").unwrap()[0].debriefed_at, None);
+
+    let read = store
+        .put_debrief_read("r1", &saved.at, r#"{"digs":[]}"#)
+        .unwrap()
+        .unwrap();
+    assert_eq!(read.read.as_deref(), Some(r#"{"digs":[]}"#));
+    // The same debrief again keeps its read and when it was saved.
+    assert_eq!(store.put_debrief("r1", r#"{"notes":"a"}"#).unwrap(), read);
+    // A changed one drops it, and a read of the old one isn't kept.
+    let changed = store.put_debrief("r1", r#"{"notes":"b"}"#).unwrap();
+    assert_eq!(changed.read, None);
+    assert!(changed.at > saved.at);
+    assert_eq!(
+        store
+            .put_debrief_read("r1", &saved.at, r#"{"digs":[]}"#)
+            .unwrap(),
+        None
+    );
+    assert_eq!(store.debrief("r1").unwrap().unwrap().read, None);
+
+    store.put_debrief("r2", r#"{"notes":"c"}"#).unwrap();
+    let all = store.application_debriefs("a").unwrap();
+    assert_eq!(
+        all.iter().map(|d| d.round_id.as_str()).collect::<Vec<_>>(),
+        ["r2", "r1"]
+    );
+
+    store.delete_round("r1").unwrap();
+    assert_eq!(store.debrief("r1").unwrap(), None);
+    assert_eq!(store.application_debriefs("a").unwrap().len(), 1);
+}
+
+#[test]
+fn notifications_are_recorded_once_per_round_and_kind() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    store.put_round(&round("r", "a", None)).unwrap();
+    assert!(!store.was_notified("r", Notified::Day).unwrap());
+    store.mark_notified("r", Notified::Day).unwrap();
+    store.mark_notified("r", Notified::Day).unwrap();
+    assert!(store.was_notified("r", Notified::Day).unwrap());
+    assert!(!store.was_notified("r", Notified::Hour).unwrap());
+    assert!(store.mark_notified("gone", Notified::Hour).is_err());
+    store.delete_round("r").unwrap();
+    assert!(!store.was_notified("r", Notified::Day).unwrap());
+}
+
+/// A debrief is due for the latest round that ended within the window with none saved: not one cancelled, not one
+/// debriefed, not one still to come or unscheduled, not one ended too long ago.
+#[test]
+fn debrief_due_is_the_latest_ended_round_without_one() {
+    let store = Store::open_in_memory().unwrap();
+    for id in ["a", "b", "c", "d"] {
+        store.put_application(&app(id, "2026-10-01", id)).unwrap();
+    }
+    let ago = |hours: u64| rfc3339_secs(now_secs() - hours * 3600);
+    // a: two ended (the later one is due), one to come, one unscheduled.
+    store.put_round(&round("a-1", "a", Some(&ago(72)))).unwrap();
+    store.put_round(&round("a-2", "a", Some(&ago(3)))).unwrap();
+    store
+        .put_round(&round("a-3", "a", Some("2999-01-01T09:00:00Z")))
+        .unwrap();
+    store.put_round(&round("a-4", "a", None)).unwrap();
+    // b: the latest is cancelled, the earlier debriefed: none due.
+    store
+        .put_round(&Round {
+            state: RoundState::Cancelled,
+            ..round("b-1", "b", Some(&ago(2)))
+        })
+        .unwrap();
+    store.put_round(&round("b-2", "b", Some(&ago(5)))).unwrap();
+    store.put_debrief("b-2", "{}").unwrap();
+    // c: ended longer ago than the window.
+    let old = u64::from(DEBRIEF_DAYS) * 24 + 2;
+    store
+        .put_round(&round("c-1", "c", Some(&ago(old))))
+        .unwrap();
+    // d: still under way (started 10 minutes ago, 45 long).
+    store
+        .put_round(&round("d-1", "d", Some(&rfc3339_secs(now_secs() - 600))))
+        .unwrap();
+
+    let due = store.debriefs_due().unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due["a"].id, "a-2");
+    assert_eq!(store.debrief_due("a").unwrap().unwrap().id, "a-2");
+    assert_eq!(store.debrief_due("b").unwrap(), None);
+    assert_eq!(store.debrief_due("c").unwrap(), None);
+    assert_eq!(store.debrief_due("d").unwrap(), None);
+
+    // Debriefing it leaves the earlier one due.
+    store.put_debrief("a-2", "{}").unwrap();
+    assert_eq!(store.debrief_due("a").unwrap().unwrap().id, "a-1");
+}
+
+/// Latest activity is the latest of the status changes, ended rounds (not cancelled ones) and debriefs.
+#[test]
+fn last_activity_takes_statuses_ended_rounds_and_debriefs() {
+    let dir = std::env::temp_dir().join(format!("resume-store-activity-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    let store = Store::open(&path).unwrap();
+    for id in ["a", "b"] {
+        store.put_application(&app(id, "2026-10-01", id)).unwrap();
+    }
+    // Status changes: to the second.
+    let logged = store.status_history("a").unwrap()[0].at.clone();
+    assert_eq!(
+        store.last_activity().unwrap()["a"],
+        format!("{}Z", &logged[..19])
+    );
+    assert_eq!(store.application_activity("nope").unwrap(), None);
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch("UPDATE status_changes SET at = '2001-01-01T00:00:00.000000Z'")
+        .unwrap();
+    assert_eq!(
+        store.application_activity("a").unwrap().unwrap(),
+        "2001-01-01T00:00:00Z"
+    );
+
+    // A round that ended (started 2 hours ago, 45 minutes long) is; one to come, or cancelled, isn't.
+    let started = now_secs() - 7200;
+    store
+        .put_round(&round("ended", "a", Some(&rfc3339_secs(started))))
+        .unwrap();
+    store
+        .put_round(&round("soon", "a", Some("2999-01-01T09:00:00Z")))
+        .unwrap();
+    store
+        .put_round(&Round {
+            state: RoundState::Cancelled,
+            ..round("x", "a", Some(&rfc3339_secs(now_secs() - 3600)))
+        })
+        .unwrap();
+    let all = store.last_activity().unwrap();
+    assert_eq!(all["a"], rfc3339_secs(started + 45 * 60));
+    assert_eq!(all["b"], "2001-01-01T00:00:00Z");
+
+    // A debrief saved now is.
+    store
+        .put_round(&round("past", "b", Some("2001-01-01T09:00:00Z")))
+        .unwrap();
+    assert_eq!(
+        store.application_activity("b").unwrap().unwrap(),
+        "2001-01-01T09:45:00Z"
+    );
+    let d = store.put_debrief("past", "{}").unwrap();
+    assert_eq!(
+        store.application_activity("b").unwrap().unwrap(),
+        format!("{}Z", &d.at[..19])
+    );
+    drop(store);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Rounds from before debriefs (schema version 11) open with none and take them.
+#[test]
+fn migrating_to_debriefs_keeps_the_rounds() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v11-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    {
+        let store = Store::open(&path).unwrap();
+        store
+            .put_application(&app("a", "2026-10-01", "Acme"))
+            .unwrap();
+        store
+            .put_round(&round("r", "a", Some("2001-01-01T09:00:00Z")))
+            .unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("DROP TABLE notified; DROP TABLE debriefs; PRAGMA user_version = 11;")
+        .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    let r = store.round("r").unwrap().unwrap();
+    assert_eq!(r.debriefed_at, None);
+    assert_eq!(store.debrief_due("a").unwrap(), None); // ended long before the window
+    store.put_debrief("r", "{}").unwrap();
+    store.mark_notified("r", Notified::Debrief).unwrap();
+    assert!(store.round("r").unwrap().unwrap().debriefed_at.is_some());
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 12);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

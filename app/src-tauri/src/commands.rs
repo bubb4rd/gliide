@@ -8,17 +8,17 @@ use tauri::{AppHandle, State};
 
 use crate::dto::{
     Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
-    Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit, EntryView, Exported,
-    FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView, ImportChoices, ImportView,
-    Instructed, JobRow, JobView, KeyDecision, Library, LogoRow, LogoSource, Mode, Place,
-    PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round, RoundDraft, RoundsView,
-    SalaryRange, SearchCursor, SearchResults, SentView, Settings, StatusSet, StoriesView,
-    StoryDraft, StoryView, UpdateStatus,
+    Debrief, DebriefView, Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit,
+    EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView,
+    ImportChoices, ImportView, Instructed, JobRow, JobView, KeyDecision, Library, LogoRow,
+    LogoSource, Mode, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
+    RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
+    StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus,
 };
 use crate::state::{App, blocking};
 use crate::{
-    cover, dig, entry, export, feed, folder as files, import, jobs, library as lib, logo, place,
-    prep, review, rounds, settings, stories, update,
+    cover, debrief, dig, entry, export, feed, folder as files, import, jobs, library as lib, logo,
+    place, prep, review, rounds, settings, stories, update,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -45,6 +45,39 @@ pub async fn set_settings(app: St<'_>, settings: Settings) -> Res<Settings> {
 #[tauri::command]
 pub async fn models(app: St<'_>) -> Res<HashMap<String, String>> {
     blocking(&app, |app| app.served_models()).await
+}
+
+// ── Notifications ──
+
+#[tauri::command]
+pub async fn notification_permission() -> Res<crate::dto::NotificationPermission> {
+    Ok(crate::notify::permission().await)
+}
+
+/// Asks macOS for permission (the prompt shows the first time only); only Turn on calls it.
+#[tauri::command]
+pub async fn request_notifications() -> Res<crate::dto::NotificationPermission> {
+    Ok(crate::notify::request().await)
+}
+
+#[tauri::command]
+pub async fn open_notification_settings(app: AppHandle) -> Res<()> {
+    crate::notify::open_settings(&app)
+}
+
+// ── Startup ──
+
+/// Why the data couldn't be opened at launch; `None` when it opened (the app then runs as usual).
+#[tauri::command]
+pub async fn startup_problem(app: AppHandle) -> Res<Option<crate::dto::StartupProblem>> {
+    use tauri::Manager;
+    Ok(app.state::<crate::state::Startup>().0.clone())
+}
+
+/// Quits and launches gliide again (Startup's Try again: setup runs anew).
+#[tauri::command]
+pub async fn relaunch(app: AppHandle) -> Res<()> {
+    app.restart()
 }
 
 // ── Updates ──
@@ -470,6 +503,23 @@ pub async fn dig_capture(
     note: String,
 ) -> Res<DigCapture> {
     dig::dig_capture(&app, &entry, answers, note).await
+}
+
+// ── Debriefs ──
+
+#[tauri::command]
+pub async fn debrief(app: St<'_>, round: String) -> Res<Option<DebriefView>> {
+    blocking(&app, move |app| debrief::debrief(app, &round)).await
+}
+
+#[tauri::command]
+pub async fn save_debrief(app: St<'_>, round: String, debrief: Debrief) -> Res<DebriefView> {
+    blocking(&app, move |app| debrief::save_debrief(app, &round, debrief)).await
+}
+
+#[tauri::command]
+pub async fn read_debrief(app: St<'_>, round: String) -> Res<DebriefView> {
+    debrief::read_debrief(&app, &round).await
 }
 
 // ── Company logos ──

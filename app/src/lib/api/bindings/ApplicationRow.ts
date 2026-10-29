@@ -18,4 +18,13 @@ companyKey: string, role: string, now: number | null, projected: number | null, 
 /**
  * The soonest upcoming round that is scheduled and hasn't ended.
  */
-nextRound: Round | null, };
+nextRound: Round | null, 
+/**
+ * The latest round that has ended (not cancelled) with no debrief yet, within the last 14 days.
+ */
+debriefDue: Round | null, 
+/**
+ * The latest of its status changes, its rounds' ends that have passed and its debriefs (RFC 3339): Up next's
+ * "No word in 7 days".
+ */
+lastActivity: string, };

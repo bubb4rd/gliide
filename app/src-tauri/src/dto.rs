@@ -92,6 +92,9 @@ pub struct Settings {
     /// for settings saved before it existed too.
     #[serde(default = "checks_updates")]
     pub check_updates: bool,
+    /// Settings saved before notifications existed have them all off.
+    #[serde(default)]
+    pub notifications: Notifications,
 }
 
 fn set_up() -> bool {
@@ -100,6 +103,28 @@ fn set_up() -> bool {
 
 fn checks_updates() -> bool {
     true
+}
+
+/// Why gliide couldn't open its data at launch. The window then shows only this, with what can fix it (`Startup`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StartupProblem {
+    pub kind: StartupKind,
+    /// The cause in a sentence, as the store gave it.
+    pub detail: String,
+    /// The store file (Show in Finder).
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum StartupKind {
+    /// Saved by a newer gliide than this one: updating fixes it; nothing was touched.
+    Newer,
+    /// Couldn't be read or opened (damaged, locked, no space…).
+    Unreadable,
 }
 
 /// What Settings and the sidebar show about `claude`: found (`claude --version`) and signed in
@@ -985,6 +1010,11 @@ pub struct ApplicationRow {
     pub status: AppStatus,
     /// The soonest upcoming round that is scheduled and hasn't ended.
     pub next_round: Option<Round>,
+    /// The latest round that has ended (not cancelled) with no debrief yet, within the last 14 days.
+    pub debrief_due: Option<Round>,
+    /// The latest of its status changes, its rounds' ends that have passed and its debriefs (RFC 3339): Up next's
+    /// "No word in 7 days".
+    pub last_activity: String,
 }
 
 // ── Interviews ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1008,6 +1038,8 @@ pub struct Round {
     pub place: String,
     pub notes: String,
     pub state: RoundState,
+    /// When its debrief was saved (RFC 3339); `None` while it has none.
+    pub debriefed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -1070,6 +1102,93 @@ pub struct RoundsView {
 pub struct StatusSet {
     pub applications: Vec<ApplicationRow>,
     pub cancelled: Vec<String>,
+}
+
+/// What you say after a round: the questions they asked (from its prep, or yours), what you got stuck on, notes.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Debrief {
+    pub asked: Vec<Asked>,
+    /// Short topics ("Kafka consumer groups"), in the order you added them.
+    pub stuck_on: Vec<String>,
+    pub notes: String,
+}
+
+/// A question they asked: one of the round's prep questions (`prep`, its `q…` id, with its text as prep wrote it), or
+/// one you typed (`prep` `None`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Asked {
+    pub text: String,
+    pub prep: Option<String>,
+}
+
+/// A round's debrief as saved, and what reading it found (`None` until it's read, or when reading it failed).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DebriefView {
+    pub round: String,
+    pub debrief: Debrief,
+    pub read: Option<DebriefRead>,
+    /// When it was saved, RFC 3339.
+    pub at: String,
+}
+
+/// One model call over a debrief: what to dig into, per entry, and what the next round's prep should know.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DebriefRead {
+    pub digs: Vec<DebriefDig>,
+    /// One sentence each ("Kubernetes came up twice"); prep for this application's later rounds reads them.
+    pub prep_notes: Vec<String>,
+    pub model: String,
+}
+
+/// Dig questions about one entry, from what you got stuck on: Dig on the entry opens with them
+/// (`/bank/entries/<entry>?debrief=<round>`). Question ids are `b1`, `b2`…
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DebriefDig {
+    pub entry: String,
+    pub entry_name: String,
+    /// What it digs into: one of the debrief's `stuck_on` topics exactly as saved ("Kafka consumer groups"); one dig a
+    /// topic, so a topic no dig names is one no entry touched.
+    pub topic: String,
+    pub questions: Vec<DigQuestion>,
+}
+
+/// Settings → Notifications. All off until you turn Interviews on; turning it on checks Day before and Hour before.
+/// The three can't be checked while Interviews is off (the UI's rule; saved as they are).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct Notifications {
+    pub interviews: bool,
+    pub day_before: bool,
+    pub hour_before: bool,
+    /// An hour after a round ends, while it has no debrief.
+    pub debrief: bool,
+    /// When Interviews was first turned on (RFC 3339), and with what ("Initech’s first round"); Settings says so.
+    pub turned_on: Option<String>,
+    pub turned_on_with: Option<String>,
+    /// The one-time offer under your first round was answered (Turn on) or dismissed; it never shows again.
+    pub offered: bool,
+}
+
+/// Whether macOS lets gliide show banners: `unknown` before it's been asked (or where it can't be told, as in
+/// `tauri dev`'s unbundled binary).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum NotificationPermission {
+    Granted,
+    Denied,
+    Unknown,
 }
 
 /// The resume an application sent, for the Interview tab's desk.
@@ -1779,6 +1898,8 @@ pub enum Stage {
     Practicing,
     /// Dig's questions about an entry written, or your answers read.
     Digging,
+    /// A round's debrief read: what to dig into, notes for the next prep.
+    Debriefing,
 }
 
 #[cfg(test)]

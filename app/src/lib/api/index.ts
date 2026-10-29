@@ -13,6 +13,8 @@ import type { AppStatus } from "./bindings/AppStatus";
 import type { CoverPart } from "./bindings/CoverPart";
 import type { CoverView } from "./bindings/CoverView";
 import type { CustomEdit } from "./bindings/CustomEdit";
+import type { Debrief } from "./bindings/Debrief";
+import type { DebriefView } from "./bindings/DebriefView";
 import type { Decision } from "./bindings/Decision";
 import type { DigAnswer } from "./bindings/DigAnswer";
 import type { DigCapture } from "./bindings/DigCapture";
@@ -37,6 +39,7 @@ import type { Library } from "./bindings/Library";
 import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
 import type { Mode } from "./bindings/Mode";
+import type { NotificationPermission } from "./bindings/NotificationPermission";
 import type { Place } from "./bindings/Place";
 import type { PracticeTurn } from "./bindings/PracticeTurn";
 import type { PrepView } from "./bindings/PrepView";
@@ -51,6 +54,7 @@ import type { SearchCursor } from "./bindings/SearchCursor";
 import type { SearchResults } from "./bindings/SearchResults";
 import type { SentView } from "./bindings/SentView";
 import type { Settings } from "./bindings/Settings";
+import type { StartupProblem } from "./bindings/StartupProblem";
 import type { StatusSet } from "./bindings/StatusSet";
 import type { StoriesView } from "./bindings/StoriesView";
 import type { StoryDraft } from "./bindings/StoryDraft";
@@ -75,6 +79,11 @@ export type * from "./bindings/CoverView";
 export type * from "./bindings/CustomEdit";
 export type * from "./bindings/Decision";
 export type * from "./bindings/Displaced";
+export type * from "./bindings/Asked";
+export type * from "./bindings/Debrief";
+export type * from "./bindings/DebriefDig";
+export type * from "./bindings/DebriefRead";
+export type * from "./bindings/DebriefView";
 export type * from "./bindings/DigAnswer";
 export type * from "./bindings/DigCapture";
 export type * from "./bindings/DigOp";
@@ -126,6 +135,8 @@ export type * from "./bindings/Mismatch";
 export type * from "./bindings/Mode";
 export type * from "./bindings/NewClaim";
 export type * from "./bindings/NoteLine";
+export type * from "./bindings/NotificationPermission";
+export type * from "./bindings/Notifications";
 export type * from "./bindings/Place";
 export type * from "./bindings/PracticeTurn";
 export type * from "./bindings/PrepGap";
@@ -156,6 +167,8 @@ export type * from "./bindings/SkillChip";
 export type * from "./bindings/Skipped";
 export type * from "./bindings/Stage";
 export type * from "./bindings/StarPart";
+export type * from "./bindings/StartupKind";
+export type * from "./bindings/StartupProblem";
 export type * from "./bindings/StatusSet";
 export type * from "./bindings/StoriesView";
 export type * from "./bindings/StoryDraft";
@@ -185,6 +198,12 @@ export const getSettings = () => invoke<Settings>("get_settings");
 export const setSettings = (settings: Settings) => invoke<Settings>("set_settings", { settings });
 /** Each asked `claude --model` alias or name → the model id that last served it (what names a chat's model). */
 export const models = () => invoke<Record<string, string>>("models");
+
+// ── Startup ──
+/** Why the data couldn't be opened at launch (the window then shows only Startup); `null` when it opened. */
+export const startupProblem = () => invoke<StartupProblem | null>("startup_problem");
+/** Quits and launches gliide again. */
+export const relaunch = () => invoke<void>("relaunch");
 
 // ── Updates ──
 export const updateStatus = () => invoke<UpdateStatus>("update_status");
@@ -372,6 +391,20 @@ export const digQuestions = (entry: string, again = false) => invoke<DigQuestion
 export const digCapture = (entry: string, answers: DigAnswer[], note: string) =>
   invoke<DigCapture>("dig_capture", { entry, answers, note });
 
+// ── Debriefs and notifications ──
+/** A round's debrief, if it has one. */
+export const debrief = (round: string) => invoke<DebriefView | null>("debrief", { round });
+/** Saves a round's debrief as you wrote it (no model call); its `read` is kept until the debrief changes. */
+export const saveDebrief = (round: string, debrief: Debrief) => invoke<DebriefView>("save_debrief", { round, debrief });
+/** One model call: the saved debrief read (emits `progress`, `debriefing`); what it found is kept with it. */
+export const readDebrief = (round: string) => invoke<DebriefView>("read_debrief", { round });
+/** Whether macOS lets gliide show banners. */
+export const notificationPermission = () => invoke<NotificationPermission>("notification_permission");
+/** Asks macOS for permission (only Turn on calls it); what it now allows. */
+export const requestNotifications = () => invoke<NotificationPermission>("request_notifications");
+/** System Settings → Notifications. */
+export const openNotificationSettings = () => invoke<void>("open_notification_settings");
+
 // ── Job feed (freehire) ──
 /** Every row but skipped and dismissed: fits first (best score first), then not fit, checking, waiting, new. */
 export const feed = () => invoke<FeedView>("feed");
@@ -410,3 +443,6 @@ export const onFeed = (handler: (s: FeedStatus) => void): Promise<UnlistenFn> =>
 /** Event `update`: checking, what a check found, or how an install is going. */
 export const onUpdate = (handler: (s: UpdateStatus) => void): Promise<UnlistenFn> =>
   listen<UpdateStatus>("update", (e) => handler(e.payload));
+/** Event `notification`: a round's macOS banner was clicked; the page it opens (`/jobs/<id>`, `?debrief=<round>`). */
+export const onNotification = (handler: (path: string) => void): Promise<UnlistenFn> =>
+  listen<string>("notification", (e) => handler(e.payload));

@@ -4,7 +4,8 @@
   entry, answered in place, skipped, or marked as not applying; `⌘⏎` sends them all (one call). What comes back: the
   facts in your answers, kept at once (your words; Undo on each), additions proposed for you to accept (a variant, a
   bullet, skills, a story; never a rewrite of a bullet's text), and follow-up questions where an answer was vague.
-  The box at the foot takes anything else you want it to know. The thread is kept per entry on this Mac.
+  The box at the foot takes anything else you want it to know. The thread is kept per entry on this Mac. Opened from
+  a round's debrief (`debrief`, the round), it asks that debrief's questions about the entry, once per debrief.
 -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
@@ -18,10 +19,13 @@
   import X from "@lucide/svelte/icons/x";
   import {
     appError,
+    applications as loadApplications,
     cancel,
+    debrief as loadDebrief,
     digCapture,
     digQuestions,
     editEntry,
+    rounds as loadRounds,
     saveStory,
     type DigAnswer,
     type DigCapture,
@@ -33,6 +37,8 @@
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { modelName } from "$lib/models";
+  import { kindLabel } from "$lib/rounds";
+  import { app } from "$lib/stores/app.svelte";
   import { themeLabel } from "$lib/stories";
   import { Badge, Button, CompanyMark, Icon, KeyFooter, type KeyCommand, Textarea, Thinking, tip, toast } from "$lib/ui";
 
@@ -43,9 +49,11 @@
     onview: (view: EntryView) => void;
     /** The screen's keys, after Dig's own in Commands. */
     keys: KeyCommand[];
+    /** A round whose debrief has questions about this entry: they open the thread, once. */
+    debrief?: string | null;
   }
 
-  let { entry, view, onview, keys }: Props = $props();
+  let { entry, view, onview, keys, debrief = null }: Props = $props();
 
   // ── The thread, kept per entry ──
   interface Answer {
@@ -54,7 +62,16 @@
     notApplicable: boolean;
   }
   type Turn =
-    | { kind: "ask"; read: string; model: string; questions: DigQuestion[]; answers: Record<string, Answer>; sent: boolean }
+    | {
+        kind: "ask";
+        read: string;
+        model: string;
+        questions: DigQuestion[];
+        answers: Record<string, Answer>;
+        sent: boolean;
+        /** Asked from a round's debrief: `<round>:<entry>`. */
+        from?: string;
+      }
     | { kind: "note"; text: string }
     | {
         kind: "capture";
@@ -75,14 +92,73 @@
   const last = $derived(turns.at(-1));
   const open = $derived(last?.kind === "ask" && !last.sent ? last : null);
 
+  let loaded = $state(false);
   onMount(() => {
     try {
       turns = JSON.parse(localStorage.getItem(STORE) ?? "[]");
     } catch {
       turns = [];
     }
-    if (!turns.length) void ask(false);
+    loaded = true;
+    if (!turns.length && !debrief) void ask(false);
   });
+
+  // From a debrief: its questions about this entry open the thread (once per debrief), the read naming the round.
+  let asked: string | null = null;
+  $effect(() => {
+    const round = debrief;
+    if (!loaded || !round || asked === round) return;
+    asked = round;
+    void fromDebrief(round);
+  });
+
+  async function fromDebrief(round: string) {
+    const key = `${round}:${entry}`;
+    try {
+      const found = await loadDebrief(round);
+      const digs = found?.read?.digs.filter((d) => d.entry === entry) ?? [];
+      if (!found?.read || !digs.length) {
+        if (!turns.length) void ask(false);
+        return;
+      }
+      if (turns.some((t) => t.kind === "ask" && t.from === key)) return;
+      const at = await roundOf(round);
+      const name = at ? `${at.company} ${at.kind}` : "";
+      const topics = new Intl.ListFormat(undefined, { type: "conjunction" }).format(digs.map((d) => d.topic));
+      const questions = digs.flatMap((d) => d.questions);
+      turns.push({
+        kind: "ask",
+        read: `From your ${name ? `${name} ` : ""}debrief: you got stuck on ${topics}.`,
+        model: found.read.model,
+        questions,
+        answers: blank(questions),
+        sent: false,
+        from: key,
+      });
+      save();
+      void follow();
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+      if (!turns.length) void ask(false);
+    }
+  }
+
+  /** The round's company and kind ("Globex", "technical"), from the application it belongs to. */
+  async function roundOf(round: string): Promise<{ company: string; kind: string } | null> {
+    const rows = app.applications.length ? app.applications : await loadApplications().catch(() => []);
+    const known = rows.find((a) => a.debriefDue?.id === round || a.nextRound?.id === round);
+    const lookIn = known ? [known] : rows.filter((a) => a.status !== "saved");
+    const found = await Promise.all(
+      lookIn.map((a) =>
+        loadRounds(a.id)
+          .then((rs) => ({ a, r: rs.find((r) => r.id === round) }))
+          .catch(() => ({ a, r: undefined })),
+      ),
+    );
+    const hit = found.find((f) => f.r);
+    if (!hit?.r) return null;
+    return { company: hit.a.company, kind: hit.r.kind === "other" ? "interview" : kindLabel(hit.r.kind).toLowerCase() };
+  }
 
   async function follow() {
     await tick();

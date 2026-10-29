@@ -3,7 +3,8 @@
   lines under it, each edited in place; masters hold none of them, so every master that shows the entry prints the
   new ones), then each bullet as rows, one per wording (its text, then the variants you wrote), with the masters that
   show each, then its facts (what you've said about it that no line prints: never on a page, a source for its lines),
-  then its stories. Details · Interview (`Tab`): the Interview tab is Dig (`Dig`), gliide asking about the entry.
+  then its stories. Details · Interview (`Tab`): the Interview tab is Dig (`Dig`), gliide asking about the entry;
+  `?debrief=<round>` opens it on that round's debrief questions about the entry.
   Every edit goes to the bank and the whole view comes back; the desk previews the entry, highlighted, in a master
   that shows it (or alone in the default template when none does). One request at a time: its answer replaces the
   view, a failure leaves it and says why.
@@ -11,6 +12,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import ArrowUpToLine from "@lucide/svelte/icons/arrow-up-to-line";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Eye from "@lucide/svelte/icons/eye";
@@ -507,6 +509,11 @@
     { value: "interview", label: "Interview" },
   ] as const;
   let tab = $state<"details" | "interview">("details");
+  /** `?debrief=<round>`: the round's debrief has questions about this entry; the Interview tab opens on them. */
+  const debrief = $derived(page.url.searchParams.get("debrief"));
+  $effect(() => {
+    if (debrief) tab = "interview";
+  });
   const interactiveKey = (target: EventTarget | null) =>
     target instanceof Element && target.closest("button, a, input, textarea, select, [contenteditable]") !== null;
   $effect(() =>
@@ -574,7 +581,7 @@
         {/each}
       </div>
     {:else if tab === "interview"}
-      <Dig entry={id} {view} onview={(v) => (view = v)} keys={TAB_KEYS} />
+      <Dig entry={id} {view} onview={(v) => (view = v)} keys={TAB_KEYS} {debrief} />
     {:else}
       <header class="head">
         <p class="meta">{view.section}</p>

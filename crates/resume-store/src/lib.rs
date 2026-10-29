@@ -1,6 +1,6 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
-//! cover letters, applications and their interview rounds, preps and practice, stories, Dig's questions and answers,
-//! company logos, the job feed and settings (ARCHITECTURE.md §8).
+//! cover letters, applications and their interview rounds, preps, practice and debriefs, the notifications sent,
+//! stories, Dig's questions and answers, company logos, the job feed and settings (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -41,7 +41,11 @@ const MIGRATIONS: &[&str] = &[
     include_str!("rounds.sql"),
     include_str!("practice.sql"),
     include_str!("stories.sql"),
+    include_str!("debriefs.sql"),
 ];
+
+/// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
+pub const DEBRIEF_DAYS: u32 = 14;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -230,6 +234,8 @@ pub struct Round {
     pub place: String,
     pub notes: String,
     pub state: RoundState,
+    /// When its debrief was saved; `None` while it has none. Set by the store (the one given is ignored).
+    pub debriefed_at: Option<String>,
     /// Set by the store on every write (the one given is ignored).
     pub updated_at: String,
 }
@@ -271,6 +277,40 @@ pub struct Prep {
     pub model: String,
     /// Set by the store when written (the one given is ignored).
     pub at: String,
+}
+
+/// A round's debrief as saved: its JSON, what reading it found (JSON, `None` until it's read), when it was saved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DebriefRow {
+    pub round_id: String,
+    /// The caller's JSON.
+    pub debrief: String,
+    /// The caller's JSON; cleared when the debrief changes.
+    pub read: Option<String>,
+    /// Set by the store when the debrief is saved changed (the one given is ignored).
+    pub at: String,
+}
+
+/// A banner the app showed for a round, each at most once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Notified {
+    /// The day before it starts.
+    Day,
+    /// An hour before it starts.
+    Hour,
+    /// An hour after it ended, with no debrief.
+    Debrief,
+}
+
+impl Notified {
+    /// The lowercase name, as stored.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Day => "day",
+            Self::Hour => "hour",
+            Self::Debrief => "debrief",
+        }
+    }
 }
 
 /// One practiced answer and the feedback that came back.
@@ -1365,6 +1405,169 @@ impl Store {
         row.map(RawRound::parse).transpose()
     }
 
+    /// Each application's debrief due, by application id: its latest round awaiting a debrief (upcoming, scheduled,
+    /// ended, none saved) that ended within the last [`DEBRIEF_DAYS`] days.
+    pub fn debriefs_due(&self) -> Result<HashMap<String, Round>, StoreError> {
+        self.due(None)?
+            .into_iter()
+            .map(|r| Ok((r.application_id.clone(), r)))
+            .collect()
+    }
+
+    /// One application's debrief due, as [`Store::debriefs_due`] finds it.
+    pub fn debrief_due(&self, application_id: &str) -> Result<Option<Round>, StoreError> {
+        Ok(self.due(Some(application_id))?.pop())
+    }
+
+    fn due(&self, application_id: Option<&str>) -> Result<Vec<Round>, StoreError> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT {ROUND_COLUMNS} FROM (
+                 SELECT *, ROW_NUMBER() OVER (
+                     PARTITION BY application_id ORDER BY {ROUND_END} DESC, created_at DESC, rowid DESC
+                 ) AS n
+                 FROM rounds
+                 WHERE (?1 IS NULL OR application_id = ?1) AND {AWAITING_DEBRIEF}
+                     AND {ROUND_END} > julianday('now') - {DEBRIEF_DAYS}
+             ) WHERE n = 1"
+        ))?;
+        let rows = stmt
+            .query_map([application_id], RawRound::from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter().map(RawRound::parse).collect()
+    }
+
+    /// Each application's latest activity, by application id (RFC 3339 UTC, to the second): the latest of its status
+    /// changes, the ends of its rounds that have passed (cancelled ones aside) and its debriefs saved.
+    pub fn last_activity(&self) -> Result<HashMap<String, String>, StoreError> {
+        self.activity(None)
+    }
+
+    /// One application's latest activity, as [`Store::last_activity`] finds it.
+    pub fn application_activity(&self, application_id: &str) -> Result<Option<String>, StoreError> {
+        Ok(self.activity(Some(application_id))?.remove(application_id))
+    }
+
+    fn activity(
+        &self,
+        application_id: Option<&str>,
+    ) -> Result<HashMap<String, String>, StoreError> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT application_id, strftime('%Y-%m-%dT%H:%M:%SZ', MAX(day)) FROM (
+                 SELECT application_id, julianday(at) AS day FROM status_changes
+                 UNION ALL
+                 SELECT application_id, {ROUND_END} FROM rounds
+                     WHERE state = 'upcoming' AND starts_at IS NOT NULL AND {ROUND_END} <= julianday('now')
+                 UNION ALL
+                 SELECT r.application_id, julianday(d.at) FROM debriefs d JOIN rounds r ON r.id = d.round_id
+             ) WHERE (?1 IS NULL OR application_id = ?1) AND day IS NOT NULL GROUP BY application_id"
+        ))?;
+        let rows = stmt
+            .query_map([application_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<HashMap<_, _>, _>>()?;
+        Ok(rows)
+    }
+
+    // Debriefs and notifications.
+
+    /// The round's debrief, `None` while it has none.
+    pub fn debrief(&self, round_id: &str) -> Result<Option<DebriefRow>, StoreError> {
+        Ok(self.debriefs_where("d.round_id = ?1", round_id)?.pop())
+    }
+
+    /// The debriefs of the application's rounds: scheduled rounds by when they start, then the unscheduled.
+    pub fn application_debriefs(
+        &self,
+        application_id: &str,
+    ) -> Result<Vec<DebriefRow>, StoreError> {
+        self.debriefs_where(
+            "r.application_id = ?1 ORDER BY r.starts_at IS NULL, julianday(r.starts_at), r.created_at, r.rowid",
+            application_id,
+        )
+    }
+
+    fn debriefs_where(&self, clause: &str, arg: &str) -> Result<Vec<DebriefRow>, StoreError> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT d.round_id, d.debrief, d.read, d.at FROM debriefs d JOIN rounds r ON r.id = d.round_id
+             WHERE {clause}"
+        ))?;
+        let rows = stmt
+            .query_map([arg], |r| {
+                Ok(DebriefRow {
+                    round_id: r.get(0)?,
+                    debrief: r.get(1)?,
+                    read: r.get(2)?,
+                    at: r.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Saves the round's debrief (`debrief`, the caller's JSON). The same JSON as stored changes nothing; a different
+    /// one replaces it, saved now, and clears what reading the old one found. Errors when the round doesn't exist.
+    pub fn put_debrief(&self, round_id: &str, debrief: &str) -> Result<DebriefRow, StoreError> {
+        if round_by_id(&self.conn, round_id)?.is_none() {
+            return Err(not_found("round", round_id));
+        }
+        if let Some(d) = self.debrief(round_id)?
+            && d.debrief == debrief
+        {
+            return Ok(d);
+        }
+        let at = now();
+        self.conn.execute(
+            "INSERT INTO debriefs (round_id, debrief, read, at) VALUES (?1, ?2, NULL, ?3)
+             ON CONFLICT (round_id) DO UPDATE SET debrief = excluded.debrief, read = NULL, at = excluded.at",
+            params![round_id, debrief, at],
+        )?;
+        Ok(DebriefRow {
+            round_id: round_id.to_owned(),
+            debrief: debrief.to_owned(),
+            read: None,
+            at,
+        })
+    }
+
+    /// Keeps `read` (the caller's JSON) with the round's debrief saved at `at`, the one it read. `None`, keeping
+    /// nothing, when the debrief has changed since (or is gone).
+    pub fn put_debrief_read(
+        &self,
+        round_id: &str,
+        at: &str,
+        read: &str,
+    ) -> Result<Option<DebriefRow>, StoreError> {
+        let changed = self.conn.execute(
+            "UPDATE debriefs SET read = ?3 WHERE round_id = ?1 AND at = ?2",
+            params![round_id, at, read],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        self.debrief(round_id)
+    }
+
+    /// Whether the banner `kind` was shown for the round.
+    pub fn was_notified(&self, round_id: &str, kind: Notified) -> Result<bool, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM notified WHERE round_id = ?1 AND kind = ?2",
+                params![round_id, kind.as_str()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Records the banner `kind` as shown for the round, now; once shown, it stays recorded as first shown.
+    pub fn mark_notified(&self, round_id: &str, kind: Notified) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO notified (round_id, kind, at) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
+            params![round_id, kind.as_str(), now()],
+        )?;
+        Ok(())
+    }
+
     // Preps and practice.
 
     /// The prep stored under `key`.
@@ -1758,10 +1961,16 @@ const ANALYSIS_COLUMNS: &str = "id, posting_id, bank_rev, master_id, master_rev,
 const APPLICATION_COLUMNS: &str = "id, posting_id, analysis_id, date, company, role, url, status, now, projected, \
                                    on_file, resume_path, cover_path, notes, updated_at";
 
-const ROUND_COLUMNS: &str =
-    "id, application_id, kind, starts_at, minutes, with_whom, place, notes, state, updated_at";
+const ROUND_COLUMNS: &str = "id, application_id, kind, starts_at, minutes, with_whom, place, notes, state, updated_at, \
+                             (SELECT debriefs.at FROM debriefs WHERE debriefs.round_id = id)";
 /// A round that hasn't ended: unscheduled, or its end (start plus its length, an hour when unknown) after now.
 const NOT_ENDED: &str = "(starts_at IS NULL OR julianday(starts_at) + COALESCE(minutes, 60) / 1440.0 > julianday('now'))";
+/// A scheduled round's end as a Julian day: its start plus its length, an hour when unknown.
+const ROUND_END: &str = "(julianday(starts_at) + COALESCE(minutes, 60) / 1440.0)";
+/// A round awaiting its debrief: upcoming, scheduled, ended, and no debrief saved.
+const AWAITING_DEBRIEF: &str = "(state = 'upcoming' AND starts_at IS NOT NULL \
+     AND julianday(starts_at) + COALESCE(minutes, 60) / 1440.0 <= julianday('now') \
+     AND NOT EXISTS (SELECT 1 FROM debriefs WHERE debriefs.round_id = id))";
 
 struct RawPosting {
     id: String,
@@ -1905,6 +2114,7 @@ impl RawRound {
                 notes: r.get(7)?,
                 state: RoundState::Upcoming,
                 updated_at: r.get(9)?,
+                debriefed_at: r.get(10)?,
             },
             state: r.get(8)?,
         })

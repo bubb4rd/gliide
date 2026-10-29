@@ -1,8 +1,9 @@
 <!--
   `/` is the Overview: a greeting, your activity (postings added and applications sent: counts over a range, and the
-  last 26 weeks by day), what's up next (applications with a round coming up, soonest first, then the rest in
-  interviews, then postings not sent yet, best fit first) and what's new for you (the feed's fits, newest posting
-  first; hidden while the feed is off).
+  last 26 weeks by day), what's up next (applications with a round coming up, soonest first, then debriefs owed, then
+  the rest in interviews, then applications with no word in a week, then postings not sent yet, best fit first; each
+  application says why in a third line) and what's new for you (the feed's fits, newest posting first; hidden while
+  the feed is off).
   V (or ⌘V) pastes a posting, I imports a resume. The backdrop chosen in Settings → Appearance, if any, sits behind
   the top of the screen, toolbar included: the toolbar lies over it unpainted and without its crumb, and takes its
   paper back once the content scrolls under it.
@@ -11,7 +12,10 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
+  import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
+  import NotebookPen from "@lucide/svelte/icons/notebook-pen";
   import FileUp from "@lucide/svelte/icons/file-up";
   import type { ApplicationRow, AppStatus, FeedItem } from "$lib/api";
   import { activity as feedActivity, openItem, postedText, postedTime } from "$lib/feed";
@@ -19,7 +23,7 @@
   import { chooseResume } from "$lib/import";
   import { bindKeys } from "$lib/keys";
   import { paste } from "$lib/paste.svelte";
-  import { roundLine } from "$lib/rounds";
+  import { endedWhen, endsAt, kindLabel, roundLine } from "$lib/rounds";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { STATUS } from "$lib/status";
@@ -138,8 +142,14 @@
     };
   }
 
-  // ── Up next: rounds by time (soonest first), then the rest in interviews, then postings not sent yet, best fit
-  // first ──
+  // ── Up next: rounds by time (soonest first), then debriefs owed, then the rest in interviews, then applications
+  // with no word in a week, then postings not sent yet, best fit first ──
+  interface Why {
+    icon: typeof CalendarClock;
+    /** In ink 2 ("Debrief"), then `meta` after it ("· technical ended 12:00 PM"). */
+    text: string;
+    meta?: string;
+  }
   interface Next {
     key: string;
     href: string;
@@ -149,26 +159,56 @@
     status: AppStatus | null;
     fit: Fit | null;
     day: string;
-    /** The next round, in words ("Technical · tomorrow 2:00 PM"). */
-    round: string | null;
+    /** Why it's here, a third line: its next round, the debrief it awaits, no word. */
+    why: Why | null;
   }
+  const DAY = 86_400_000;
+  /** Whole days since the application's last status change, round or debrief. */
+  const quiet = (a: ApplicationRow, now: Date) => Math.floor((now.getTime() - new Date(a.lastActivity).getTime()) / DAY);
   const interviewing = $derived.by<Next[]>(() => {
     const now = new Date();
     const start = (a: ApplicationRow) => (a.nextRound?.startsAt ? new Date(a.nextRound.startsAt).getTime() : null);
-    return app.applications
-      .filter((a) => start(a) !== null || a.status === "interviewing")
-      .sort((a, b) => (start(a) ?? Number.MAX_VALUE) - (start(b) ?? Number.MAX_VALUE))
-      .map((a) => ({
-        key: `application-${a.id}`,
-        href: a.job ? `/jobs/${a.job}` : "/applications",
-        company: a.company,
-        companyKey: a.companyKey,
-        role: a.role,
-        status: a.status,
-        fit: applicationFit(a),
-        day: a.date,
-        round: a.nextRound ? roundLine(a.nextRound, now) : null,
-      }));
+    /** A debrief owed shows unless a round is within the day. */
+    const owes = (a: ApplicationRow) => {
+      const at = start(a);
+      return a.debriefDue !== null && (at === null || at - now.getTime() > DAY);
+    };
+    const live = (a: ApplicationRow) => a.status === "applied" || a.status === "interviewing";
+    const row = (a: ApplicationRow, why: Why | null): Next => ({
+      key: `application-${a.id}`,
+      href: a.job ? `/jobs/${a.job}` : "/applications",
+      company: a.company,
+      companyKey: a.companyKey,
+      role: a.role,
+      status: a.status,
+      fit: applicationFit(a),
+      day: a.date,
+      why,
+    });
+    const noWord = (a: ApplicationRow): Why | null =>
+      live(a) && quiet(a, now) >= 7
+        ? { icon: Hourglass, text: `No word in ${quiet(a, now)} days`, meta: STATUS[a.status].label.toLowerCase() }
+        : null;
+    const rounds = app.applications
+      .filter((a) => start(a) !== null && !owes(a))
+      .sort((a, b) => start(a)! - start(b)!)
+      .map((a) => row(a, { icon: CalendarClock, text: roundLine(a.nextRound!, now) }));
+    const debriefs = app.applications
+      .filter(owes)
+      .sort((a, b) => (endsAt(b.debriefDue!) ?? 0) - (endsAt(a.debriefDue!) ?? 0))
+      .map((a) => {
+        const r = a.debriefDue!;
+        const name = r.kind === "other" ? "interview" : kindLabel(r.kind).toLowerCase();
+        return row(a, { icon: NotebookPen, text: "Debrief", meta: `${name} ended ${endedWhen(r, now)}` });
+      });
+    const roundless = app.applications
+      .filter((a) => a.status === "interviewing" && start(a) === null && !owes(a))
+      .map((a) => row(a, noWord(a) ?? { icon: CalendarPlus, text: "Interviewing", meta: "no round yet" }));
+    const silent = app.applications
+      .filter((a) => a.status === "applied" && start(a) === null && !owes(a) && noWord(a))
+      .sort((a, b) => a.lastActivity.localeCompare(b.lastActivity))
+      .map((a) => row(a, noWord(a)));
+    return [...rounds, ...debriefs, ...roundless, ...silent];
   });
   const waiting = $derived<Next[]>(
     app.jobs
@@ -183,14 +223,16 @@
         status: j.status,
         fit: jobFit(j, app.applications),
         day: jobDay(j.addedAt),
-        round: null,
+        why: null,
       })),
   );
   const next = $derived([...interviewing, ...waiting].slice(0, NEXT));
   const noBank = $derived(app.library !== null && app.library.bank === null);
   const nextMeta = $derived(
     [
-      interviewing.length ? `${interviewing.length} interviewing` : "",
+      interviewing.some((n) => n.status === "interviewing")
+        ? `${interviewing.filter((n) => n.status === "interviewing").length} interviewing`
+        : "",
       waiting.length ? `${waiting.length} not sent` : "",
     ]
       .filter(Boolean)
@@ -316,9 +358,12 @@
                 </span>
                 <span class="score">{@render fitBar(item.fit)}</span>
                 <span class="day meta num">{shortDay(item.day)}</span>
-                {#if item.round}
-                  <span class="round meta" {@attach tip(item.round)}>
-                    <Icon icon={CalendarClock} size={14} /><span class="round__text">{item.round}</span>
+                {#if item.why}
+                  {@const why = item.why}
+                  <span class="round meta" {@attach tip(why.meta ? `${why.text} · ${why.meta}` : why.text)}>
+                    <Icon icon={why.icon} size={14} /><span class="round__text"
+                      >{why.text}{#if why.meta}<span class="round__meta">{` · ${why.meta}`}</span>{/if}</span
+                    >
                   </span>
                 {/if}
               </a>
@@ -524,6 +569,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .round__meta {
+    color: var(--ink-3);
   }
   .lead {
     grid-area: lead;

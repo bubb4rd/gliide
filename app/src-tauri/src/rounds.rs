@@ -63,6 +63,7 @@ pub fn save_round(app: &App, application: &str, draft: RoundDraft) -> Result<Rou
         place: draft.place.trim().to_owned(),
         notes: draft.notes.trim().to_owned(),
         state,
+        debriefed_at: None,
         updated_at: String::new(),
     })?;
     drop(store);
@@ -106,7 +107,7 @@ fn view(app: &App, application: &str, moved_from: Option<AppStatus>) -> Result<R
     let a = application_of(&store, application)?;
     Ok(RoundsView {
         rounds: store.rounds(application)?.into_iter().map(round).collect(),
-        application: export::row(&a, store.next_round(application)?),
+        application: export::row(&store, &a)?,
         moved_from,
     })
 }
@@ -303,6 +304,7 @@ pub fn round(r: store::Round) -> Round {
             StoreState::Upcoming => RoundState::Upcoming,
             StoreState::Cancelled => RoundState::Cancelled,
         },
+        debriefed_at: r.debriefed_at,
     }
 }
 

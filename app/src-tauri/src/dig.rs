@@ -228,7 +228,7 @@ pub async fn dig_capture(
     .await
 }
 
-fn question(q: dig::Question) -> DigQuestion {
+pub(crate) fn question(q: dig::Question) -> DigQuestion {
     DigQuestion {
         id: q.id,
         about: q.about,

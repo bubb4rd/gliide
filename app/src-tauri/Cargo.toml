@@ -43,11 +43,25 @@ ts-rs = "12"
 uuid = { version = "1", features = ["v4"] }
 window-vibrancy = "0.8"
 
-# The exported PDF's text, read back with PDFKit for the on-file score.
+# The exported PDF's text, read back with PDFKit for the on-file score. Round banners through UserNotifications
+# (what macOS allows, its prompt, banners and their clicks): `tauri-plugin-notification` can't tell a denied app.
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSString", "NSURL"] }
 objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = [
+    "std",
+    "bitflags",
+    "block2",
+    "UNNotification",
+    "UNNotificationContent",
+    "UNNotificationRequest",
+    "UNNotificationResponse",
+    "UNNotificationSettings",
+    "UNNotificationTrigger",
+    "UNUserNotificationCenter",
+] }
 
 # The clipboard's image file or picture, for a pasted company logo.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

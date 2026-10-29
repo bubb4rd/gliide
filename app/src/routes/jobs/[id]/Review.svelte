@@ -16,6 +16,7 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
+  import NotebookPen from "@lucide/svelte/icons/notebook-pen";
   import PenLine from "@lucide/svelte/icons/pen-line";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sparkles from "@lucide/svelte/icons/sparkles";
@@ -94,6 +95,7 @@
     prepping: "Writing the prep…",
     practicing: "Reading your answer…",
     digging: "Reading your answers…",
+    debriefing: "Reading your debrief…",
   } as const;
   /** A finished stage in the status's trail. */
   const DONE = {
@@ -108,6 +110,7 @@
     prepping: "Wrote the prep",
     practicing: "Read your answer",
     digging: "Read your answers",
+    debriefing: "Read your debrief",
   } as const;
   const TABS: { value: Tab; label: string }[] = [
     { value: "resume", label: "Resume" },
@@ -159,6 +162,11 @@
   /** The Interview tab is practicing a round, and whether it has a prep to practice (its toolbar action). */
   let practicing = $state(false);
   let canPractice = $state(false);
+  /** The Interview tab's open debrief, and the round in focus awaiting one (its toolbar actions). */
+  let debriefing = $state<string | null>(null);
+  let debriefDue = $state<string | null>(null);
+  let canSaveDebrief = $state(false);
+  let interview = $state<ReturnType<typeof Interview>>();
   /** The lines of the resume you sent that the Interview tab's selected question is about. */
   let marked = $state<string[]>([]);
   /** The column is the chat: on the resume tab, once there's a review to talk about. */
@@ -197,8 +205,9 @@
   }
   const nextTab = $derived(tabs[(tabs.findIndex((t) => t.value === tab) + 1) % Math.max(tabs.length, 1)]?.label ?? "");
 
-  // An Interviewing posting opens on its Interview tab; `?add=round` opens the add form there too. Moving it to
-  // Interviewing here, with no round to come, goes there and opens the form.
+  // An Interviewing posting opens on its Interview tab, as does one with a debrief due or `?debrief=<round>` (on that
+  // debrief); `?add=round` opens the add form there too. Moving it to Interviewing here, with no round to come, goes
+  // there and opens the form.
   let opened = false;
   let lastStatus: string | null = null;
   $effect(() => {
@@ -208,7 +217,8 @@
     if (!opened) {
       opened = true;
       const add = page.url.searchParams.get("add") === "round";
-      if (application.status === "interviewing" || (add && interviewable)) tab = "interview";
+      const debrief = application.debriefDue !== null || page.url.searchParams.has("debrief");
+      if (application.status === "interviewing" || ((add || debrief) && interviewable)) tab = "interview";
       if (add && interviewable) addRound = true;
     } else if (was !== null && was !== "interviewing" && application.status === "interviewing") {
       tab = "interview";
@@ -479,6 +489,16 @@
     >
   {:else if onInterview && practicing}
     <Button variant="ghost" kbd="Esc" onclick={() => (practicing = false)}>Back to prep</Button>
+  {:else if onInterview && debriefing}
+    <Button
+      variant="primary"
+      icon={Check}
+      kbd="⌘⏎"
+      disabled={!canSaveDebrief}
+      onclick={() => interview?.saveDebrief()}>Save debrief</Button
+    >
+  {:else if onInterview && debriefDue}
+    <Button variant="primary" icon={NotebookPen} kbd="D" onclick={() => interview?.debriefNow()}>Debrief</Button>
   {:else if onInterview && canPractice}
     <Button variant="primary" icon={Play} kbd="P" onclick={() => (practicing = true)}>Practice</Button>
   {:else if onInterview}
@@ -517,6 +537,7 @@
 
     {#if onInterview && application}
       <Interview
+        bind:this={interview}
         {job}
         {application}
         company={head?.company || application.company}
@@ -528,6 +549,9 @@
         bind:marked
         bind:practicing
         bind:canPractice
+        bind:debriefing
+        bind:canSaveDebrief
+        bind:debriefDue
       />
     {:else}
     {#if head && !chatting}

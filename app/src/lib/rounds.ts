@@ -51,3 +51,33 @@ export function roundLine(round: Round, now = new Date()): string {
 export function endsAt(round: Round): number | null {
   return round.startsAt ? new Date(round.startsAt).getTime() + (round.minutes ?? 60) * 60_000 : null;
 }
+
+/** The round has ended (not cancelled) and has no debrief yet. */
+export function awaitingDebrief(round: Round, now = new Date()): boolean {
+  const end = endsAt(round);
+  return round.state === "upcoming" && end !== null && end < now.getTime() && round.debriefedAt === null;
+}
+
+/** When a round ended, for a line about it: "12:00 PM" today, "yesterday 12:00 PM", else the day ("Oct 24"). */
+export function endedWhen(round: Round, now = new Date()): string {
+  const end = new Date(endsAt(round) ?? 0);
+  const days = Math.round((dayOf(now) - dayOf(end)) / DAY);
+  if (days === 0) return clock(end, false);
+  if (days === 1) return `yesterday ${clock(end, false)}`;
+  return end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** How long ago a round ended: "Ended 5 minutes ago", "Ended 1 hour ago", "Ended yesterday", "Ended 3 days ago". */
+export function endedAgo(round: Round, now = new Date()): string {
+  const end = endsAt(round);
+  if (end === null) return "";
+  const minutes = Math.max(0, Math.round((now.getTime() - end) / 60_000));
+  if (minutes < 1) return "Ended just now";
+  if (minutes < 60) return `Ended ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const days = Math.round((dayOf(now) - dayOf(new Date(end))) / DAY);
+  if (days === 0) {
+    const hours = Math.round(minutes / 60);
+    return `Ended ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  return days === 1 ? "Ended yesterday" : `Ended ${days} days ago`;
+}

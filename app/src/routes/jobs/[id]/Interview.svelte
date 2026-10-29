@@ -4,15 +4,21 @@
   rounds, then the prep for the round in focus (`Prep`). A round is added in a form in place (`A`), filled from an
   invite you paste (`⌘V`, one model call) or a calendar file (`.ics`) you drop on the window; edited in place (`⏎`)
   and removed (`⌫`, Undo in the toast). The first upcoming round of a Saved or Applied posting moves it to
-  Interviewing, with Undo. Practice (`P`) turns the column into the round's practice (`Practice`). The desk (Review's)
-  shows the resume you sent, the lines the selected question is about marked.
+  Interviewing, with Undo; adding a round while reminders were never offered offers them once, inline. Practice (`P`)
+  turns the column into the round's practice (`Practice`). A round that has ended awaits its debrief (`D`, or its
+  Debrief badge): the debrief (`Debrief`) takes the prep's place; the tab opens on it when the latest round awaits
+  one, or for `?debrief=<round>`. The desk (Review's) shows the resume you sent, the lines the selected question is
+  about marked (in a debrief, the checked questions').
 -->
 <script lang="ts">
   import { untrack } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { readText } from "@tauri-apps/plugin-clipboard-manager";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { page } from "$app/state";
+  import Bell from "@lucide/svelte/icons/bell";
   import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
+  import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
@@ -21,14 +27,17 @@
   import {
     appError,
     cancel,
+    openNotificationSettings,
     practiceTurns,
     prep as loadPrep,
     readInvite,
     readInviteFile,
     removeRound,
+    requestNotifications,
     rounds as loadRounds,
     saveRound,
     type ApplicationRow,
+    type NotificationPermission,
     type PracticeTurn,
     type PrepQuestion,
     type PrepView,
@@ -39,13 +48,14 @@
     type SentLine,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
-  import { endsAt, kindLabel, ROUND_KINDS, roundLine, when } from "$lib/rounds";
+  import { awaitingDebrief, endsAt, kindLabel, ROUND_KINDS, roundLine, when } from "$lib/rounds";
   import { app } from "$lib/stores/app.svelte";
   import {
     Badge,
     Button,
     CompanyMark,
     GroupHead,
+    Icon,
     Input,
     KeyFooter,
     type KeyCommand,
@@ -56,6 +66,7 @@
     tip,
     toast,
   } from "$lib/ui";
+  import Debrief from "./Debrief.svelte";
   import Practice from "./Practice.svelte";
   import Prep from "./Prep.svelte";
 
@@ -78,6 +89,12 @@
     practicing?: boolean;
     /** There's a prep to practice (bindable; the toolbar shows Practice). */
     canPractice?: boolean;
+    /** The round whose debrief is open (bindable; the toolbar's Save debrief). */
+    debriefing?: string | null;
+    /** The open debrief has something to save (bindable; the toolbar's Save debrief). */
+    canSaveDebrief?: boolean;
+    /** The round in focus has ended and awaits its debrief (bindable; the toolbar shows Debrief). */
+    debriefDue?: string | null;
   }
 
   let {
@@ -92,6 +109,9 @@
     marked = $bindable([]),
     practicing = $bindable(false),
     canPractice = $bindable(false),
+    debriefing = $bindable(null),
+    canSaveDebrief = $bindable(false),
+    debriefDue = $bindable(null),
   }: Props = $props();
 
   const LENGTHS: { value: number | null; label: string }[] = [
@@ -128,9 +148,113 @@
     failed = null;
     try {
       const rows = await loadRounds(id);
-      if (id === application.id) list = rows;
+      if (id !== application.id) return;
+      list = rows;
+      if (!opened) {
+        opened = true;
+        openFirst(rows);
+      }
     } catch (e) {
       failed = appError(e).message;
+    }
+  }
+
+  // ── Debriefs ──
+  let opened = false;
+  let debriefPane = $state<ReturnType<typeof Debrief>>();
+  const debriefRound = $derived(list?.find((r) => r.id === debriefing && r.state === "upcoming") ?? null);
+  $effect(() => {
+    debriefDue = !debriefing && focus && awaitingDebrief(focus, now) ? focus.id : null;
+  });
+
+  /** Opens on a debrief: the round `?debrief=` names, else the latest round when it awaits one. */
+  function openFirst(rows: Round[]) {
+    const named = rows.find((r) => r.id === (debriefing ?? page.url.searchParams.get("debrief")));
+    const latest = rows
+      .filter((r) => r.state === "upcoming" && r.startsAt)
+      .sort((a, b) => (endsAt(b) ?? 0) - (endsAt(a) ?? 0))[0];
+    const round = named ?? (latest && awaitingDebrief(latest, now) ? latest : undefined);
+    if (round) openDebrief(round);
+  }
+
+  function openDebrief(r: Round) {
+    practicing = false;
+    form = null;
+    selected = r.id;
+    question = null;
+    debriefing = r.id;
+  }
+
+  function leaveDebrief() {
+    debriefing = null;
+    marked = [];
+  }
+
+  /** The toolbar's Save debrief (`⌘⏎` is the debrief's own). */
+  export function saveDebrief() {
+    void debriefPane?.save();
+  }
+
+  /** Saved: the round is debriefed, and the application's debrief due and last activity have moved. */
+  function debriefSaved() {
+    void load(application.id);
+    void app.refreshApplications();
+    now = new Date();
+  }
+
+  // ── Reminders, offered once under the first round you add (the round you added) ──
+  let offering = $state<Round | null>(null);
+  const offerable = $derived(
+    app.settings !== null && !app.settings.notifications.offered && !app.settings.notifications.interviews,
+  );
+
+  async function turnOn() {
+    let permission: NotificationPermission = "unknown";
+    try {
+      permission = await requestNotifications();
+    } catch {
+      // Settings still records it on; Settings → Notifications says what macOS allows.
+    }
+    const settings = app.settings;
+    if (!settings) return;
+    const live = list?.filter((r) => r.state === "upcoming") ?? [];
+    const added = offering;
+    const what = live.length <= 1 || !added ? "first round" : kindLabel(added.kind).toLowerCase();
+    try {
+      await app.saveSettings({
+        ...settings,
+        notifications: {
+          ...settings.notifications,
+          interviews: true,
+          dayBefore: true,
+          hourBefore: true,
+          debrief: false,
+          turnedOn: new Date().toISOString(),
+          turnedOnWith: `${company}’s ${what}`,
+          offered: true,
+        },
+      });
+      offering = null;
+      if (permission === "denied") {
+        toast("Reminders are on, but macOS doesn’t allow gliide’s banners", {
+          action: { label: "Open macOS settings", run: () => void openNotificationSettings() },
+        });
+      } else {
+        toast("Reminders on: the day before and an hour before");
+      }
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+    }
+  }
+
+  async function notNow() {
+    const settings = app.settings;
+    offering = null;
+    if (!settings) return;
+    try {
+      await app.saveSettings({ ...settings, notifications: { ...settings.notifications, offered: true } });
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
     }
   }
 
@@ -295,6 +419,7 @@
       form = null;
       const saved = view.rounds.find((r) => (draft.id ? r.id === draft.id : !had.has(r.id)));
       if (saved) selected = saved.id;
+      if (saved && !draft.id && offerable) offering = saved;
       if (view.movedFrom) {
         const from = view.movedFrom;
         toast(`Moved to Interviewing${saved ? ` · ${roundLine(saved)}` : ""}`, {
@@ -413,30 +538,44 @@
   const interactive = (target: EventTarget | null) =>
     target instanceof HTMLElement && target.closest("button, a, input, textarea, select, [contenteditable]") !== null;
 
-  /** ↑↓ go through the rounds, then the prep's questions. */
+  /** ↑↓ go through the rounds, then the prep's questions (the rounds alone in a debrief). */
   function step(by: number) {
     const items = [
       ...(list ?? []).map((r) => ({ round: r.id, q: null as PrepQuestion | null })),
-      ...(prep?.questions ?? []).map((q) => ({ round: null, q })),
+      ...(debriefRound ? [] : (prep?.questions ?? [])).map((q) => ({ round: null, q })),
     ];
     if (!items.length) return;
     const at = question ? items.findIndex((i) => i.q?.id === question) : items.findIndex((i) => i.round === selected);
     const to = items[Math.min(Math.max(at + by, 0), items.length - 1)];
     if (to.q) choose(to.q);
-    else {
-      question = null;
-      marked = [];
-      selected = to.round;
-    }
+    else selectRound(to.round!);
+  }
+
+  /** Selects a round; choosing another leaves the debrief for later. */
+  function selectRound(id: string) {
+    question = null;
+    marked = [];
+    selected = id;
+    if (debriefing && id !== debriefing) leaveDebrief();
   }
 
   const chosen = $derived(prep?.questions.find((q) => q.id === question));
 
   const KEYS: KeyCommand[] = $derived([
-    { keys: ["P"], label: "Practice", run: () => startPractice(chosen), disabled: !canPractice },
+    ...(debriefRound
+      ? [
+          { keys: ["⌘⏎"], label: "Save debrief", run: saveDebrief, disabled: !canSaveDebrief },
+          { keys: ["Esc"], label: "Leave it for later", run: leaveDebrief },
+        ]
+      : [
+          ...(debriefDue
+            ? [{ keys: ["D"], label: "Debrief", run: () => focus && openDebrief(focus) }]
+            : []),
+          { keys: ["P"], label: "Practice", run: () => startPractice(chosen), disabled: !canPractice },
+        ]),
     { keys: ["A"], label: "Add interview", run: startAdd, disabled: busy },
     { keys: ["⌘V"], label: "Paste an invite", run: () => void pasteInvite(), disabled: reading !== null },
-    { keys: ["↑", "↓"], label: "Select a round or question" },
+    { keys: ["↑", "↓"], label: debriefRound ? "Select a round" : "Select a round or question" },
     {
       keys: ["⏎"],
       label: chosen ? "Practice this question" : "Edit round",
@@ -452,10 +591,16 @@
     ...keys,
   ]);
 
+  /** The toolbar's Debrief: the round in focus. */
+  export function debriefNow() {
+    if (debriefDue && focus) openDebrief(focus);
+  }
+
   $effect(() => {
     if (practicing) return;
     return bindKeys({
-      p: (e) => (interactive(e.target) || !canPractice ? false : startPractice(chosen)),
+      d: (e) => (interactive(e.target) || !debriefDue || !focus ? false : openDebrief(focus)),
+      p: (e) => (interactive(e.target) || !canPractice || debriefRound ? false : startPractice(chosen)),
       a: (e) => (interactive(e.target) ? false : startAdd()),
       "mod+v": (e) => (interactive(e.target) ? false : void pasteInvite()),
       ArrowDown: (e) => (interactive(e.target) ? false : step(1)),
@@ -650,11 +795,7 @@
         <PartRow
           label={kindLabel(round.kind)}
           selected={round.id === selected && question === null}
-          onselect={() => {
-            selected = round.id;
-            question = null;
-            marked = [];
-          }}
+          onselect={() => selectRound(round.id)}
           editor={form?.key === round.id ? editor : undefined}
         >
           {#snippet text()}
@@ -677,14 +818,27 @@
               </div>
               {#if round.state === "cancelled"}
                 <Badge>Cancelled</Badge>
-              {:else if over(round)}
-                <span class="meta">Over</span>
+              {:else if awaitingDebrief(round, now)}
+                <button
+                  type="button"
+                  class="state-button"
+                  {@attach tip("Debrief this round (D)")}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    openDebrief(round);
+                  }}><Badge tone="accent">Debrief</Badge></button
+                >
+              {:else if round.debriefedAt && over(round)}
+                <span class="meta debriefed"><Icon icon={Check} size={14} />Debriefed</span>
               {:else if next?.id === round.id}
                 <Badge tone="accent">{soon(round)}</Badge>
               {/if}
             </div>
           {/snippet}
           {#snippet actions()}
+            {#if round.debriefedAt && round.state === "upcoming" && round.id !== debriefRound?.id}
+              <Button variant="ghost" size="sm" onclick={() => openDebrief(round)}>Open debrief</Button>
+            {/if}
             <Button variant="ghost" size="sm" icon={Pencil} kbd="⏎" onclick={() => startEdit(round)}>Edit</Button>
             <Button
               variant="danger"
@@ -722,10 +876,39 @@
           >
         </div>
       {/if}
+      {#if offering && offerable}
+        <div class="offer" role="group" aria-label="Reminders">
+          <Icon icon={Bell} size={16} />
+          <div class="offer__text">
+            <p class="offer__title">Remind you the day before and an hour before?</p>
+            <p class="meta">macOS asks once. Settings can change it later.</p>
+          </div>
+          <div class="offer__actions">
+            <Button variant="ghost" size="sm" onclick={() => void notNow()}>Not now</Button>
+            <Button size="sm" onclick={() => void turnOn()}>Turn on</Button>
+          </div>
+        </div>
+      {/if}
     {/if}
   </section>
 
-  {#if focus}
+  {#if debriefRound}
+    {#key debriefRound.id}
+      <Debrief
+        bind:this={debriefPane}
+        {job}
+        round={debriefRound}
+        status={application.status}
+        {prep}
+        {writing}
+        {practiced}
+        bind:marked
+        bind:canSave={canSaveDebrief}
+        onsaved={debriefSaved}
+        onleave={leaveDebrief}
+      />
+    {/key}
+  {:else if focus}
     <Prep
       name={focus.kind === "other" ? "the interview" : `the ${kindLabel(focus.kind).toLowerCase()}`}
       {prep}
@@ -875,6 +1058,59 @@
   .notes {
     color: var(--ink-3);
     text-wrap: pretty;
+  }
+  /* A round's Debrief badge is the button that opens its debrief. */
+  .state-button {
+    display: inline-flex;
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: none;
+    cursor: default;
+  }
+  .state-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .debriefed {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--ink-2);
+  }
+  /* The one-time reminders offer: a sunken well under the rounds. */
+  .offer {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2-5);
+    margin: var(--space-2) var(--space-3) 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--sunken);
+  }
+  .offer > :global(.icon) {
+    flex: none;
+    margin-top: 3px;
+    color: var(--ink-3);
+  }
+  .offer__text {
+    flex: 1;
+    min-width: 0;
+  }
+  .offer__text p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+  .offer__title {
+    font-weight: var(--weight-medium);
+  }
+  .offer__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
   }
   .reading {
     padding: var(--space-2) var(--space-3);

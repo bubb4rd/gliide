@@ -5,6 +5,7 @@
 
 mod commands;
 pub mod cover;
+pub mod debrief;
 pub mod dig;
 pub mod dto;
 pub mod entry;
@@ -17,6 +18,7 @@ pub mod import;
 pub mod jobs;
 pub mod library;
 pub mod logo;
+pub mod notify;
 pub mod place;
 pub mod prep;
 pub mod review;
@@ -63,13 +65,19 @@ pub fn run() {
                     Event::Feed(s) => handle.emit("feed", s),
                 };
             });
-            let state = Arc::new(App::open(&dir, emit).map_err(|e| e.message)?);
+            let state = match App::open(&dir, emit) {
+                Ok(state) => Arc::new(state),
+                Err(problem) => return cannot_start(app, problem),
+            };
             let warm = Arc::clone(&state);
             std::thread::spawn(move || warm.warm());
             tauri::async_runtime::spawn(feed::schedule(Arc::clone(&state)));
             app.manage(state);
+            app.manage(state::Startup(None));
             app.manage(update::Updates::new(app.package_info().version.to_string()));
             tauri::async_runtime::spawn(update::schedule(app.handle().clone()));
+            notify::setup(app.handle());
+            tauri::async_runtime::spawn(notify::schedule(app.handle().clone()));
             window::setup(app)?;
             Ok(())
         })
@@ -78,9 +86,14 @@ pub fn run() {
             commands::get_settings,
             commands::set_settings,
             commands::models,
+            commands::notification_permission,
+            commands::request_notifications,
+            commands::open_notification_settings,
             commands::update_status,
             commands::check_update,
             commands::install_update,
+            commands::startup_problem,
+            commands::relaunch,
             commands::library,
             commands::read_import,
             commands::import_view,
@@ -140,6 +153,9 @@ pub fn run() {
             commands::remove_story,
             commands::dig_questions,
             commands::dig_capture,
+            commands::debrief,
+            commands::save_debrief,
+            commands::read_debrief,
             commands::logos,
             commands::set_logo,
             commands::remove_logo,
@@ -159,4 +175,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running gliide");
+}
+
+/// The data couldn't be opened: the window opens on the Startup screen alone (why, and what fixes it: Update gliide,
+/// Try again, Show in Finder), with nothing else running. Only the updater and Startup's commands work. Should the
+/// window itself fail, a native alert says why and quits once dismissed. Never an error out of setup: that panics
+/// where unwinding can't, and macOS reports it as a crash.
+fn cannot_start(app: &mut tauri::App, problem: dto::StartupProblem) -> Result<(), Box<dyn std::error::Error>> {
+    let detail = problem.detail.clone();
+    app.manage(state::Startup(Some(problem)));
+    app.manage(update::Updates::new(app.package_info().version.to_string()));
+    if let Err(e) = window::setup(app) {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        eprintln!("gliide: the window couldn't open ({e})");
+        let handle = app.handle().clone();
+        app.dialog()
+            .message(detail)
+            .title("gliide can’t open its data")
+            .kind(MessageDialogKind::Error)
+            .buttons(MessageDialogButtons::OkCustom("Quit".into()))
+            .show(move |_| handle.exit(1));
+    }
+    Ok(())
 }

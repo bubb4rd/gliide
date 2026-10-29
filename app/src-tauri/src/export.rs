@@ -179,7 +179,7 @@ fn recorded(
 ) -> Result<Exported> {
     let store = lock(&app.store);
     let saved = store.application_for_posting(&r.posting_id)?.unwrap_or(a);
-    let next = store.next_round(&saved.id)?;
+    let application = row(&store, &saved)?;
     drop(store);
     write_csv(app)?;
     Ok(Exported {
@@ -189,7 +189,7 @@ fn recorded(
             .unwrap_or_default(),
         path: path.display().to_string(),
         on_file,
-        application: row(&saved, next),
+        application,
     })
 }
 
@@ -283,14 +283,37 @@ fn is_app_header(text: &str) -> bool {
     cells == APP_COLUMNS
 }
 
-/// `apps` as the UI lists them, each with its next round (one query for all).
+/// `apps` as the UI lists them, each with its next round, its debrief due and its latest activity (one query each for
+/// all).
 pub fn rows(store: &Store, apps: &[Application]) -> Result<Vec<ApplicationRow>> {
     let mut next = store.next_rounds()?;
-    Ok(apps.iter().map(|a| row(a, next.remove(&a.id))).collect())
+    let mut due = store.debriefs_due()?;
+    let mut last = store.last_activity()?;
+    Ok(apps
+        .iter()
+        .map(|a| build(a, next.remove(&a.id), due.remove(&a.id), last.remove(&a.id)))
+        .collect())
 }
 
-/// The application as the UI shows it, with `next` (its next round: [`Store::next_round`]).
-pub fn row(a: &Application, next: Option<resume_store::Round>) -> ApplicationRow {
+/// One application as the UI shows it, as [`rows`] finds it.
+pub fn row(store: &Store, a: &Application) -> Result<ApplicationRow> {
+    Ok(build(
+        a,
+        store.next_round(&a.id)?,
+        store.debrief_due(&a.id)?,
+        store.application_activity(&a.id)?,
+    ))
+}
+
+/// The application as the UI shows it: `next` its next round ([`Store::next_round`]), `due` the round whose debrief
+/// is due ([`Store::debrief_due`]), `last` its latest activity ([`Store::application_activity`]; when it has none
+/// logged, when the row last changed).
+fn build(
+    a: &Application,
+    next: Option<resume_store::Round>,
+    due: Option<resume_store::Round>,
+    last: Option<String>,
+) -> ApplicationRow {
     ApplicationRow {
         id: a.id.clone(),
         job: a.posting_id.clone(),
@@ -306,6 +329,8 @@ pub fn row(a: &Application, next: Option<resume_store::Round>) -> ApplicationRow
         url: a.url.clone(),
         status: a.status.into(),
         next_round: next.map(crate::rounds::round),
+        debrief_due: due.map(crate::rounds::round),
+        last_activity: last.unwrap_or_else(|| a.updated_at.clone()),
     }
 }
 
