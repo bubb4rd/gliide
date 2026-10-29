@@ -12,6 +12,7 @@ pub mod extract;
 pub mod import;
 pub mod instruct;
 pub mod invite;
+pub mod nudge;
 pub mod practice;
 pub mod prep;
 pub mod rewrite;

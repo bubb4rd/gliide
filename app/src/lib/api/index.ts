@@ -40,6 +40,7 @@ import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
 import type { Mode } from "./bindings/Mode";
 import type { NotificationPermission } from "./bindings/NotificationPermission";
+import type { Nudge } from "./bindings/Nudge";
 import type { Place } from "./bindings/Place";
 import type { PracticeTurn } from "./bindings/PracticeTurn";
 import type { PrepView } from "./bindings/PrepView";
@@ -137,6 +138,7 @@ export type * from "./bindings/NewClaim";
 export type * from "./bindings/NoteLine";
 export type * from "./bindings/NotificationPermission";
 export type * from "./bindings/Notifications";
+export type * from "./bindings/Nudge";
 export type * from "./bindings/Place";
 export type * from "./bindings/PracticeTurn";
 export type * from "./bindings/PrepGap";
@@ -364,6 +366,10 @@ export const practiceTurns = (round: string) => invoke<PracticeTurn[]>("practice
 /** One model call: your answer to prep question `question` read (emits `progress`, `practicing`), kept with it. */
 export const practice = (round: string, question: string, answer: string) =>
   invoke<PracticeTurn>("practice", { round, question, answer });
+/** One model call (emits `progress`, `nudging`): nudges for prep question `question` while you answer it, read
+ *  with `draft` (what you've typed; may be empty) and your last answer to it. Not kept. */
+export const nudge = (round: string, question: string, draft: string) =>
+  invoke<Nudge[]>("nudge", { round, question, draft });
 /** Keeps what an answer said as a fact of bank entry `entry` (from practice for `round`; `null` for a story told
  *  alone, which was said for no posting). */
 export const keepClaim = (round: string | null, entry: string, text: string) =>

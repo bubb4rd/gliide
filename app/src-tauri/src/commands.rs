@@ -11,7 +11,7 @@ use crate::dto::{
     Debrief, DebriefView, Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit,
     EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView,
     ImportChoices, ImportView, Instructed, JobRow, JobView, KeyDecision, Library, LogoRow,
-    LogoSource, Mode, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
+    LogoSource, Mode, Nudge, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
     RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
     StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus,
 };
@@ -431,6 +431,16 @@ pub async fn practice(
     answer: String,
 ) -> Res<PracticeTurn> {
     prep::practice(&app, &round, question, answer).await
+}
+
+#[tauri::command]
+pub async fn nudge(
+    app: St<'_>,
+    round: String,
+    question: String,
+    draft: String,
+) -> Res<Vec<Nudge>> {
+    prep::nudge(&app, &round, question, draft).await
 }
 
 #[tauri::command]

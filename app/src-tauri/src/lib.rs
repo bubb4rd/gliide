@@ -143,6 +143,7 @@ pub fn run() {
             commands::sent_resume,
             commands::prep,
             commands::practice,
+            commands::nudge,
             commands::practice_turns,
             commands::keep_claim,
             commands::tell_story,

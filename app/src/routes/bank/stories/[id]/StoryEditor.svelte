@@ -1002,6 +1002,10 @@
     gap: var(--space-5);
     padding: var(--space-5) var(--space-6);
   }
+  /* The cards keep their height and the thread scrolls (see Practice). */
+  .thread > :global(*) {
+    flex: none;
+  }
   .turn p {
     margin: 0;
   }

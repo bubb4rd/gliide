@@ -1323,6 +1323,18 @@ pub struct Feedback {
     pub story: Option<StoryDraft>,
 }
 
+/// A small suggestion for the question you're answering, never the answer: a direction or a question that jogs your
+/// memory, the resume lines it points to (`SentLine.id`), and what you could say for it, with `…` where only you know
+/// the words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Nudge {
+    pub text: String,
+    pub lines: Vec<String>,
+    pub example: Option<String>,
+}
+
 // ── Stories ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// A story you tell in interviews: situation, task, action, result, in your words. Never printed.
@@ -1896,6 +1908,8 @@ pub enum Stage {
     Prepping,
     /// A practiced answer read.
     Practicing,
+    /// Nudges for the question you're answering.
+    Nudging,
     /// Dig's questions about an entry written, or your answers read.
     Digging,
     /// A round's debrief read: what to dig into, notes for the next prep.

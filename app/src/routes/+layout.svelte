@@ -45,6 +45,7 @@
     inviting: "Reading…",
     prepping: "Prepping…",
     practicing: "Reading…",
+    nudging: "Nudging…",
     digging: "Reading…",
     debriefing: "Reading…",
   };

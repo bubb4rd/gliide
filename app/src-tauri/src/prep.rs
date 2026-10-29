@@ -12,13 +12,14 @@ use resume_core::posting::text_hash;
 use resume_core::story::Story;
 use resume_core::{Requirements, Resume};
 use resume_llm::debrief::Earlier;
+use resume_llm::nudge::{self, LastAnswer, NudgeInput};
 use resume_llm::practice::{self, PracticeInput};
 use resume_llm::prep::{self as written, PrepInput, SentResume};
 use resume_store::{self as store, Application, PracticeRow};
 
 use crate::dto::{
-    Feedback, Mismatch, NewClaim, PracticeTurn, PrepGap, PrepQuestion, PrepView, QuestionGroup,
-    Stage, StarPart, StorySource,
+    Feedback, Mismatch, NewClaim, Nudge, PracticeTurn, PrepGap, PrepQuestion, PrepView,
+    QuestionGroup, Stage, StarPart, StorySource,
 };
 use crate::error::{AppError, Result};
 use crate::rounds::{application_of, sent_pdf};
@@ -306,6 +307,96 @@ pub async fn practice(
     };
     let stored = blocking(app, move |app| Ok(lock(&app.store).add_practice(&row)?)).await?;
     turn(stored)
+}
+
+/// One model call: nudges for prep question `question` of the round while you answer it (`draft`, what you've typed;
+/// may be empty), read with your last answer to it and what its reading found, checked against the resume as sent,
+/// the bank and your words. Not kept: they're for the draft in front of you.
+pub async fn nudge(
+    app: &Arc<App>,
+    round: &str,
+    question: String,
+    draft: String,
+) -> Result<Vec<Nudge>> {
+    let (id, wanted) = (round.to_owned(), question.clone());
+    let (cx, prep, last) = blocking(app, move |app| {
+        let cx = context(app, &id)?;
+        let store = lock(&app.store);
+        let prep = store
+            .latest_prep(&id)?
+            .ok_or_else(|| AppError::missing("Write this round’s prep first"))?;
+        let last = store
+            .practice(&id)?
+            .into_iter()
+            .rfind(|p| p.question == wanted);
+        Ok((cx, prep, last))
+    })
+    .await?;
+    let prep: written::Prep = serde_json::from_str(&prep.json)?;
+    let q = prep
+        .questions
+        .into_iter()
+        .find(|q| q.id == question)
+        .ok_or_else(|| AppError::missing("This question is no longer in the prep"))?;
+    let told: Option<Story> = q
+        .story
+        .as_deref()
+        .and_then(|id| cx.stories.iter().find(|s| s.id == id))
+        .cloned();
+    let terms: Vec<String> = cx
+        .requirements
+        .as_ref()
+        .map(|r| r.skills.iter().map(|k| k.term.clone()).collect())
+        .unwrap_or_default();
+    let last = match last {
+        Some(p) => Some((p.answer, serde_json::from_str::<practice::Feedback>(&p.feedback)?)),
+        None => None,
+    };
+    let llm = app.claude().await?;
+    let model = app.settings().suggest_model;
+    let (m, s, d, qt, st, la) = (
+        model.clone(),
+        cx.sent.clone(),
+        draft.clone(),
+        q.clone(),
+        told.clone(),
+        last.clone(),
+    );
+    let (reply, out) = model_call(app, &cx.job, Stage::Nudging, async move {
+        let input = NudgeInput {
+            question: &qt.text,
+            why: &qt.why,
+            lines: &qt.lines,
+            draft: &d,
+            last: la.as_ref().map(|(answer, f)| LastAnswer {
+                answer,
+                situation: f.situation,
+                task: f.task,
+                action: f.action,
+                result: f.result,
+                note: f.star_note.as_deref(),
+            }),
+            terms: &terms,
+            sent: &s,
+            story: st.as_ref(),
+        };
+        nudge::read(&llm, &nudge::schema(), &input, &m).await
+    })
+    .await?;
+    app.note_served(&model, &out);
+    let last_answer = last.as_ref().map(|(a, _)| a.as_str());
+    let (nudges, dropped) = nudge::checked(reply, &cx.sent, &q.lines, &draft, last_answer, told.as_ref());
+    if !dropped.is_empty() {
+        eprintln!("gliide: nudge on round {} dropped {dropped:?}", cx.round.id);
+    }
+    Ok(nudges
+        .into_iter()
+        .map(|n| Nudge {
+            text: n.text,
+            lines: n.lines,
+            example: n.example,
+        })
+        .collect())
 }
 
 /// The round's practiced answers, oldest first.

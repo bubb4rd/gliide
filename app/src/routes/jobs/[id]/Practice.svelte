@@ -3,8 +3,10 @@
   at a time; you answer in the box at the foot; each answer comes back (one model call) as a feedback card
   (`FeedbackCard`): the lines it drew on, which of situation, task, action and result it has, what it says differently
   from the resume you sent (amber), what it says the bank doesn't hold yet (Keep as fact), a tighter telling and the
-  likely follow-up. Never a grade. An answer that tells a story offers Save as story (`S`). The strip at the top pins
-  the question, with how many you've practiced. `N` next question, `R` again, `Esc` back to the prep.
+  likely follow-up. Never a grade. An answer that tells a story offers Save as story (`S`). Stuck, **Nudge** (`⌘J`, one
+  call) reads your draft and your last answer to the question for a few small suggestions (`NudgeCard`); Add to answer
+  puts one's example at the end of your draft, its first `…` selected. The strip at the top pins the question, with
+  how many you've practiced. `N` next question, `R` again, `Esc` back to the prep.
 -->
 <script lang="ts">
   import { tick } from "svelte";
@@ -12,6 +14,7 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import BookOpen from "@lucide/svelte/icons/book-open";
   import Check from "@lucide/svelte/icons/check";
+  import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import UserRound from "@lucide/svelte/icons/user-round";
@@ -19,9 +22,11 @@
     appError,
     cancel,
     keepClaim,
+    nudge,
     practice,
     saveStory,
     type NewClaim,
+    type Nudge,
     type PracticeTurn,
     type PrepQuestion,
     type PrepView,
@@ -32,6 +37,7 @@
   import { kindLabel } from "$lib/rounds";
   import { Button, Icon, KeyFooter, type KeyCommand, Textarea, Thinking, tip, toast } from "$lib/ui";
   import FeedbackCard from "./FeedbackCard.svelte";
+  import NudgeCard from "./NudgeCard.svelte";
 
   interface Props {
     job: string;
@@ -70,7 +76,14 @@
   const answered = $derived(turns.at(-1)?.question === asked?.id && !again);
   let kept = $state(new Set<string>());
   let field = $state<Textarea>();
+  let composer = $state<HTMLElement>();
   let thread = $state<HTMLElement>();
+  /** The nudges shown, and the question they're for. */
+  let nudges = $state<{ question: string; items: Nudge[] } | null>(null);
+  let nudging = $state<number | null>(null);
+  /** A call is running: answers and nudges wait for it. */
+  const busy = $derived(reading !== null || nudging !== null);
+  const shown = $derived(nudges && nudges.question === asked?.id ? nudges.items : null);
   // Practice starts in the answer box.
   $effect(() => {
     field?.focus();
@@ -78,12 +91,13 @@
 
   async function send() {
     const text = answer.trim();
-    if (!text || !asked || reading !== null) return;
+    if (!text || !asked || busy) return;
     reading = performance.now();
     try {
       const turn = await practice(round.id, asked.id, text);
       turns = [...turns, turn];
       answer = "";
+      nudges = null;
       again = false;
       (document.activeElement as HTMLElement | null)?.blur();
       await tick();
@@ -96,8 +110,39 @@
     }
   }
 
+  /** One call: nudges for the question being asked, read with what you've typed so far. */
+  async function askNudge() {
+    if (!asked || busy) return;
+    const q = asked.id;
+    nudging = performance.now();
+    try {
+      const items = await nudge(round.id, q, answer);
+      nudges = { question: q, items };
+      await tick();
+      thread?.scrollTo({ top: thread.scrollHeight });
+    } catch (e) {
+      const error = appError(e);
+      if (error.kind !== "cancelled") toast(error.message, { tone: "danger" });
+    } finally {
+      nudging = null;
+    }
+  }
+
+  /** Puts a nudge's example at the end of your draft and selects its first `…`, where your words go. */
+  async function addToAnswer(example: string) {
+    const base = answer.trimEnd();
+    answer = base ? `${base} ${example}` : example;
+    await tick();
+    const box = composer?.querySelector("textarea");
+    if (!box) return;
+    box.focus();
+    const gap = answer.indexOf("…", base.length);
+    if (gap >= 0) box.setSelectionRange(gap, gap + 1);
+    else box.setSelectionRange(answer.length, answer.length);
+  }
+
   async function ask(q: PrepQuestion | undefined, same = false) {
-    if (!q || reading !== null) return;
+    if (!q || busy) return;
     question = q.id;
     again = same;
     answer = "";
@@ -153,9 +198,10 @@
     target instanceof HTMLElement && target.closest("button, a, input, textarea, select") !== null;
 
   const KEYS: KeyCommand[] = $derived([
-    { keys: ["⏎"], label: "Send your answer", run: () => void send(), disabled: !answer.trim() || reading !== null },
-    { keys: ["N"], label: "Next question", run: () => void ask(next), disabled: reading !== null },
-    { keys: ["R"], label: "Ask it again", run: () => void ask(asked, true), disabled: reading !== null },
+    { keys: ["⏎"], label: "Send your answer", run: () => void send(), disabled: !answer.trim() || busy },
+    { keys: ["⌘J"], label: "Nudge", run: () => void askNudge(), disabled: busy },
+    { keys: ["N"], label: "Next question", run: () => void ask(next), disabled: busy },
+    { keys: ["R"], label: "Ask it again", run: () => void ask(asked, true), disabled: busy },
     ...(saveable ? [{ keys: ["S"], label: "Save as story", run: () => void saveAsStory(saveable), disabled: saving }] : []),
     { keys: ["Esc"], label: "Back to prep", run: onback },
     ...keys,
@@ -166,8 +212,9 @@
       n: (e) => (interactive(e.target) ? false : void ask(next)),
       r: (e) => (interactive(e.target) ? false : void ask(asked, true)),
       s: (e) => (interactive(e.target) || !saveable ? false : void saveAsStory(saveable)),
+      "mod+j": () => void askNudge(),
       Escape: (e) => {
-        if (reading !== null) return void cancel(job);
+        if (busy) return void cancel(job);
         if (interactive(e.target)) return false;
         onback();
       },
@@ -231,9 +278,21 @@
       <p class="asked">{asked.text}</p>
     </article>
   {/if}
+  {#if shown}
+    <NudgeCard
+      nudges={shown}
+      line={(id) => byId.get(id)}
+      onadd={(example) => void addToAnswer(example)}
+      ondismiss={() => (nudges = null)}
+    />
+  {/if}
   {#if reading !== null}
     <div class="reading">
       <Thinking label="Reading your answer…" startedAt={reading} oncancel={() => void cancel(job)} />
+    </div>
+  {:else if nudging !== null}
+    <div class="reading">
+      <Thinking label="Nudging…" startedAt={nudging} oncancel={() => void cancel(job)} />
     </div>
   {/if}
 </div>
@@ -245,7 +304,10 @@
     {:else}
       <span class="meta next">Answer as you would out loud</span>
     {/if}
-    <Button variant="ghost" size="sm" icon={RotateCcw} kbd="R" disabled={reading !== null} onclick={() => ask(asked, true)}
+    <Button variant="ghost" size="sm" icon={Lightbulb} kbd="⌘J" disabled={busy || !asked} onclick={() => askNudge()}
+      >Nudge</Button
+    >
+    <Button variant="ghost" size="sm" icon={RotateCcw} kbd="R" disabled={busy} onclick={() => ask(asked, true)}
       >Again</Button
     >
     <Button
@@ -253,11 +315,11 @@
       size="sm"
       icon={SkipForward}
       kbd="N"
-      disabled={reading !== null}
+      disabled={busy}
       onclick={() => ask(next)}>Next question</Button
     >
   </div>
-  <div class="composer">
+  <div class="composer" bind:this={composer}>
     <Textarea
       bind:this={field}
       bind:value={answer}
@@ -276,7 +338,7 @@
         icon={ArrowUp}
         aria-label="Send your answer"
         {@attach tip("Send your answer (⏎)")}
-        disabled={!answer.trim() || reading !== null}
+        disabled={!answer.trim() || busy}
         onclick={() => void send()}
       />
     </div>
@@ -341,6 +403,11 @@
     flex-direction: column;
     gap: var(--space-5);
     padding: var(--space-5) var(--space-6);
+  }
+  /* The thread scrolls; its turns and cards keep their height. A card clips its corners (`overflow: hidden`), which
+     lets a flex item shrink below its content, so without this the cards would squash instead of the thread scrolling. */
+  .thread > :global(*) {
+    flex: none;
   }
   .turn p {
     margin: 0;

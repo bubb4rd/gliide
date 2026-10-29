@@ -94,6 +94,7 @@
     inviting: "Reading the invite…",
     prepping: "Writing the prep…",
     practicing: "Reading your answer…",
+    nudging: "Nudging…",
     digging: "Reading your answers…",
     debriefing: "Reading your debrief…",
   } as const;
@@ -109,6 +110,7 @@
     inviting: "Read the invite",
     prepping: "Wrote the prep",
     practicing: "Read your answer",
+    nudging: "Nudged",
     digging: "Read your answers",
     debriefing: "Read your debrief",
   } as const;

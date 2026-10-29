@@ -50,50 +50,78 @@ pub struct PracticeInput<'a> {
 /// The Practice call's input: `<question>` (its text, why, the lines it's about with their text, and the story it
 /// means to tell), `<answer>` (at most [`MAX_ANSWER_CHARS`]), `<terms>` (one a line), `<resume>`.
 pub fn input(i: &PracticeInput<'_>) -> String {
-    let answer = i.answer.trim();
-    let answer = match answer.char_indices().nth(MAX_ANSWER_CHARS) {
-        Some((at, _)) => &answer[..at],
-        None => answer,
-    };
+    let answer = clipped(i.answer);
     let mut s = String::with_capacity(i.sent.text.len() + answer.len() + 1024);
-    let _ = writeln!(s, "<question>\n{}", i.question.trim());
-    if !i.why.trim().is_empty() {
-        let _ = writeln!(s, "(why) {}", i.why.trim());
+    write_question(&mut s, i.question, i.why, i.lines, i.sent, i.story);
+    let _ = writeln!(s, "<answer>\n{answer}\n</answer>");
+    write_terms_and_resume(&mut s, i.terms, i.sent);
+    s
+}
+
+/// `text` trimmed, at most [`MAX_ANSWER_CHARS`].
+pub(crate) fn clipped(text: &str) -> &str {
+    let text = text.trim();
+    match text.char_indices().nth(MAX_ANSWER_CHARS) {
+        Some((at, _)) => &text[..at],
+        None => text,
     }
-    for id in i.lines {
-        if let Some(l) = i.sent.line(id) {
+}
+
+/// `<question>`: the question, why it's likely, the lines it's about with their text, and the story it means to tell
+/// with its parts.
+pub(crate) fn write_question(
+    s: &mut String,
+    question: &str,
+    why: &str,
+    lines: &[String],
+    sent: &SentResume,
+    story: Option<&Story>,
+) {
+    let _ = writeln!(s, "<question>\n{}", question.trim());
+    if !why.trim().is_empty() {
+        let _ = writeln!(s, "(why) {}", why.trim());
+    }
+    for id in lines {
+        if let Some(l) = sent.line(id) {
             let _ = writeln!(s, "(about) [{}] {}", l.id, l.text);
         }
     }
-    if let Some(story) = i.story {
+    if let Some(story) = story {
         let _ = writeln!(s, "(story) {}", story.title.trim());
-        for (part, text) in [
-            ("situation", &story.situation),
-            ("task", &story.task),
-            ("action", &story.action),
-            ("result", &story.result),
-        ] {
+        for (part, text) in story_parts(story) {
             if !text.trim().is_empty() {
                 let _ = writeln!(s, "  ({part}) {}", text.trim());
             }
         }
     }
     s.push_str("</question>\n");
-    let _ = writeln!(s, "<answer>\n{answer}\n</answer>");
+}
+
+/// A story's situation, task, action and result, by name.
+pub(crate) fn story_parts(story: &Story) -> [(&'static str, &str); 4] {
+    [
+        ("situation", story.situation.as_str()),
+        ("task", story.task.as_str()),
+        ("action", story.action.as_str()),
+        ("result", story.result.as_str()),
+    ]
+}
+
+/// `<terms>` (one a line), then `<resume>` (`<resume ids="none">` for the PDF's text).
+pub(crate) fn write_terms_and_resume(s: &mut String, terms: &[String], sent: &SentResume) {
     s.push_str("<terms>\n");
-    for t in i.terms {
+    for t in terms {
         s.push_str(t);
         s.push('\n');
     }
     s.push_str("</terms>\n");
-    if i.sent.lines.is_empty() {
+    if sent.lines.is_empty() {
         s.push_str("<resume ids=\"none\">\n");
     } else {
         s.push_str("<resume>\n");
     }
-    s.push_str(i.sent.text.trim());
+    s.push_str(sent.text.trim());
     s.push_str("\n</resume>\n");
-    s
 }
 
 /// Whether an answer has a part of situation, task, action and result.
