@@ -33,13 +33,6 @@ trademarks of their respective owners. They are used only to identify the servic
 are not covered by gliide's license. gliide is not affiliated with, sponsored or endorsed by any of these owners.
 Where each icon came from is listed in each folder's `README.md`.
 
-## Agent skill
-
-`.agents/skills/better-ui/` (also reached through `.claude/skills/better-ui`) is from
-[jakubkrehel/skills](https://github.com/jakubkrehel/skills), © 2026 Jakub Krehel, under the MIT License
-([`.agents/skills/better-ui/LICENSE`](.agents/skills/better-ui/LICENSE)). It guides contributors' coding agents and is
-not part of the app.
-
 ## Rust dependencies
 
 Computed with `cargo metadata --format-version 1 --locked` on 2026-10-20: 791 third-party packages in the resolved

@@ -26,8 +26,10 @@ app/src-tauri/gen/
 .vscode/*
 !.vscode/extensions.json
 
-# Agent and tool state (the shared skills in .agents/skills stay tracked)
+# Agent and tool state, and agent skills (installed per machine; skills-lock.json names where each comes from)
 .claude/settings.local.json
+.claude/skills/
+.agents/skills/better-ui/
 .omp/
 .cursor/
 *.tsbuildinfo
