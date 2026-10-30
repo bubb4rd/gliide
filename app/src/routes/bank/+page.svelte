@@ -4,7 +4,8 @@
   stories: each its title, the entry it happened in and its themes, how long it takes to tell and when you last
   practiced it, under the themes no story covers. Import picks a resume file (PDF, Word, Markdown, text, or a gliide
   v1 JSON) and opens its review (/bank/import). Each entry (not a skills line) opens its editor
-  (/bank/entries/<id>), each story its own (/bank/stories/<id>); New story `N` opens a blank one.
+  (/bank/entries/<id>), each story its own (/bank/stories/<id>); New story `N` opens a blank one. A section of
+  entries adds one from its heading: named in place (`⏎`), it joins the bank in no master and its editor opens.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -12,12 +13,20 @@
   import { page } from "$app/state";
   import FileUp from "@lucide/svelte/icons/file-up";
   import Plus from "@lucide/svelte/icons/plus";
-  import { appError, stories as loadStories, type EntryRow, type StoriesView, type StoryView } from "$lib/api";
+  import {
+    addEntry,
+    appError,
+    stories as loadStories,
+    type EntryRow,
+    type SectionRow,
+    type StoriesView,
+    type StoryView,
+  } from "$lib/api";
   import { chooseResume } from "$lib/import";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { themeLabel, tellTime } from "$lib/stories";
-  import { Badge, Button, Card, Empty, Toolbar, toast } from "$lib/ui";
+  import { Badge, Button, Card, Empty, Input, Toolbar, toast } from "$lib/ui";
 
   let loaded = $state(false);
   let stories = $state<StoriesView | null>(null);
@@ -42,6 +51,56 @@
   const newStory = () => goto("/bank/stories/new");
 
   $effect(() => bindKeys({ i: () => void pick(), n: () => void newStory() }));
+
+  // ── A new entry, named in place at the end of its section ──
+  /** What adding to a section of each kind says, and what its name asks for (an entry's name is where or what). */
+  const ADDS: Record<string, { action: string; placeholder: string }> = {
+    experience: { action: "Add a role", placeholder: "Where, like Acme Widgets Co." },
+    projects: { action: "Add a project", placeholder: "Its name, like Tidepool" },
+    education: { action: "Add a school", placeholder: "Its name, like State University" },
+    certifications: { action: "Add a certification", placeholder: "Its name, like AWS Certified Developer" },
+    custom: { action: "Add an entry", placeholder: "Its name" },
+  };
+  /** The section a new entry is being named in. */
+  let adding = $state<string | null>(null);
+  let name = $state("");
+  let creating = $state(false);
+  const bankAware = $derived(app.settings?.suggestionsFrom !== "master-only");
+
+  function startAdd(section: SectionRow) {
+    adding = section.id;
+    name = "";
+  }
+
+  /** Adds the named entry and opens its editor; with no name, the field closes. */
+  async function create() {
+    const section = adding;
+    const text = name.trim();
+    if (!section || creating) return;
+    if (!text) return void (adding = null);
+    creating = true;
+    try {
+      const id = await addEntry(section, text);
+      await goto(`/bank/entries/${encodeURIComponent(id)}`);
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+    } finally {
+      creating = false;
+    }
+  }
+
+  function onNameKey(e: KeyboardEvent) {
+    if (e.isComposing) return;
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      adding = null;
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      void create();
+    }
+  }
+
+  const focus = (element: HTMLElement) => element.focus();
 
   function updated(rfc3339: string): string {
     const d = new Date(rfc3339);
@@ -138,6 +197,11 @@
                 {plural(section.entries.length, "entry", "entries")} · {plural(sum(section.entries, (e) => e.items), "bullet", "bullets")}
               {/if}
             </span>
+            {#if ADDS[section.kind]}
+              <Button variant="ghost" size="sm" icon={Plus} onclick={() => startAdd(section)}
+                >{ADDS[section.kind].action}</Button
+              >
+            {/if}
           </header>
           <Card>
             <ul class="list">
@@ -170,6 +234,29 @@
                   {/if}
                 </li>
               {/each}
+              {#if adding === section.id && ADDS[section.kind]}
+                <li class="adding">
+                  <Input
+                    size="md"
+                    bind:value={name}
+                    placeholder={ADDS[section.kind].placeholder}
+                    aria-label="{ADDS[section.kind].action}: its name"
+                    disabled={creating}
+                    {@attach focus}
+                    onkeydown={onNameKey}
+                    onblur={() => {
+                      if (!name.trim() && !creating) adding = null;
+                    }}
+                  />
+                  <p class="meta hint">
+                    {#if bankAware}
+                      In no master: a review brings it in where it fits a posting better than what the master shows.
+                    {:else}
+                      In no master: suggestions come from the master only (Settings, Tailoring).
+                    {/if}
+                  </p>
+                </li>
+              {/if}
             </ul>
           </Card>
         </section>
@@ -419,6 +506,14 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+  }
+  /* Naming a new entry: the row it will be, its field over what happens to it. */
+  .adding {
+    padding: var(--space-3) var(--space-5);
+  }
+  .hint {
+    margin: var(--space-1-5) 0 0;
+    text-wrap: pretty;
   }
 
   .center {

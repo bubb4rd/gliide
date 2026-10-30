@@ -25,7 +25,7 @@ use resume_tailor::{Tailored, tailor};
 
 use crate::dto::{
     Accepted, ChipState, CustomEdit, Decision, Displaced, EditTargets, Instructed, KeyDecision,
-    MasterChoice, Mode, Proposal, ReviewView, Rewritten, Skipped, Stage, Target,
+    MasterChoice, Proposal, ReviewView, Rewritten, Skipped, Stage, Target,
 };
 use crate::entry::variant_error;
 use crate::error::{AppError, Result};
@@ -40,7 +40,6 @@ pub struct Review {
     pub posting: PostingRow,
     pub bank: Bank,
     pub master: Master,
-    pub mode: CoreMode,
     pub req: Requirements,
     /// The `claude --model` alias or name the suggestions were made with.
     pub model: String,
@@ -64,18 +63,18 @@ pub struct Last {
     pub draft: Draft,
 }
 
-/// Opens the review of `job`: Suggest's output for the master and mode (an existing analysis for the same input and
-/// model keeps its draft; `fresh` calls Suggest again, carrying your decisions over by key), then the fit check. A
-/// call that a newer `start_review` overtook rejects as cancelled and leaves the newer review open.
+/// Opens the review of `job`: Suggest's output for the master, drawing on the bank as Settings says (an existing
+/// analysis for the same input and model keeps its draft; `fresh` calls Suggest again, carrying your decisions over by
+/// key), then the fit check. A call that a newer `start_review` overtook rejects as cancelled and leaves the newer
+/// review open.
 pub async fn start_review(
     app: &Arc<App>,
     job: &str,
     master: Option<String>,
-    mode: Option<Mode>,
     fresh: bool,
 ) -> Result<ReviewView> {
     let ticket = app.review_ticket();
-    let (review, view) = make_review(app, job, master, mode, fresh).await?;
+    let (review, view) = make_review(app, job, master, fresh).await?;
     let mut slot = lock(&app.review);
     if !app.is_newest_review(ticket) {
         return Err(AppError::cancelled());
@@ -84,10 +83,10 @@ pub async fn start_review(
     Ok(view)
 }
 
-/// Makes and saves the review of `job` with its last master and mode (Suggest's output, the fit score) without opening
-/// it: a job you opened and left goes on, so its review is ready when you come back.
+/// Makes and saves the review of `job` with its last master (Suggest's output, the fit score) without opening it: a
+/// job you opened and left goes on, so its review is ready when you come back.
 pub async fn prepare_review(app: &Arc<App>, job: &str) -> Result<()> {
-    make_review(app, job, None, None, false).await.map(drop)
+    make_review(app, job, None, false).await.map(drop)
 }
 
 /// [`start_review`]'s review, made but not opened. Suggest runs once per input and model: a call asking for one
@@ -96,17 +95,14 @@ async fn make_review(
     app: &Arc<App>,
     job: &str,
     master: Option<String>,
-    mode: Option<Mode>,
     fresh: bool,
 ) -> Result<(Review, ReviewView)> {
     let row = jobs::posting(app, job)?;
     let req = jobs::requirements(app, &row).await?;
     let settings = app.settings();
     let latest = lock(&app.store).latest_analysis(job)?;
-    let mode: CoreMode = mode
-        .map(Into::into)
-        .or(latest.as_ref().map(|a| a.mode))
-        .unwrap_or_else(|| settings.default_mode.into());
+    // Every review follows the setting, so entries you add to the bank reach the jobs you already have.
+    let mode: CoreMode = settings.suggestions_from.into();
     let master_id = match master.or(latest.map(|a| a.master_id)) {
         Some(id) => id,
         None => {
@@ -174,12 +170,14 @@ async fn make_review(
         .await?;
         app.note_served(&model, &out);
         let store = lock(&app.store);
+        // Your draft carries over from this input's last answer, else from the review of this master you last opened,
+        // whichever mode it drew on: a changed setting or bank keeps your decisions and edits.
         let previous = match store.analysis(&key, &model)? {
             Some(a) => Some(a),
             None => store
                 .analyses(job)?
                 .into_iter()
-                .find(|a| a.master_id == master.id && a.mode == mode),
+                .find(|a| a.master_id == master.id),
         };
         let a = store.put_analysis(&NewAnalysis {
             posting_id: job,
@@ -211,7 +209,6 @@ async fn make_review(
             posting: row,
             bank,
             master,
-            mode,
             req,
             model: analysis.model,
             suggestions: analysis.suggestions,
@@ -294,7 +291,6 @@ fn detached(r: &Review) -> Review {
         posting: r.posting.clone(),
         bank: r.bank.clone(),
         master: r.master.clone(),
-        mode: r.mode,
         req: r.req.clone(),
         model: r.model.clone(),
         suggestions: r.suggestions.clone(),

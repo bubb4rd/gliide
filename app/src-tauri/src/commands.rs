@@ -11,7 +11,7 @@ use crate::dto::{
     Debrief, DebriefView, Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit,
     EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView,
     ImportChoices, ImportView, Instructed, JobRow, JobView, KeyDecision, Library, LogoRow,
-    LogoSource, Mode, Nudge, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
+    LogoSource, Nudge, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
     RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
     StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus,
 };
@@ -152,6 +152,11 @@ pub async fn folder_pdf(app: St<'_>, name: String) -> Res<FolderPdf> {
 }
 
 #[tauri::command]
+pub async fn add_entry(app: St<'_>, section: String, name: String) -> Res<String> {
+    blocking(&app, move |app| entry::add_entry(app, &section, &name)).await
+}
+
+#[tauri::command]
 pub async fn entry(app: St<'_>, entry: String, preview: Option<String>) -> Res<EntryView> {
     blocking(&app, move |app| {
         entry::entry_view(app, &entry, preview.as_deref())
@@ -209,10 +214,9 @@ pub async fn start_review(
     app: St<'_>,
     job: String,
     master: Option<String>,
-    mode: Option<Mode>,
     fresh: bool,
 ) -> Res<ReviewView> {
-    review::start_review(&app, &job, master, mode, fresh).await
+    review::start_review(&app, &job, master, fresh).await
 }
 
 #[tauri::command]

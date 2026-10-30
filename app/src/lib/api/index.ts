@@ -38,7 +38,6 @@ import type { KeyDecision } from "./bindings/KeyDecision";
 import type { Library } from "./bindings/Library";
 import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
-import type { Mode } from "./bindings/Mode";
 import type { NotificationPermission } from "./bindings/NotificationPermission";
 import type { Nudge } from "./bindings/Nudge";
 import type { Place } from "./bindings/Place";
@@ -227,6 +226,9 @@ export const importView = (choices: ImportChoices) => invoke<ImportView>("import
 /** Adds the waiting import to the bank and saves its master. */
 export const finishImport = (choices: ImportChoices) => invoke<Library>("finish_import", { choices });
 export const discardImport = () => invoke<void>("discard_import");
+/** Adds an entry named `name` at the end of bank section `section`, in no master: its id. Rejects with a sentence to
+ * show (no name, or a section that holds no entries). */
+export const addEntry = (section: string, name: string) => invoke<string>("add_entry", { section, name });
 /** One bank entry with every bullet's wordings and which master shows which; `preview` picks the master on the desk
  * (null: the first that shows the entry; the entry alone when none does). */
 export const entry = (entry: string, preview: string | null = null) =>
@@ -256,13 +258,13 @@ export const setSalary = (job: string, salary: SalaryRange | null) => invoke<Job
 /** The places a job's location names, geocoded and cached (empty: remote, a country, or nothing found). */
 export const places = (location: string) => invoke<Place[]>("places", { location });
 /**
- * Opens the review for `job`: Suggest (cached per posting × master × mode × model; a call already running for the
- * same joins it), then the fit check. `master`/`mode` null: the job's last review's, else the best-ranked master and
- * the default mode. `fresh` calls Suggest again (`r`). Emits `progress`.
+ * Opens the review for `job`: Suggest (cached per posting × master × Settings' suggestions-from × model; a call
+ * already running for the same joins it), then the fit check. `master` null: the job's last review's, else the
+ * best-ranked master. `fresh` calls Suggest again (`r`). Emits `progress`.
  */
-export const startReview = (job: string, master: string | null, mode: Mode | null, fresh = false) =>
-  invoke<ReviewView>("start_review", { job, master, mode, fresh });
-/** As `startReview` with the job's last master and mode, saved (with its fit score) without opening it. */
+export const startReview = (job: string, master: string | null, fresh = false) =>
+  invoke<ReviewView>("start_review", { job, master, fresh });
+/** As `startReview` with the job's last master, saved (with its fit score) without opening it. */
 export const prepareReview = (job: string) => invoke<void>("prepare_review", { job });
 /** Stops the model call running for `job`; its command rejects with kind `cancelled`. */
 export const cancel = (job: string) => invoke<void>("cancel", { job });

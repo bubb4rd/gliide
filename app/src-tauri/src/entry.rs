@@ -1,17 +1,18 @@
-//! A bank entry's editor (DESIGN.md, Experience bank): its details (`resume_core::details`), its facts
-//! (`resume_core::facts`), its bullets with every wording, their skills and which master shows which, edits of the
-//! wordings (`resume_core::variants`: every master keeps the words it showed unless the edit is about what it shows; a
-//! new bullet joins the entry in no master; folding a bullet moves your stories' links onto the one it folds into),
-//! and the desk's preview: a master that shows the entry, or the entry alone in the default template.
+//! A bank entry's editor (DESIGN.md, Experience bank): a new entry (a name in a section, in no master), its details
+//! (`resume_core::details`), its facts (`resume_core::facts`), its bullets with every wording, their skills and which
+//! master shows which, edits of the wordings (`resume_core::variants`: every master keeps the words it showed unless
+//! the edit is about what it shows; a new bullet joins the entry in no master; a removed bullet leaves every master
+//! and comes back as it was shown; folding a bullet moves your stories' links onto the one it folds into), and the
+//! desk's preview: a master that shows the entry, or the entry alone in the default template.
 
 use chrono::{SecondsFormat, Utc};
-use resume_core::bank::{Fact, FactSource, Note};
-use resume_core::details::{Details, set_details};
+use resume_core::bank::{BankBullet, Fact, FactSource, Note};
+use resume_core::details::{self, Details, set_details};
 use resume_core::facts::{FactDraft, set_facts};
 use resume_core::master::{MasterBullet, MasterEntry, MasterSection};
 use resume_core::variants::{
-    self, VariantError, add_bullet, add_variant, fold_into, make_main, remove_variant, set_skills,
-    set_wording,
+    self, VariantError, Wording, add_bullet, add_variant, fold_into, make_main, remove_bullet,
+    remove_variant, restore_bullet, set_skills, set_wording,
 };
 use resume_core::{Bank, Master, Resume, resolve};
 
@@ -29,6 +30,17 @@ pub fn entry_view(app: &App, entry: &str, preview: Option<&str>) -> Result<Entry
     view(app, &bank, &masters, entry, preview)
 }
 
+/// Adds an entry named `name` at the end of bank section `section`, in no master (a new bank revision): its id. A
+/// bank-aware review brings it in where it fits a posting better than what the master shows.
+pub fn add_entry(app: &App, section: &str, name: &str) -> Result<String> {
+    let store = lock(&app.store);
+    let (_, mut bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
+    let id =
+        details::add_entry(&mut bank, section, name).map_err(|e| AppError::other(e.to_string()))?;
+    store.put_bank(&bank)?;
+    Ok(id)
+}
+
 /// Applies `edit` to entry `entry`: a new bank revision, and one for each master whose wordings moved.
 pub fn edit_entry(
     app: &App,
@@ -42,15 +54,17 @@ pub fn edit_entry(
         find(bank, entry).is_some_and(|(_, e)| e.bullets.iter().any(|b| b.id == bullet))
     };
     let bullet = match &edit {
-        EntryEdit::SetDetails { .. } | EntryEdit::SetFacts { .. } | EntryEdit::AddBullet { .. } => {
-            None
-        }
+        EntryEdit::SetDetails { .. }
+        | EntryEdit::SetFacts { .. }
+        | EntryEdit::AddBullet { .. }
+        | EntryEdit::RestoreBullet { .. } => None,
         EntryEdit::AddVariant { bullet, .. }
         | EntryEdit::SetWording { bullet, .. }
         | EntryEdit::RemoveVariant { bullet, .. }
         | EntryEdit::MakeMain { bullet, .. }
         | EntryEdit::Show { bullet, .. }
-        | EntryEdit::SetSkills { bullet, .. } => Some(bullet),
+        | EntryEdit::SetSkills { bullet, .. }
+        | EntryEdit::RemoveBullet { bullet } => Some(bullet),
         EntryEdit::Fold { from, .. } => Some(from),
     };
     if bullet.is_some_and(|b| !owns(&bank, b)) {
@@ -104,6 +118,11 @@ fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) 
         }
         EntryEdit::AddVariant { bullet, text } => add_variant(bank, &bullet, &text).map(drop),
         EntryEdit::AddBullet { text } => add_bullet(bank, entry, &text).map(drop),
+        EntryEdit::RemoveBullet { bullet } => remove_bullet(bank, masters, &bullet),
+        EntryEdit::RestoreBullet { bullet, at } => {
+            let (bullet, shown) = restored(bullet);
+            restore_bullet(bank, masters, entry, at as usize, bullet, &shown)
+        }
         EntryEdit::SetSkills { bullet, skills } => set_skills(bank, &bullet, &skills),
         EntryEdit::SetWording {
             bullet,
@@ -143,6 +162,29 @@ fn apply(bank: &mut Bank, masters: &mut [Master], entry: &str, edit: EntryEdit) 
 
 pub fn variant_error(e: VariantError) -> AppError {
     AppError::other(e.to_string())
+}
+
+/// A bullet as the editor sent it back: the bank's bullet (its text, then its variants in order), and each master that
+/// showed it with the wording.
+fn restored(b: BulletView) -> (BankBullet, Vec<(String, Wording)>) {
+    let mut text = String::new();
+    let mut variants = Vec::with_capacity(b.wordings.len().saturating_sub(1));
+    let mut shown = Vec::new();
+    for w in b.wordings {
+        let wording = w.variant.map(|v| v as usize);
+        shown.extend(w.masters.into_iter().map(|m| (m, wording)));
+        match wording {
+            None => text = w.text,
+            Some(_) => variants.push(w.text),
+        }
+    }
+    let bullet = BankBullet {
+        id: b.id,
+        text,
+        variants,
+        skills: b.skills,
+    };
+    (bullet, shown)
 }
 
 /// A fact as the editor shows it.

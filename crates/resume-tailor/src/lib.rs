@@ -2,9 +2,10 @@
 //! its three scores.
 //!
 //! **States.** A change starts in, except: one you turned off is off; one the grounding validator flagged is left out
-//! (with the flags as its reason) and one from your bank (`include`, `swap_entry`) is off while the mode experiment
-//! runs. One you turned on is in, or forced when it would be left out. Yours and forced changes are never left out by
-//! the fit check; when they run long they stay, with a warning.
+//! (with the flags as its reason). A change from your bank (`include`, `swap_entry`) starts in like any other, so an
+//! entry outside the master that fits the posting better takes the place Suggest gave it; the fit check leaves it out
+//! first when the page runs over. One you turned on is in, or forced when it would be left out. Yours and forced
+//! changes are never left out by the fit check; when they run long they stay, with a warning.
 //!
 //! **Fit, as a fit loop with one measure pass.** One measure compile lays out every in-change's new text at
 //! the width of the line it targets: a rewrite, variant, set, swap or note addition over its line's original count is
@@ -189,7 +190,6 @@ impl Slot {
             None if yours => (State::In, true),
             None => match flags.clone() {
                 Some(reason) => (State::LeftOut { reason }, false),
-                None if from_bank(&c.op) => (State::Off, false),
                 None => (State::In, false),
             },
         };
@@ -235,11 +235,6 @@ impl Slot {
         }
         self.warning.get_or_insert(reason);
     }
-}
-
-/// `include` and `swap_entry`: changes that bring in experience from outside the master.
-fn from_bank(op: &Op) -> bool {
-    matches!(op, Op::Include { .. } | Op::SwapEntry { .. })
 }
 
 /// What a change does to the lines with a budget.

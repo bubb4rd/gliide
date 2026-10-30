@@ -1,5 +1,5 @@
-//! Bank candidates (ARCHITECTURE.md §2, "Trying both methods"): the bank entries a master doesn't show, ranked by how
-//! much of the posting they state, computed in code before the Suggest call.
+//! Bank candidates (ARCHITECTURE.md §2, "Master only or the whole bank"): the bank entries a master doesn't show,
+//! ranked by how much of the posting they state, computed in code before the Suggest call.
 
 use std::collections::BTreeSet;
 

@@ -99,6 +99,7 @@ pub fn run() {
             commands::import_view,
             commands::finish_import,
             commands::discard_import,
+            commands::add_entry,
             commands::entry,
             commands::edit_entry,
             commands::set_master_options,

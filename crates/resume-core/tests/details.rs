@@ -1,5 +1,5 @@
 use resume_core::bank::{BankEntry, Note};
-use resume_core::details::{Details, DetailsError, set_details};
+use resume_core::details::{Details, DetailsError, add_entry, set_details};
 use resume_core::{Bank, Resume, migrate_v1, resolve};
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -113,4 +113,40 @@ fn a_name_and_every_line_need_text() {
         Err(DetailsError::Entry("nowhere".into()))
     );
     assert_eq!(bank, before, "a refused edit changes nothing");
+}
+
+#[test]
+fn a_new_entry_ends_its_section_in_no_master_under_an_id_of_its_own() {
+    let (mut bank, master) = jane();
+    let page = resolve(&bank, &master).unwrap();
+
+    let id = add_entry(&mut bank, "projects", "  Tidepool  ").unwrap();
+    assert_eq!(id, "tidepool-2", "the fixture's project holds `tidepool`");
+    let again = add_entry(&mut bank, "work", "Tidepool").unwrap();
+    assert_eq!(again, "tidepool-3");
+
+    let projects = bank.sections.iter().find(|s| s.id == "projects").unwrap();
+    let last = projects.entries.last().unwrap();
+    assert_eq!(
+        (last.id.as_str(), last.name.as_str()),
+        ("tidepool-2", "Tidepool")
+    );
+    assert!(last.bullets.is_empty() && last.start.is_none());
+    assert_eq!(resolve(&bank, &master).unwrap(), page, "no master shows it");
+}
+
+#[test]
+fn a_new_entry_needs_a_name_and_a_section_that_holds_entries() {
+    let (mut bank, _) = jane();
+    let before = bank.clone();
+    assert_eq!(add_entry(&mut bank, "work", " "), Err(DetailsError::Name));
+    assert_eq!(
+        add_entry(&mut bank, "skills", "Rust"),
+        Err(DetailsError::Section("skills".into()))
+    );
+    assert_eq!(
+        add_entry(&mut bank, "nowhere", "Rust"),
+        Err(DetailsError::Section("nowhere".into()))
+    );
+    assert_eq!(bank, before, "a refused entry changes nothing");
 }

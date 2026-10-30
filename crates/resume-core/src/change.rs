@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::posting::text_hash;
 
-/// Where suggestions may draw from (ARCHITECTURE.md §2, "Trying both methods").
+/// Where suggestions may draw from (ARCHITECTURE.md §2, "Master only or the whole bank").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Mode {

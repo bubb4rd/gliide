@@ -607,7 +607,10 @@
           <Card pad as="section" id="tailoring" tabindex={-1} aria-labelledby="tailoring-title">
             <div class="card">
               <h2 class="name" id="tailoring-title">Tailoring</h2>
-              <p class="lede">The model for each step, and where suggestions come from by default.</p>
+              <p class="lede">
+                The model for each step, and what suggestions draw on. Bank-aware brings in an entry from Experience
+                where it fits a posting better than one the master shows.
+              </p>
               <dl class="fields">
                 {#each MODEL_ROWS as row (row.key)}
                   <div class="field">
@@ -643,9 +646,9 @@
                   <dd>
                     <Segmented
                       options={MODES}
-                      value={s.defaultMode}
-                      label="Default suggestions from"
-                      onchange={(m) => save({ defaultMode: m })}
+                      value={s.suggestionsFrom}
+                      label="Suggestions from"
+                      onchange={(m) => save({ suggestionsFrom: m })}
                     />
                   </dd>
                 </div>

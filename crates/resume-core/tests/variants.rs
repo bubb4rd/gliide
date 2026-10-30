@@ -1,7 +1,7 @@
 use resume_core::master::Master;
 use resume_core::variants::{
-    VariantError, add_bullet, add_variant, fold_into, make_main, remove_variant, set_skills,
-    set_wording, show,
+    VariantError, add_bullet, add_variant, fold_into, make_main, remove_bullet, remove_variant,
+    restore_bullet, set_skills, set_wording, show,
 };
 use resume_core::{Bank, Resume, migrate_v1, resolve};
 
@@ -207,7 +207,7 @@ fn folding_reuses_a_wording_the_target_already_has() {
 }
 
 #[test]
-fn a_new_bullet_takes_the_next_free_id_in_no_master() {
+fn a_new_bullet_takes_the_number_after_the_highest_in_no_master() {
     let (mut bank, masters) = jane();
     let before = pages(&bank, &masters);
     let id = add_bullet(&mut bank, "acme", "  Ran the on-call rotation ").unwrap();
@@ -215,9 +215,12 @@ fn a_new_bullet_takes_the_next_free_id_in_no_master() {
     let acme = &bank.sections[0].entries[0];
     assert_eq!(acme.bullets.last().unwrap().text, "Ran the on-call rotation");
     assert_eq!(pages(&bank, &masters), before, "no master shows it");
-    // A removed bullet's number is free again, as an import numbers them.
+    // A bullet removed from the middle keeps its id unused: a story may still name it, and Undo puts it back under it.
     bank.sections[0].entries[0].bullets.retain(|b| b.id != "acme.2");
-    assert_eq!(add_bullet(&mut bank, "acme", "Mentored 2 interns").unwrap(), "acme.2");
+    assert_eq!(
+        add_bullet(&mut bank, "acme", "Mentored 2 interns").unwrap(),
+        "acme.5"
+    );
     assert_eq!(
         add_bullet(&mut bank, "acme", "Ran the on-call  rotation"),
         Err(VariantError::Duplicate)
@@ -231,6 +234,72 @@ fn a_new_bullet_takes_the_next_free_id_in_no_master() {
     assert_eq!(
         add_bullet(&mut bank, "nope", "x"),
         Err(VariantError::Entry("nope".into()))
+    );
+}
+
+#[test]
+fn removing_a_bullet_takes_it_out_of_every_master_and_restoring_puts_it_back_as_shown() {
+    let (bank, masters) = jane();
+    let ids: Vec<String> = bank.sections[0].entries[0]
+        .bullets
+        .iter()
+        .map(|b| b.id.clone())
+        .collect();
+    for (at, id) in ids.iter().enumerate() {
+        let (mut b, mut ms) = (bank.clone(), masters.clone());
+        let gone = b.sections[0].entries[0].bullets[at].clone();
+        let shown: Vec<(String, Option<usize>)> = ms
+            .iter()
+            .flat_map(|m| {
+                m.sections[0].entries[0]
+                    .bullets
+                    .iter()
+                    .filter(|x| x.id == *id)
+                    .map(|x| (m.id.clone(), x.variant))
+            })
+            .collect();
+        remove_bullet(&mut b, &mut ms, id).unwrap();
+        assert!(b.sections[0].entries[0].bullets.iter().all(|x| x.id != *id));
+        for page in texts(&b, &ms) {
+            assert!(!page.contains(&gone.text), "{id} left every master");
+            assert_eq!(
+                page.len(),
+                texts(&bank, &masters)[0].len() - 1,
+                "the other lines stay"
+            );
+        }
+
+        restore_bullet(&mut b, &mut ms, "acme", at, gone, &shown).unwrap();
+        assert_eq!(
+            (&b, &ms),
+            (&bank, &masters),
+            "{id} is back where it was, as each master showed it"
+        );
+    }
+    assert_eq!(
+        remove_bullet(&mut bank.clone(), &mut masters.clone(), "acme.9"),
+        Err(VariantError::Bullet("acme.9".into()))
+    );
+}
+
+#[test]
+fn a_restored_bullet_needs_its_id_free_and_skips_a_master_that_left_its_entry() {
+    let (mut bank, mut masters) = jane();
+    let acme1 = bank.sections[0].entries[0].bullets[0].clone();
+    let shown = [("design".to_owned(), Some(1))];
+    assert_eq!(
+        restore_bullet(&mut bank, &mut masters, "acme", 0, acme1.clone(), &shown),
+        Err(VariantError::Taken("acme.1".into()))
+    );
+
+    remove_bullet(&mut bank, &mut masters, "acme.1").unwrap();
+    masters[1].sections[0].entries.retain(|e| e.id != "acme");
+    let design = masters[1].clone();
+    restore_bullet(&mut bank, &mut masters, "acme", 0, acme1, &shown).unwrap();
+    assert_eq!(bank.sections[0].entries[0].bullets[0].id, "acme.1");
+    assert_eq!(
+        masters[1], design,
+        "a master that no longer shows the entry stays as it is"
     );
 }
 

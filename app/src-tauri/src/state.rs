@@ -394,7 +394,7 @@ fn default_settings() -> Settings {
     Settings {
         theme: Theme::Light,
         backdrop: Backdrop::None,
-        default_mode: Mode::MasterOnly,
+        suggestions_from: Mode::BankAware,
         extract_model: DEFAULT_EXTRACT_MODEL.to_owned(),
         suggest_model: DEFAULT_SUGGEST_MODEL.to_owned(),
         export_dir: home.join("Documents/Resumes").display().to_string(),
@@ -410,15 +410,6 @@ impl From<Mode> for resume_core::change::Mode {
         match m {
             Mode::MasterOnly => Self::MasterOnly,
             Mode::BankAware => Self::BankAware,
-        }
-    }
-}
-
-impl From<resume_core::change::Mode> for Mode {
-    fn from(m: resume_core::change::Mode) -> Self {
-        match m {
-            resume_core::change::Mode::MasterOnly => Self::MasterOnly,
-            resume_core::change::Mode::BankAware => Self::BankAware,
         }
     }
 }

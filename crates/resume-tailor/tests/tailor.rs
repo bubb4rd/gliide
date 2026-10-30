@@ -119,7 +119,7 @@ fn line_edits_keep_their_line_budget() {
 }
 
 #[test]
-fn validator_flags_leave_out_and_bank_changes_start_off() {
+fn validator_flags_leave_out_and_bank_changes_start_in() {
     let (bank, mut master) = fixture();
     master.sections.retain(|s| s.id != "projects");
     let flagged = Change {
@@ -152,18 +152,23 @@ fn validator_flags_leave_out_and_bank_changes_start_off() {
         t.states
     );
     assert_eq!(t.states[&changes[1].key], State::Forced { warning: None });
-    assert_eq!(t.states[&changes[2].key], State::Off);
+    // An entry from your bank that Suggest brought in is on the page until you turn it off.
+    assert_eq!(t.states[&changes[2].key], State::In);
+    assert!(resume_core::resume_text(&t.resume).contains("Tidepool"));
     // The ceiling takes every unflagged change, bank ones included.
     assert!(matches!(
         t.ceiling_states[&changes[0].key],
         State::LeftOut { .. }
     ));
     assert_eq!(t.ceiling_states[&changes[2].key], State::In);
-    assert!(!resume_core::resume_text(&t.resume).contains("Tidepool"));
 
-    let t = run(&bank, &master, &changes, &on(&[&changes[2]]));
-    assert_eq!(t.states[&changes[2].key], State::In);
-    assert!(resume_core::resume_text(&t.resume).contains("Tidepool"));
+    let off = Draft {
+        decisions: [(changes[2].key.clone(), Decision::Off)].into(),
+        ..Draft::default()
+    };
+    let t = run(&bank, &master, &changes, &off);
+    assert_eq!(t.states[&changes[2].key], State::Off);
+    assert!(!resume_core::resume_text(&t.resume).contains("Tidepool"));
 }
 
 #[test]

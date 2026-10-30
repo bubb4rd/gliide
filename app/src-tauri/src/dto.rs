@@ -46,13 +46,13 @@ pub enum Theme {
     System,
 }
 
-/// `master-only` or `bank-aware`, as `resume_core::change::Mode` serializes.
+/// `master-only` or `bank-aware`, as `resume_core::change::Mode` serializes; bank-aware unless you choose otherwise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "kebab-case")]
 #[ts(export)]
 pub enum Mode {
-    #[default]
     MasterOnly,
+    #[default]
     BankAware,
 }
 
@@ -76,7 +76,10 @@ pub struct Settings {
     /// Settings saved before backdrops existed have none.
     #[serde(default)]
     pub backdrop: Backdrop,
-    pub default_mode: Mode,
+    /// What every review's suggestions draw on: the master alone, or the bank entries outside it too. Settings saved
+    /// while master-only was the default (as `defaultMode`) load bank-aware.
+    #[serde(default)]
+    pub suggestions_from: Mode,
     /// A `claude --model` alias or name; `sonnet` by default.
     pub extract_model: String,
     pub suggest_model: String,
@@ -460,7 +463,8 @@ pub struct MasterRef {
     pub title: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+/// A bullet as the editor shows it; sent back whole to put a removed one back (`restore-bullet`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct BulletView {
@@ -471,7 +475,7 @@ pub struct BulletView {
     pub skills: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct WordingView {
@@ -531,6 +535,16 @@ pub enum EntryEdit {
     /// A new bullet at the entry's end, in no master yet.
     AddBullet {
         text: String,
+    },
+    /// The bullet, every wording, leaves the bank and every master that shows it.
+    RemoveBullet {
+        bullet: String,
+    },
+    /// A removed bullet put back as the editor showed it (Undo): at `at` among the entry's bullets, under its id, in
+    /// the masters that showed it with the wording each showed.
+    RestoreBullet {
+        bullet: BulletView,
+        at: u32,
     },
     /// The skills you say a bullet demonstrates, whole.
     SetSkills {
@@ -660,7 +674,6 @@ pub struct ReviewView {
     pub model: String,
     pub master: MasterChoice,
     pub masters: Vec<MasterChoice>,
-    pub mode: Mode,
     pub now: ScoreView,
     pub projected: ScoreView,
     pub ceiling: ScoreView,
@@ -1918,7 +1931,7 @@ pub enum Stage {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backdrop, Settings};
+    use super::{Backdrop, Mode, Settings};
 
     const SAVED_BEFORE: &str = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"sonnet",
         "suggestModel":"sonnet","exportDir":"/tmp","claudePath":null}"#;
@@ -1933,5 +1946,17 @@ mod tests {
     fn settings_saved_before_setup_existed_skip_it() {
         let settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
         assert!(settings.onboarded);
+    }
+
+    #[test]
+    fn settings_saved_with_the_old_master_only_default_draw_on_the_bank() {
+        let settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
+        assert_eq!(settings.suggestions_from, Mode::BankAware);
+        let chosen: Settings = serde_json::from_str(&SAVED_BEFORE.replace(
+            r#""defaultMode":"master-only""#,
+            r#""suggestionsFrom":"master-only""#,
+        ))
+        .unwrap();
+        assert_eq!(chosen.suggestions_from, Mode::MasterOnly);
     }
 }

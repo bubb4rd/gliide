@@ -8,7 +8,12 @@ export type Settings = { theme: Theme,
 /**
  * Settings saved before backdrops existed have none.
  */
-backdrop: Backdrop, defaultMode: Mode, 
+backdrop: Backdrop, 
+/**
+ * What every review's suggestions draw on: the master alone, or the bank entries outside it too. Settings saved
+ * while master-only was the default (as `defaultMode`) load bank-aware.
+ */
+suggestionsFrom: Mode, 
 /**
  * A `claude --model` alias or name; `sonnet` by default.
  */

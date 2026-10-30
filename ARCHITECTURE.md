@@ -239,6 +239,20 @@ track is a variant, and the master picks it. An entry's details (`resume_core::d
 and the labeled lines under it) are edited the same way, in the entry editor: masters hold none of them, so every
 master that shows the entry prints the new ones. New dates are read again into `start` and `end`.
 
+**New entries** (`resume_core::details::add_entry`) come from Experience: a section of entries (not skills or the
+summary) adds one by its name, at the section's end, under an id slugged from the name that no entry holds
+(`Tidepool` → `tidepool-2` when `tidepool` is taken). It joins no master, so no resume shows it as written; its
+details and bullets are filled in its editor (a new bullet joins its entry in no master, numbered one past the
+highest its entry holds). Bank-aware suggestions bring it in where it fits a posting better than what the master
+shows.
+
+**Removing a bullet** (`resume_core::variants::remove_bullet`, the entry editor's text row) takes it, every wording,
+out of the bank and out of every master that shows it; the masters' other lines stay. Undo
+(`restore_bullet`) puts it back at its place in the entry under its own id, and in each master that still shows the
+entry with the wording it showed, before the first bullet it shows that comes after it; it's refused once another
+bullet holds the id. A story that drew on it keeps the id and reads "Bullet removed" until then; since new bullets
+number past the highest, one removed from the middle never lends its id to another.
+
 **Variants** (`resume_core::variants`) come from two places: the entry editor (Experience bank → an entry: add,
 edit, remove a variant, make one the bullet's text, fold a reworded duplicate bullet into another of its entry, choose
 which wording each master shows) and the review (**Save as variant** keeps a rewrite or your wording of a bullet; not
@@ -248,28 +262,31 @@ the text where it was shown; making a variant the text swaps the indexes; foldin
 and is refused when a master shows both bullets. Suggest already sees variants as `(variant N)` lines and prefers them
 over new words; the grounding validator counts them as the bullet's own facts.
 
-### Trying both methods
+### Master only or the whole bank
 
-The bank model holds both methods, so the app can switch between them without a second data model:
+The bank model holds both methods, so the app switches between them without a second data model:
 
 | Mode | Suggest sees | Can propose |
 |---|---|---|
 | **Master only** | The resolved master | Rewrites, skills, swaps, cuts within it |
-| **Bank-aware** | The master, plus up to 5 bank entries outside it, ranked by requirement-term overlap (computed in code, before the call) | All of the above, plus: include an entry or bullet from the bank, swap one entry for another |
+| **Bank-aware** (default) | The master, plus up to 5 bank entries outside it, ranked by requirement-term overlap (computed in code, before the call) | All of the above, plus: include an entry or bullet from the bank, swap one entry for another |
 
-Bank suggestions are listed in their own group, **From your bank**, each with its points and the line cost, and are
-off by default until the experiment says otherwise.
+**Decided: bank-aware.** Entries you keep outside your masters (added in Experience, or brought by an import) are
+there to be used where they fit: an entry that backs a posting better than one the master shows takes its place.
+Bank suggestions are listed in their own group, **From your bank**, each with its points and the line cost, and start
+in like every other suggestion; the fit check leaves them out first when the page runs over. Master only stays as a
+setting (Settings → Tailoring → Suggestions from, `suggestionsFrom`), and every review follows it, the jobs you
+already have included: a review whose mode changed runs Suggest again and carries your draft over from that master's
+last review. Settings saved while master-only was the experiment's default (as `defaultMode`) load bank-aware.
 
-Measured on fixture postings and your real applications (logged per application):
+What the experiment measured, still logged per application:
 
 | Metric | Question |
 |---|---|
 | Ceiling, bank-aware minus master-only | Does the bank find points the master can't? |
-| Share of bank suggestions you accept | Are they relevant or noise? |
+| Share of bank suggestions you keep | Are they relevant or noise? |
 | Suggest latency and prompt size, each mode | What does it cost? |
 | Fit-loop drops caused by bank additions | Do they crowd out better changes on one page? |
-
-After about 25 applications, keep the mode that wins as the default and the other as a toggle.
 
 ### Everything else
 
@@ -556,7 +573,7 @@ produces the tailored JSON. All three are pure functions in `resume-core`.
 stateDiagram-v2
   [*] --> In
   [*] --> LeftOut: validator or word swap flags it
-  [*] --> Off: bank suggestion (while the experiment runs)
+  [*] --> Off: you turned it off before
   In --> LeftOut: fit check (over its lines, Skills line wraps, over page limit)
   In --> Off: you turn it off
   Off --> In: you turn it on
@@ -813,12 +830,12 @@ composed Review screen.
 
 | Screen | Content |
 |---|---|
-| Bank | Every entry, filterable by tag and section; which masters show each; editor with the entry's details (name, subtitle, place, dates, lines under it), then variants and skills per bullet |
+| Bank | Every entry, filterable by tag and section; which masters show each; a new entry per section, in no master; editor with the entry's details (name, subtitle, place, dates, lines under it), then variants and skills per bullet, and new bullets |
 | Masters | Cards (track, template thumbnail, last edited); a master's editor is checkboxes and drag-to-order over the bank, with live preview |
 | Job | Posting input; requirements as chips; master picker with each master's score; score header |
 | Review | Score header; changes grouped by section, then **From your bank**; then **Other lines**: every master line no change touches, each with Edit and Rewrite with a note (either makes it your edit); live preview beside them |
 | Applications | Table with status, scores, files, posting link; CSV export. Statuses set many at once (checked rows, one `set_status` call: all or none, one CSV rewrite, Undo); an export starts as Saved, and the job's **Mark applied** moves it to Applied |
-| Settings | Agents found, signed in or not, model per call; mode (master only / bank-aware); export folder; default template |
+| Settings | Agents found, signed in or not, model per call; suggestions from (master only / bank-aware, the default); export folder; default template |
 
 **Score header:** `Now 53%` → `Projected 78%` (large, live) with `Ceiling 85%` beside it; a bar showing now, the gain
 from your selections, and the headroom left; components on hover.
@@ -893,7 +910,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (a junior SWE posting, now `northwind-jr-swe`: 74.2 → 84.2); a bank with roles outside the master is needed to settle the mode experiment |
 | M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv`, agent settings; `resume-store` (SQLite), `resume-pipeline` | Done. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` gave identical scores, states and points on the recorded outputs of the time |
-| M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; second template (design track), the mode experiment's report | Decision on the default mode |
+| M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; new entries and bullets in Experience, in no master ✓; the default mode ✓ (bank-aware, bank suggestions in); second template (design track) | Decision on the default mode ✓ |
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (`prompts/cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Cover letters and application tracking |
 | M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search (opt-in), the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: a live pull checks jobs within the daily cap, per-place copies folded; a five-board watchlist pull kept 84 of 693 jobs, every board's first job read from its API |
 | M6.7 Interviews | The interviewer: you prepare for and practice a job's interviews, and gliide asks about your experience to deepen the bank. Data ✓ (facts per bank entry as sources for every model call and the validator; each application's status changes with their time; the resume as exported); the review's "Do you have Bash experience?" kept as a fact (**Yes, at…**) and the entry editor's Facts ✓; rounds ✓ (saving one moves a Saved or Applied application to Interviewing, Offer or Rejected cancels the upcoming ones, a pasted invite read by one call or an `.ics` parsed, the resume as sent rendered again) and the job's Interview tab ✓ (its rounds over the resume you sent; the next round in Up next, Recent and Applications' Next column); prep and typed practice ✓ (a round's prep by one call, kept until what it was written from changes; an answer read back without a grade, its new claims kept as facts); nudges while you answer ✓ (one call, not kept: where to start, what to add, what you could say with `…` for your words); Dig and stories ✓ (an entry's questions by one call, kept until the entry changes; your answers' facts kept at once and additions proposed by another; stories as their own record, linked from prep's questions, offered from practice and Dig, told alone); debriefs ✓ (what they asked, what you got stuck on and notes saved with no call; one call reads it for Dig questions on the entries it touches and notes for the next prep, which reads the earlier rounds' debriefs; a debrief due for 14 days after a round ends, and each application's latest activity); opt-in notifications ✓ (UserNotifications banners the day before a round, an hour before and an hour after it ends without a debrief, each once, fired by the app while it runs; a click opens the job); spoken practice, then a live interviewer | A practiced round's prep, practice and debrief, grounded in the bank like a tailored resume |
@@ -906,7 +923,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 |---|---|
 | UI stack | **Decided:** Tauri 2 + Svelte over a Rust core |
 | Model access on desktop | **Decided:** your own agents: `claude -p` first; ACP (Codex, Gemini CLI, registry) added after core features work; no API keys |
-| Bank-aware vs master-only suggestions | **Experiment** in M3–M5 on one data model; default chosen from the metrics |
+| Bank-aware vs master-only suggestions | **Decided:** bank-aware by default, bank suggestions in like the rest; master only a setting |
 | Sync | **Not yet** |
 | Company logo source | **Decided:** first party (posting pages, the company's own site); logo.dev if coverage needs a third party |
 | Job feed source | **Decided:** freehire's public API (no account), LinkedIn's guest search (opt-in, off by default), a watchlist of company boards polled directly, and Fantastic.jobs through your Apify token (paid per job, once a day); nothing written back |
@@ -924,7 +941,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | Users must install and sign in to a CLI (and Node for adapters) | Settings detects agents and links the install and sign-in steps |
 | The score is mistaken for a real ATS's | Label it as literal-match coverage; show components; read back from the PDF |
 | Model wording claims more than the bank | Validator, sources per rewrite, your variants preferred, everything reviewable before export |
-| Bank suggestions add noise or crowd the page | Off by default, own group, measured in the experiment |
+| Bank suggestions add noise or crowd the page | Own group, each a toggle; candidates only when they state the posting's terms; the fit check leaves them out first |
 | Job boards block fetching or change markup | Board APIs and JSON-LD first; paste always works; parser fixtures per board |
 | A source changes, slows, rate-limits or blocks (LinkedIn's guest search answers 429 after heavy use) | Sources are independent: one failing is named in the status and the others still count; a pull is a few calls each; LinkedIn is asked at most hourly and backed off after a 429; pasting a link always works |
 | Font metrics differ across platforms | Bundled fonts only; no system font fallback in templates |
