@@ -13,7 +13,7 @@ export type Instructed = { review: ReviewView,
  */
 reply: string, 
 /**
- * The model id that served this call, else the `claude --model` alias or name it asked for.
+ * The model id that served this call, else the `--model` alias or name it asked for.
  */
 model: string, proposals: Array<Proposal>, 
 /**

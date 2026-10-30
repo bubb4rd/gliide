@@ -28,7 +28,7 @@
   import X from "@lucide/svelte/icons/x";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { appError, editTargets, type EditTargets, type SalaryRange } from "$lib/api";
-  import { modelName } from "$lib/models";
+  import { makerIcon } from "$lib/agents";
   import { app } from "$lib/stores/app.svelte";
   import { Button, CompanyMark, Icon, type KeyCommand, Menu, Thinking, tip, toast } from "$lib/ui";
   import ChatJob from "./ChatJob.svelte";
@@ -135,8 +135,7 @@
   const KINDS = { bullet: "New bullet", skill: "Skill", line: "Line", summary: "Summary" } as const;
   const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   /** Who answered: the model the plan was made with, a turn's own (older turns didn't keep it: the review's). */
-  const planModel = $derived(app.modelName(review.model));
-  const turnModel = (t: Turn) => (t.model ? modelName(t.model) : planModel);
+  const turnModel = (t: Turn) => t.model || review.model;
 
   // ── Where the page stands (the newest turn's foot) ──
   const keywords = $derived(keywordsOf(review));
@@ -363,8 +362,8 @@
 
       <div class="turns">
         {#key s.arrival}
-          <article class={["agent", s.arrival !== firstArrival && "enter"]} aria-label={planModel}>
-            {@render identity(planModel)}
+          <article class={["agent", s.arrival !== firstArrival && "enter"]} aria-label={app.modelName(review.model)}>
+            {@render identity(review.model)}
             {#if review.headline}<p class="prose">{review.headline}</p>{/if}
             {#if plan.length}
               <PlanCard {s} {review} items={plan} {ready} />
@@ -447,7 +446,7 @@
           {/if}
 
           {#if turn.status !== "running"}
-            <article class={["agent", live && "enter"]} aria-label={turnModel(turn)}>
+            <article class={["agent", live && "enter"]} aria-label={app.modelName(turnModel(turn))}>
               {@render identity(turnModel(turn), time(turn.at + turn.ms), turn)}
               {#if confirming === turn.id}
                 {@const note = rewindNote(turn)}
@@ -622,9 +621,12 @@
   </div>
 </div>
 
+<!-- `model`: the id, alias or name asked or served; shown with its maker's icon (else the agent's) and by name. -->
 {#snippet identity(model: string, at?: string, turn?: Turn)}
   <div class="who">
-    <CompanyMark size={20} src="/agents/claude.png" /><span class="who__name">{model}</span>{#if at}<span
+    <CompanyMark size={20} src={makerIcon(model) ?? app.agentInfo.icon} /><span class="who__name"
+      >{app.modelName(model)}</span
+    >{#if at}<span
         class="meta num">{at}</span
       >{/if}
     <span class="acts">

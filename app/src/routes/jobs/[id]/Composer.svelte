@@ -69,8 +69,11 @@
     field?.focus();
   }
 
-  /** The model an ask goes to, by name; the agent's problem, if any, in its tooltip (its state is the sidebar's). */
-  const model = $derived(app.modelName(app.settings?.suggestModel ?? review.model));
+  /** The model an ask goes to (the agent in use's), by name; the agent's problem, if any, in its tooltip (its state is
+   *  the sidebar's). */
+  const model = $derived(
+    app.modelName((app.settings && app.settings.agents[app.settings.agent].suggestModel) ?? review.model),
+  );
 
   // ── The menu: `@` parts, `"` lines, or `/` quick asks ──
   interface Option {
@@ -353,7 +356,7 @@
 <div class="composer">
   {#if busy}
     <div class="thinking">
-      <CompanyMark size={16} src="/agents/claude.png" />
+      <CompanyMark size={16} src={app.agentInfo.icon} />
       <div class="thinking__stage">
         <Thinking
           label="Working on your request…"
@@ -430,7 +433,7 @@
         onclick={() => insert("/")}
       />
       <span class="agent" {@attach tip(app.agent?.problem)}>
-        <CompanyMark size={16} src="/agents/claude.png" />
+        <CompanyMark size={16} src={app.agentInfo.icon} />
         <span class="agent__name">{model}</span>
       </span>
       <span class="tools__end">

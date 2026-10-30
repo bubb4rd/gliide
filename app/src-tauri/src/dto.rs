@@ -23,7 +23,7 @@ pub struct AppError {
 pub enum ErrorKind {
     /// You cancelled it.
     Cancelled,
-    /// `claude` missing, signed out, timed out, or its output failed the schema.
+    /// The agent missing, signed out, timed out, or its output failed the schema.
     Agent,
     /// The posting couldn't be read (blocked site, empty page…).
     Ingest,
@@ -68,36 +68,193 @@ pub enum Backdrop {
     Sakura,
 }
 
+/// An agent CLI gliide runs (`resume_llm::AgentKind`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Agent {
+    #[default]
+    Claude,
+    Codex,
+    Antigravity,
+}
+
+impl From<Agent> for resume_llm::AgentKind {
+    fn from(a: Agent) -> Self {
+        match a {
+            Agent::Claude => Self::Claude,
+            Agent::Codex => Self::Codex,
+            Agent::Antigravity => Self::Antigravity,
+        }
+    }
+}
+
+impl From<resume_llm::AgentKind> for Agent {
+    fn from(a: resume_llm::AgentKind) -> Self {
+        match a {
+            resume_llm::AgentKind::Claude => Self::Claude,
+            resume_llm::AgentKind::Codex => Self::Codex,
+            resume_llm::AgentKind::Antigravity => Self::Antigravity,
+        }
+    }
+}
+
+/// One agent's own settings, kept while another runs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AgentSettings {
+    /// The binary; `None` finds it (`resume_llm::AgentKind::find`).
+    pub path: Option<String>,
+    /// A `--model` alias, slug or name for reading postings and resumes; the agent's default to begin with.
+    pub extract_model: String,
+    /// The same, for every other call.
+    pub suggest_model: String,
+}
+
+impl AgentSettings {
+    pub fn new(agent: Agent) -> Self {
+        let model = resume_llm::AgentKind::from(agent).default_model();
+        Self {
+            path: None,
+            extract_model: model.to_owned(),
+            suggest_model: model.to_owned(),
+        }
+    }
+}
+
+/// Each agent's settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AgentsSettings {
+    pub claude: AgentSettings,
+    #[serde(default = "codex")]
+    pub codex: AgentSettings,
+    #[serde(default = "antigravity")]
+    pub antigravity: AgentSettings,
+}
+
+fn codex() -> AgentSettings {
+    AgentSettings::new(Agent::Codex)
+}
+
+fn antigravity() -> AgentSettings {
+    AgentSettings::new(Agent::Antigravity)
+}
+
+impl Default for AgentsSettings {
+    fn default() -> Self {
+        Self {
+            claude: AgentSettings::new(Agent::Claude),
+            codex: codex(),
+            antigravity: antigravity(),
+        }
+    }
+}
+
+impl AgentsSettings {
+    pub fn get(&self, agent: Agent) -> &AgentSettings {
+        match agent {
+            Agent::Claude => &self.claude,
+            Agent::Codex => &self.codex,
+            Agent::Antigravity => &self.antigravity,
+        }
+    }
+
+    pub fn get_mut(&mut self, agent: Agent) -> &mut AgentSettings {
+        match agent {
+            Agent::Claude => &mut self.claude,
+            Agent::Codex => &mut self.codex,
+            Agent::Antigravity => &mut self.antigravity,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Settings {
     pub theme: Theme,
-    /// Settings saved before backdrops existed have none.
-    #[serde(default)]
     pub backdrop: Backdrop,
-    /// What every review's suggestions draw on: the master alone, or the bank entries outside it too. Settings saved
-    /// while master-only was the default (as `defaultMode`) load bank-aware.
-    #[serde(default)]
+    /// What every review's suggestions draw on: the master alone, or the bank entries outside it too.
     pub suggestions_from: Mode,
-    /// A `claude --model` alias or name; `sonnet` by default.
-    pub extract_model: String,
-    pub suggest_model: String,
+    /// The agent every model call runs on; Claude Code until you connect another.
+    pub agent: Agent,
+    /// Each agent's path and models.
+    pub agents: AgentsSettings,
     /// Absolute folder for exported PDFs and `applications.csv`; `~/Documents/Resumes` by default.
     pub export_dir: String,
-    /// The `claude` binary; `None` finds it (`resume_llm::find_claude`).
-    pub claude_path: Option<String>,
-    /// The first-run setup (`/welcome`) is done or skipped. Settings saved before it existed belong to someone
-    /// already using the app, so they load as done; a new install starts without it.
-    #[serde(default = "set_up")]
+    /// The first-run setup (`/welcome`) is done or skipped.
     pub onboarded: bool,
-    /// Look for a newer release at launch and once a day (release builds; Settings → About). On unless turned off,
-    /// for settings saved before it existed too.
-    #[serde(default = "checks_updates")]
+    /// Look for a newer release at launch and once a day (release builds; Settings → About).
     pub check_updates: bool,
+    pub notifications: Notifications,
+}
+
+impl Settings {
+    /// The settings of the agent calls run on.
+    pub fn current(&self) -> &AgentSettings {
+        self.agents.get(self.agent)
+    }
+}
+
+/// Settings as stored, from any version: what older ones lack takes its default, and Claude Code's models and path,
+/// stored at the top before there were other agents, move to `agents.claude`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredSettings {
+    theme: Theme,
+    /// Settings saved before backdrops existed have none.
+    #[serde(default)]
+    backdrop: Backdrop,
+    /// Settings saved while master-only was the default (as `defaultMode`) load bank-aware.
+    #[serde(default)]
+    suggestions_from: Mode,
+    #[serde(default)]
+    agent: Agent,
+    agents: Option<AgentsSettings>,
+    extract_model: Option<String>,
+    suggest_model: Option<String>,
+    claude_path: Option<String>,
+    export_dir: String,
+    /// Settings saved before the setup existed belong to someone already using the app, so they load as done.
+    #[serde(default = "set_up")]
+    onboarded: bool,
+    /// On unless turned off, for settings saved before it existed too.
+    #[serde(default = "checks_updates")]
+    check_updates: bool,
     /// Settings saved before notifications existed have them all off.
     #[serde(default)]
-    pub notifications: Notifications,
+    notifications: Notifications,
+}
+
+impl<'de> Deserialize<'de> for Settings {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = StoredSettings::deserialize(d)?;
+        let agents = s.agents.unwrap_or_else(|| {
+            let mut agents = AgentsSettings::default();
+            let claude = &mut agents.claude;
+            claude.path = s.claude_path;
+            if let Some(m) = s.extract_model {
+                claude.extract_model = m;
+            }
+            if let Some(m) = s.suggest_model {
+                claude.suggest_model = m;
+            }
+            agents
+        });
+        Ok(Self {
+            theme: s.theme,
+            backdrop: s.backdrop,
+            suggestions_from: s.suggestions_from,
+            agent: s.agent,
+            agents,
+            export_dir: s.export_dir,
+            onboarded: s.onboarded,
+            check_updates: s.check_updates,
+            notifications: s.notifications,
+        })
+    }
 }
 
 fn set_up() -> bool {
@@ -130,21 +287,33 @@ pub enum StartupKind {
     Unreadable,
 }
 
-/// What Settings and the sidebar show about `claude`: found (`claude --version`) and signed in
-/// (`claude auth status`'s `loggedIn`). The app reads no credential.
+/// What Settings and the sidebar show about an agent: found (`--version`), signed in (`claude auth status`'s
+/// `loggedIn`, `codex login status`, `agy models` answering), and the models it offers. The app reads no credential.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AgentStatus {
+    pub agent: Agent,
     pub found: bool,
     pub path: Option<String>,
     pub version: Option<String>,
     /// `None` when it couldn't be checked.
     pub signed_in: Option<bool>,
-    /// `claude.ai` login, `pro`/`max` plan…, for the badge: `"Claude Code · Pro"`.
+    /// The plan or sign-in, for the badge: Claude Code's `Pro`/`Max`…, Codex's `ChatGPT` or `API key`.
     pub plan: Option<String>,
     /// Why it isn't usable, and what to do: "Run `claude` in Terminal and sign in".
     pub problem: Option<String>,
+    /// The models its menus offer: Claude Code's aliases; the ones Codex and Antigravity list (empty when they
+    /// couldn't be read).
+    pub models: Vec<ModelOption>,
+}
+
+/// A model an agent offers: what `--model` takes, and its name.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ModelOption {
+    pub id: String,
+    pub name: String,
 }
 
 /// Where updating is: nothing running, checking, or downloading and installing the newer release.
@@ -670,7 +839,7 @@ pub struct ReviewView {
     pub verdict: Verdict,
     /// Suggest's one line.
     pub headline: String,
-    /// The `claude --model` alias or name the suggestions were made with (`models` maps it to the id that served it).
+    /// The `--model` alias or name the suggestions were made with (`models` maps it to the id that served it).
     pub model: String,
     pub master: MasterChoice,
     pub masters: Vec<MasterChoice>,
@@ -913,7 +1082,7 @@ pub struct Instructed {
     pub review: ReviewView,
     /// 1–2 sentences on what it did.
     pub reply: String,
-    /// The model id that served this call, else the `claude --model` alias or name it asked for.
+    /// The model id that served this call, else the `--model` alias or name it asked for.
     pub model: String,
     pub proposals: Vec<Proposal>,
     /// Parts of the instruction it couldn't do honestly, and edits that couldn't be placed.
@@ -1931,10 +2100,10 @@ pub enum Stage {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backdrop, Mode, Settings};
+    use super::{Agent, Backdrop, Mode, Settings};
 
-    const SAVED_BEFORE: &str = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"sonnet",
-        "suggestModel":"sonnet","exportDir":"/tmp","claudePath":null}"#;
+    const SAVED_BEFORE: &str = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"haiku",
+        "suggestModel":"opus","exportDir":"/tmp","claudePath":"/opt/claude"}"#;
 
     #[test]
     fn settings_saved_before_backdrops_load_with_none() {
@@ -1958,5 +2127,33 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(chosen.suggestions_from, Mode::MasterOnly);
+    }
+
+    #[test]
+    fn settings_saved_before_other_agents_keep_claudes_models_and_path() {
+        let settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
+        assert_eq!(settings.agent, Agent::Claude);
+        let claude = settings.current();
+        assert_eq!(claude.path.as_deref(), Some("/opt/claude"));
+        assert_eq!(
+            (claude.extract_model.as_str(), claude.suggest_model.as_str()),
+            ("haiku", "opus")
+        );
+        let codex = &settings.agents.codex;
+        assert_eq!(codex.path, None);
+        assert_eq!(
+            codex.extract_model,
+            resume_llm::AgentKind::Codex.default_model()
+        );
+    }
+
+    #[test]
+    fn settings_round_trip() {
+        let mut settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
+        settings.agent = Agent::Antigravity;
+        settings.agents.antigravity.suggest_model = "gemini-test".to_owned();
+        let again: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(again, settings);
     }
 }

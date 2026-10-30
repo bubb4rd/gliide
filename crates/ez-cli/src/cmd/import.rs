@@ -4,11 +4,11 @@ use std::time::Instant;
 
 use resume_core::import::{Choices, master_id, merge, plan};
 use resume_core::{Bank, Master, Resume};
-use resume_llm::ClaudeCli;
-use resume_llm::import::{self, DEFAULT_IMPORT_MODEL, Link};
+use resume_llm::import::{self, Link};
+use resume_llm::{Agent, AgentKind};
 use resume_pipeline::{ResumeSource, read_resume};
 
-use super::job::runtime;
+use super::job::{AgentArg, runtime};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -28,8 +28,12 @@ pub struct Args {
     /// Add the file's contact items the bank lacks.
     #[arg(long)]
     contact: bool,
-    #[arg(long, default_value = DEFAULT_IMPORT_MODEL)]
-    model: String,
+    /// The agent CLI the model call runs on.
+    #[arg(long, value_enum, default_value = "claude")]
+    agent: AgentArg,
+    /// Model for Import; the agent's default unless given.
+    #[arg(long)]
+    model: Option<String>,
     /// Folder for imported.json (the model's copy of the file), bank.json and masters/<id>.json.
     #[arg(long)]
     out: PathBuf,
@@ -48,16 +52,18 @@ pub fn run(args: Args) -> anyhow::Result<()> {
                 })
                 .collect();
             let start = Instant::now();
+            let agent = AgentKind::from(args.agent);
+            let model = args.model.as_deref().unwrap_or(agent.default_model());
             let r: Resume = runtime()?.block_on(async {
-                let llm = ClaudeCli::discover().await?;
+                let llm = Agent::discover(agent).await?;
                 eprintln!(
-                    "import: claude -p --model {} ({} chars, {} links) …",
-                    args.model,
+                    "import: {} --model {model} ({} chars, {} links) …",
+                    agent.bin(),
                     f.text.len(),
                     links.len()
                 );
                 let (r, _) =
-                    import::import(&llm, &import::schema(), &f.text, &links, &args.model).await?;
+                    import::import(&llm, &import::schema(), &f.text, &links, model).await?;
                 anyhow::Ok(r)
             })?;
             eprintln!("import: {:.1} s", start.elapsed().as_secs_f64());

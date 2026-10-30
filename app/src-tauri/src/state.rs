@@ -13,16 +13,15 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use resume_core::{Bank, Master, PageFacts, Resume, resolve};
-use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
-use resume_llm::suggest::DEFAULT_SUGGEST_MODEL;
-use resume_llm::{ClaudeCli, LlmError, Structured};
+use resume_llm::{Agent, AgentKind, LlmError, Structured};
 use resume_render::{FontOptions, Renderer};
 use resume_store::{Rev, Store, StoreError};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
 
 use crate::dto::{
-    Backdrop, FeedStatus, Mode, Notifications, Progress, Settings, Stage, StartupKind, StartupProblem, Theme,
+    AgentsSettings, Backdrop, FeedStatus, Mode, Notifications, Progress, Settings, Stage, StartupKind,
+    StartupProblem, Theme,
 };
 use crate::error::{AppError, Result};
 use crate::export;
@@ -259,12 +258,13 @@ impl App {
         Ok(Some(Library { bank, masters }))
     }
 
-    /// The `claude` the settings name, else the one found.
-    pub async fn claude(&self) -> Result<ClaudeCli> {
-        let path = self.settings().claude_path;
-        match path.filter(|p| !p.trim().is_empty()) {
-            Some(p) => Ok(ClaudeCli::new(p)),
-            None => Ok(ClaudeCli::discover().await?),
+    /// The agent the settings run: at the path they name, else the one found.
+    pub async fn agent(&self) -> Result<Agent> {
+        let s = self.settings();
+        let kind = AgentKind::from(s.agent);
+        match s.current().path.clone().filter(|p| !p.trim().is_empty()) {
+            Some(p) => Ok(Agent::new(kind, p)),
+            None => Ok(Agent::discover(kind).await?),
         }
     }
 
@@ -311,7 +311,8 @@ fn running(calls: &HashMap<String, Call>) -> Vec<Progress> {
 }
 
 /// Runs `call` (a model call) as a task registered under `job`, telling the UI when it starts and ends: `cancel(job)`
-/// aborts it, which drops the `claude` child and kills it. A newer call for the same job supersedes a running one.
+/// aborts it, which drops the agent's child process and kills it. A newer call for the same job supersedes a running
+/// one.
 pub async fn model_call<T: Send + 'static>(
     app: &Arc<App>,
     job: &str,
@@ -395,10 +396,9 @@ fn default_settings() -> Settings {
         theme: Theme::Light,
         backdrop: Backdrop::None,
         suggestions_from: Mode::BankAware,
-        extract_model: DEFAULT_EXTRACT_MODEL.to_owned(),
-        suggest_model: DEFAULT_SUGGEST_MODEL.to_owned(),
+        agent: crate::dto::Agent::Claude,
+        agents: AgentsSettings::default(),
         export_dir: home.join("Documents/Resumes").display().to_string(),
-        claude_path: None,
         onboarded: false,
         notifications: Notifications::default(),
         check_updates: true,

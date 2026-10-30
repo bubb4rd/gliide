@@ -125,7 +125,8 @@
     shell.bare = bare;
   });
 
-  /** Claude Code as the account you're signed in to: its icon with a presence dot, its state (and plan) under it. */
+  /** The agent model calls run on (`app.agentInfo`), as the account you're signed in to: its icon with a presence dot,
+   *  its name, its state (and plan) under it. */
   const agentLine = $derived.by(() => {
     const a = app.agent;
     if (!a) return { tone: "neutral", sub: "Not checked" } as const;
@@ -220,8 +221,8 @@
           <NavItem href="/settings#about" icon={CircleArrowDown} sub={updateLine}>Update available</NavItem>
         {/if}
         <NavItem href="/settings" sub={agentLine.sub} {@attach tip(app.agent?.problem)}>
-          {#snippet lead()}<AgentMark src="/agents/claude.png" tone={agentLine.tone} />{/snippet}
-          Claude Code
+          {#snippet lead()}<AgentMark src={app.agentInfo.icon} tone={agentLine.tone} />{/snippet}
+          {app.agentInfo.name}
         </NavItem>
       </div>
     </aside>

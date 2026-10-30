@@ -170,8 +170,8 @@ pub async fn tell_story(
         .filter(|b| sent.line(b).is_some())
         .cloned()
         .collect();
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let job = format!("story:{}", s.id);
     let (m, st, se, a, q, l) = (
         model.clone(),

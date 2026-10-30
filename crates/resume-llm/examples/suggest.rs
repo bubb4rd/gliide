@@ -1,7 +1,9 @@
-//! Suggest runs: Suggest through `claude -p` on fixture postings, sequentially, for one bank and master.
+//! Suggest runs: Suggest through an agent CLI (`claude -p` unless `--agent` names another) on fixture postings,
+//! sequentially, for one bank and master.
 //!
 //! `cargo run -p resume-llm --example suggest -- --bank <bank.json> --master <master.json> [--candidates id,id]
-//! [--only <posting-id>[,<posting-id>…]] [--out <dir>] [--golden <dir>] [--model sonnet] [--report]`
+//! [--only <posting-id>[,<posting-id>…]] [--out <dir>] [--golden <dir>] [--agent claude|codex|antigravity]
+//! [--model <the agent's default>] [--report]`
 //!
 //! Each `fixtures/postings/<id>.md` runs with its requirements from `fixtures/requirements/sonnet/<id>.json`. With
 //! `--candidates` the run is bank-aware (those bank entries are offered), else master-only. Writes each run (raw
@@ -18,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use resume_core::suggestions::{BankOp, BulletOp, Have, KeywordOp, SkillOp, Suggestions};
 use resume_core::{Bank, Master, Posting, Requirements, Resume, resolve};
-use resume_llm::suggest::{self, DEFAULT_SUGGEST_MODEL, SuggestInput};
-use resume_llm::{Attempt, ClaudeCli, LlmError};
+use resume_llm::suggest::{self, SuggestInput};
+use resume_llm::{Agent, AgentKind, Attempt, LlmError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -60,13 +62,14 @@ struct Args {
     only: Vec<String>,
     out: Option<PathBuf>,
     golden: Option<PathBuf>,
+    agent: AgentKind,
     model: String,
     report_only: bool,
 }
 
 fn args() -> Args {
     let usage = "usage: suggest --bank <bank.json> --master <master.json> [--candidates id,id] [--only id,id] \
-                 [--out <dir>] [--golden <dir>] [--model sonnet] [--report]";
+                 [--out <dir>] [--golden <dir>] [--agent claude|codex|antigravity] [--model <name>] [--report]";
     let list = |s: String| -> Vec<String> {
         s.split(',')
             .map(str::trim)
@@ -74,7 +77,7 @@ fn args() -> Args {
             .map(str::to_owned)
             .collect()
     };
-    let (mut bank, mut master) = (None, None);
+    let (mut bank, mut master, mut model) = (None, None, None);
     let mut a = Args {
         bank: PathBuf::new(),
         master: PathBuf::new(),
@@ -82,7 +85,8 @@ fn args() -> Args {
         only: Vec::new(),
         out: None,
         golden: None,
-        model: DEFAULT_SUGGEST_MODEL.to_owned(),
+        agent: AgentKind::Claude,
+        model: String::new(),
         report_only: false,
     };
     let mut it = std::env::args().skip(1);
@@ -98,13 +102,15 @@ fn args() -> Args {
             "--only" => a.only = list(value()),
             "--out" => a.out = Some(PathBuf::from(value())),
             "--golden" => a.golden = Some(PathBuf::from(value())),
-            "--model" => a.model = value(),
+            "--agent" => a.agent = value().parse().unwrap(),
+            "--model" => model = Some(value()),
             "--report" => a.report_only = true,
             _ => panic!("unknown argument {arg}; {usage}"),
         }
     }
     a.bank = bank.unwrap_or_else(|| panic!("--bank is required; {usage}"));
     a.master = master.unwrap_or_else(|| panic!("--master is required; {usage}"));
+    a.model = model.unwrap_or_else(|| a.agent.default_model().to_owned());
     a
 }
 
@@ -157,14 +163,14 @@ async fn main() {
     let requirements = |id: &str| -> Requirements { read_json(&req_path(id)) };
 
     if !a.report_only {
-        let provider = match ClaudeCli::discover().await {
+        let provider = match Agent::discover(a.agent).await {
             Ok(p) => p.with_timeout(TIMEOUT),
             Err(e) => {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
         };
-        eprintln!("claude: {}", provider.bin().display());
+        eprintln!("{}: {}", a.agent.bin(), provider.bin().display());
         let schema = suggest::schema();
         if let Some(g) = &a.golden {
             std::fs::create_dir_all(g).unwrap();

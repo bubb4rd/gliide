@@ -18,8 +18,6 @@ use crate::{Call, Llm, LlmError, Schema, Structured};
 pub const PROMPT: &str = include_str!("../../../prompts/suggest.md");
 /// The `Suggestions` schema (`prompts/suggest.schema.json`).
 pub const SCHEMA: &str = include_str!("../../../prompts/suggest.schema.json");
-/// The model Suggest runs on unless the user picks another.
-pub const DEFAULT_SUGGEST_MODEL: &str = "sonnet";
 /// Characters per printed line the line budget assumes (the one-page layout).
 pub const LINE_CHARS: usize = 100;
 /// The longest a bullet rewrite may be, whatever the line it replaces.
@@ -80,7 +78,7 @@ pub fn tagged_with_bank(resume: &Resume, bank: &Bank) -> String {
     s
 }
 
-/// Runs Suggest with `model` ([`DEFAULT_SUGGEST_MODEL`] unless the user picked another).
+/// Runs Suggest with `model` (the agent's [`crate::AgentKind::default_model`] unless the user picked another).
 pub async fn suggest(
     llm: &impl Llm,
     schema: &Schema,

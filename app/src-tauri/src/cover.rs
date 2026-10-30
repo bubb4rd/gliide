@@ -173,8 +173,8 @@ fn save_and_view(
 pub async fn write_cover(app: &Arc<App>, review: &str) -> Result<CoverView> {
     let id = review.to_owned();
     let job = blocking(app, move |app| job(app, &id)).await?;
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let posting_id = job.posting_id.clone();
     let m = model.clone();
     let (letter, out, job) = model_call(app, &posting_id, Stage::Writing, async move {
@@ -243,8 +243,8 @@ pub async fn rewrite_cover_paragraph(
             "This paragraph is gone; reopen the letter",
         ));
     }
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let posting_id = job.posting_id.clone();
     let m = model.clone();
     let (text, out, job) = model_call(app, &posting_id, Stage::Revising, async move {

@@ -1,9 +1,10 @@
 <!--
   Settings: one column of cards, with a rail of links to them (`SectionNav`; a row over the cards under 720px).
-  Every control saves as you change it (fields on blur or ⏎); the theme applies at once. Agents lists Claude Code
-  (its status checked by running `claude`, never by reading its credentials) and, grayed, the agents gliide can't run
-  yet. Feed holds the job feed's own settings (saved apart
-  from the rest): each filter is Auto (worked out from your experience and masters, shown as it stands) or Custom;
+  Every control saves as you change it (fields on blur or ⏎); the theme applies at once. Agents lists Claude Code,
+  Codex and Antigravity (each checked by running it, never by reading its credentials; one check runs them all), each
+  with its own path; Use moves every model call to one that's found, and Tailoring's models are that agent's own.
+  Feed holds the job feed's own settings (saved apart from the rest): each filter is Auto (worked out from your
+  experience and masters, shown as it stands) or Custom;
   then its sources besides freehire: LinkedIn's search, a watchlist of careers boards and Fantastic.jobs through an
   Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
   while Interviews is off or macOS doesn't allow gliide's banners, read again whenever the window gains focus.
@@ -20,6 +21,8 @@
   import RotateCw from "@lucide/svelte/icons/rotate-cw";
   import X from "@lucide/svelte/icons/x";
   import {
+    type Agent,
+    type AgentStatus,
     appError,
     type Backdrop,
     feedSettings,
@@ -34,6 +37,7 @@
     type Settings,
     type Theme,
   } from "$lib/api";
+  import { AGENT_LIST, type AgentInfo } from "$lib/agents";
   import { CATEGORY, COUNTRIES, EMPLOYMENT, SENIORITY, countryName } from "$lib/feed";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
@@ -56,14 +60,7 @@
   } from "$lib/ui";
 
   const CUSTOM = "custom";
-  const MODELS = [
-    { value: "sonnet", label: "Sonnet" },
-    { value: "opus", label: "Opus" },
-    { value: "haiku", label: "Haiku" },
-    { value: CUSTOM, label: "Custom…" },
-  ];
-  const ALIASES = new Set(MODELS.map((m) => m.value).filter((v) => v !== CUSTOM));
-  const MODEL_ROWS: { key: "extractModel" | "suggestModel"; label: string }[] = [
+  const MODEL_ROWS: { key: ModelKey; label: string }[] = [
     { key: "extractModel", label: "Reading the requirements" },
     { key: "suggestModel", label: "Suggesting edits" },
   ];
@@ -82,11 +79,6 @@
     { value: "tokyo", label: "Tokyo" },
     { value: "sakura", label: "Sakura" },
   ];
-  /** Agents gliide will run once they're supported (ARCHITECTURE.md §1): listed, grayed, so you know what's coming. */
-  const LATER = [
-    { name: "Codex", maker: "OpenAI", src: "/agents/openai.png" },
-    { name: "Antigravity", maker: "Google", src: "/agents/antigravity.png" },
-  ];
 
   type ModelKey = "extractModel" | "suggestModel";
 
@@ -95,17 +87,19 @@
   let resets = $state(0);
   /** Models whose menu says Custom… while the field is being filled. */
   let custom = $state<Record<ModelKey, boolean>>({ extractModel: false, suggestModel: false });
-  let drafts = $state<Record<ModelKey | "claudePath", string>>({ extractModel: "", suggestModel: "", claudePath: "" });
+  let drafts = $state<Record<ModelKey, string>>({ extractModel: "", suggestModel: "" });
 
   const s = $derived(app.settings);
+  /** The agent model calls run on, and its models as stored. */
+  const active = $derived(app.agentInfo);
+  const activeModels = $derived(s ? s.agents[s.agent] : null);
   let scroller = $state<HTMLElement>();
 
-  // The fields start from what's stored, and follow it after each save.
+  // The fields start from what's stored for the agent in use, and follow it after each save or switch.
   $effect(() => {
-    if (!s) return;
-    drafts.extractModel = s.extractModel;
-    drafts.suggestModel = s.suggestModel;
-    drafts.claudePath = s.claudePath ?? "";
+    if (!activeModels) return;
+    drafts.extractModel = activeModels.extractModel;
+    drafts.suggestModel = activeModels.suggestModel;
   });
 
   onMount(() => {
@@ -368,10 +362,18 @@
     openNotificationSettings().catch((e) => toast(appError(e).message, { tone: "danger" }));
   }
 
-  async function refreshAgent() {
+  /** One check, every agent. */
+  async function refreshAgents() {
     checking = true;
-    await app.refreshAgent();
+    await app.refreshAgents();
     checking = false;
+  }
+
+  /** Runs every model call on `agent` from now on; its own models and path come with it. */
+  async function useAgent(agent: Agent) {
+    if (!s || s.agent === agent) return;
+    custom = { extractModel: false, suggestModel: false };
+    await save({ agent });
   }
 
   function setTheme(t: Theme) {
@@ -380,17 +382,31 @@
     save({ theme: t });
   }
 
-  const menuValue = (key: ModelKey) => (custom[key] || !ALIASES.has(s?.[key] ?? "") ? CUSTOM : (s?.[key] ?? ""));
+  /** The agent in use's models, from its status, as menu options; Custom… last. */
+  const modelOptions = $derived([
+    ...(app.agent?.models ?? []).map((m) => ({ value: m.id, label: m.name })),
+    { value: CUSTOM, label: "Custom…" },
+  ]);
+  const listed = $derived(new Set((app.agent?.models ?? []).map((m) => m.id)));
+
+  const menuValue = (key: ModelKey) =>
+    custom[key] || !listed.has(activeModels?.[key] ?? "") ? CUSTOM : (activeModels?.[key] ?? "");
+
+  /** Saves one of the agent in use's models, keeping its path and the other agents'. */
+  function saveModel(key: ModelKey, value: string) {
+    if (!s) return Promise.resolve(false);
+    return save({ agents: { ...s.agents, [s.agent]: { ...s.agents[s.agent], [key]: value } } });
+  }
 
   function chooseModel(key: ModelKey, value: string) {
     if (value === CUSTOM) {
       custom[key] = true;
-      drafts[key] = ALIASES.has(drafts[key]) ? "" : drafts[key];
+      drafts[key] = listed.has(drafts[key]) ? "" : drafts[key];
       tick().then(() => document.getElementById(`${key}-custom`)?.focus());
       return;
     }
     custom[key] = false;
-    save({ [key]: value });
+    void saveModel(key, value);
   }
 
   async function commitModel(key: ModelKey) {
@@ -398,46 +414,50 @@
     if (!value) {
       // Nothing typed: back to what's stored.
       custom[key] = false;
-      drafts[key] = s?.[key] ?? "";
+      drafts[key] = activeModels?.[key] ?? "";
       return;
     }
-    if (value === s?.[key]) return;
-    if (await save({ [key]: value })) custom[key] = !ALIASES.has(value);
+    if (value === activeModels?.[key]) return;
+    if (await saveModel(key, value)) custom[key] = !listed.has(value);
   }
 
-  // ── Claude Code's path: shown, then edited behind Change path (Save, Discard, or Remove to find it again) ──
-  let pathOpen = $state(false);
+  // ── Each agent's path: shown, then edited behind Change path (Save, Discard, or Remove to find it again); one
+  //    editor open at a time ──
+  let pathOpen = $state<Agent | null>(null);
+  let pathDraft = $state("");
   let pathBusy = $state(false);
-  const pathUnchanged = $derived(drafts.claudePath.trim() === (s?.claudePath ?? ""));
+  const pathUnchanged = $derived(pathOpen !== null && pathDraft.trim() === (s?.agents[pathOpen].path ?? ""));
 
-  function openPath() {
-    drafts.claudePath = s?.claudePath ?? "";
-    pathOpen = true;
-    tick().then(() => document.getElementById("claude-path")?.focus());
+  function openPath(agent: Agent) {
+    pathDraft = s?.agents[agent].path ?? "";
+    pathOpen = agent;
+    tick().then(() => document.getElementById(`${agent}-path`)?.focus());
   }
 
-  /** Back to the path as stored, focus on Change path. */
+  /** Back to the path as stored, focus on its Change path. */
   function closePath() {
-    pathOpen = false;
-    drafts.claudePath = s?.claudePath ?? "";
-    tick().then(() => document.getElementById("claude-path-change")?.focus());
+    const agent = pathOpen;
+    pathOpen = null;
+    pathDraft = "";
+    if (agent) tick().then(() => document.getElementById(`${agent}-path-change`)?.focus());
   }
 
-  /** `null` finds `claude` on your PATH again. Stays open when the save fails, so the path can be fixed. */
+  /** `null` finds the agent on your PATH again. Stays open when the save fails, so the path can be fixed. */
   async function savePath(path: string | null) {
-    if (pathBusy) return;
-    if (path === (s?.claudePath ?? null)) return closePath();
+    const agent = pathOpen;
+    if (pathBusy || !s || !agent) return;
+    if (path === s.agents[agent].path) return closePath();
     pathBusy = true;
-    const saved = await save({ claudePath: path });
+    const saved = await save({ agents: { ...s.agents, [agent]: { ...s.agents[agent], path } } });
     pathBusy = false;
     if (!saved) return;
     closePath();
-    void refreshAgent();
+    void refreshAgents();
   }
 
   function submitPath(e: SubmitEvent) {
     e.preventDefault();
-    if (!pathUnchanged) void savePath(drafts.claudePath.trim() || null);
+    if (!pathUnchanged) void savePath(pathDraft.trim() || null);
   }
 
   /** Esc anywhere in the path's editor discards it, as its Discard button says. */
@@ -471,21 +491,20 @@
     if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
   }
 
-  const agent = $derived(app.agent);
-  const agentBadge = $derived.by(() => {
+  const statusOf = (agent: Agent) => app.agents?.find((a) => a.agent === agent) ?? null;
+  function badgeOf(status: AgentStatus | null) {
     if (checking) return { tone: "neutral", text: "Checking…" } as const;
-    if (!agent) return { tone: "neutral", text: "Not checked" } as const;
-    if (!agent.found) return { tone: "danger", text: "Not found" } as const;
-    if (agent.signedIn === false) return { tone: "danger", text: "Signed out" } as const;
-    if (agent.signedIn === null) return { tone: "neutral", text: "Sign-in unknown" } as const;
+    if (!status) return { tone: "neutral", text: "Not checked" } as const;
+    if (!status.found) return { tone: "danger", text: "Not found" } as const;
+    if (status.signedIn === false) return { tone: "danger", text: "Signed out" } as const;
+    if (status.signedIn === null) return { tone: "neutral", text: "Sign-in unknown" } as const;
     return { tone: "gain", text: "Signed in" } as const;
-  });
-  /** Its maker, then what `claude` says about itself: "Anthropic · 2.1.0 · Max". */
-  const claudeMeta = $derived(
-    ["Anthropic", ...(agent && !agent.found ? ["not installed on this Mac"] : [agent?.version, agent?.plan])]
+  }
+  /** Its maker, then what the agent says about itself: "Anthropic · 2.1.0 · Max". */
+  const metaOf = (info: AgentInfo, status: AgentStatus | null) =>
+    [info.maker, ...(status && !status.found ? ["not installed on this Mac"] : [status?.version, status?.plan])]
       .filter(Boolean)
-      .join(" · "),
-  );
+      .join(" · ");
 
   // ── About: this build and updates ──
   const update = $derived(app.update);
@@ -523,81 +542,97 @@
           <Card pad as="section" id="agents" tabindex={-1} aria-labelledby="agents-title">
             <div class="card">
               <h2 class="name" id="agents-title">Agents</h2>
-              <p class="lede">Read the requirements and suggest the edits, on your own plan. gliide never sees a credential.</p>
+              <p class="lede">
+                Every model call runs on the agent you choose, with your own plan. gliide never sees a credential.
+              </p>
               <ul class="agents">
-                <li class="agent">
-                  <span class="agent__mark"><CompanyMark size={28} src="/agents/claude.png" /></span>
-                  <span class="agent__name">Claude Code</span>
-                  <span class="agent__sub num">{claudeMeta}</span>
-                  <span class="agent__end">
-                    <Badge tone={agentBadge.tone} dot>{agentBadge.text}</Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      square
-                      icon={RotateCw}
-                      disabled={checking}
-                      aria-label="Check Claude Code again"
-                      {@attach tip("Check again")}
-                      onclick={refreshAgent}
-                    />
-                  </span>
-                  {#if agent?.problem}<p class="problem agent__more">{agent.problem}</p>{/if}
-                  {#if pathOpen}
-                    <form class="agent__more path-edit" onsubmit={submitPath} {@attach discardOnEscape}>
-                      <label for="claude-path">Path</label>
-                      <Input
-                        id="claude-path"
-                        size="md"
-                        bind:value={drafts.claudePath}
-                        placeholder="Automatic"
-                        spellcheck="false"
-                        autocomplete="off"
-                        aria-describedby="claude-path-hint"
-                      />
-                      <p class="hint" id="claude-path-hint">
-                        Where the <code>claude</code> to run is. Empty finds it on your PATH.
-                      </p>
-                      <div class="path-actions">
-                        {#if s.claudePath}
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            disabled={pathBusy}
-                            {@attach tip("Find claude on your PATH again")}
-                            onclick={() => void savePath(null)}>Remove</Button
-                          >
-                        {/if}
-                        <Button variant="ghost" size="sm" kbd="Esc" disabled={pathBusy} onclick={closePath}>Discard</Button>
-                        <Button type="submit" variant="primary" size="sm" kbd="⏎" disabled={pathBusy || pathUnchanged}>
-                          {pathBusy ? "Saving…" : "Save"}
-                        </Button>
-                      </div>
-                    </form>
-                  {:else}
-                    <div class="agent__more path-row">
-                      <span class="path-label">Path</span>
-                      <span class="path-value">
-                        {#if s.claudePath}
-                          <code {@attach tip(s.claudePath)}>{s.claudePath}</code>
-                        {:else if agent?.path}
-                          <code {@attach tip(agent.path)}>{agent.path}</code> · found on your PATH
-                        {:else}
-                          Automatic: found on your PATH
-                        {/if}
-                      </span>
-                      <Button id="claude-path-change" variant="ghost" size="sm" onclick={openPath}>Change path</Button>
-                    </div>
-                  {/if}
-                </li>
-                {#each LATER as later (later.name)}
-                  <li class="agent agent--later">
-                    <span class="agent__mark"><CompanyMark size={28} src={later.src} off /></span>
-                    <span class="agent__name">{later.name}</span>
-                    <span class="agent__sub">{later.maker} · not supported yet</span>
-                    <span class="agent__end">
-                      <Button size="sm" disabled aria-label="Connect {later.name}: not supported yet">Connect</Button>
+                {#each AGENT_LIST as info (info.id)}
+                  {@const status = statusOf(info.id)}
+                  {@const badge = badgeOf(status)}
+                  {@const inUse = s.agent === info.id}
+                  {@const path = s.agents[info.id].path}
+                  <li class="agent">
+                    <span class="agent__mark"><CompanyMark size={28} src={info.icon} /></span>
+                    <span class="agent__name">
+                      <span class="agent__title">{info.name}</span>
+                      {#if inUse}<Badge tone="accent">In use</Badge>{/if}
                     </span>
+                    <span class="agent__sub num">{metaOf(info, status)}</span>
+                    <span class="agent__end">
+                      {#if !inUse && status?.found}
+                        <Button size="sm" aria-label="Use {info.name} for model calls" onclick={() => void useAgent(info.id)}
+                          >Use</Button
+                        >
+                      {:else if status && !status.found}
+                        <Button size="sm" variant="ghost" icon={ExternalLink} onclick={() => visit(info.install)}
+                          >How to install</Button
+                        >
+                      {/if}
+                      <Badge tone={badge.tone} dot>{badge.text}</Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        square
+                        icon={RotateCw}
+                        disabled={checking}
+                        aria-label="Check the agents again"
+                        {@attach tip("Check again")}
+                        onclick={refreshAgents}
+                      />
+                    </span>
+                    {#if status?.problem}<p class="problem agent__more">{status.problem}</p>{/if}
+                    {#if pathOpen === info.id}
+                      <form class="agent__more path-edit" onsubmit={submitPath} {@attach discardOnEscape}>
+                        <label for="{info.id}-path">Path</label>
+                        <Input
+                          id="{info.id}-path"
+                          size="md"
+                          bind:value={pathDraft}
+                          placeholder="Automatic"
+                          spellcheck="false"
+                          autocomplete="off"
+                          aria-describedby="{info.id}-path-hint"
+                        />
+                        <p class="hint" id="{info.id}-path-hint">
+                          Where the <code>{info.bin}</code> to run is. Empty finds it on your PATH.
+                        </p>
+                        <div class="path-actions">
+                          {#if path}
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              disabled={pathBusy}
+                              {@attach tip(`Find ${info.bin} on your PATH again`)}
+                              onclick={() => void savePath(null)}>Remove</Button
+                            >
+                          {/if}
+                          <Button variant="ghost" size="sm" kbd="Esc" disabled={pathBusy} onclick={closePath}>Discard</Button>
+                          <Button type="submit" variant="primary" size="sm" kbd="⏎" disabled={pathBusy || pathUnchanged}>
+                            {pathBusy ? "Saving…" : "Save"}
+                          </Button>
+                        </div>
+                      </form>
+                    {:else}
+                      <div class="agent__more path-row">
+                        <span class="path-label">Path</span>
+                        <span class="path-value">
+                          {#if path}
+                            <code {@attach tip(path)}>{path}</code>
+                          {:else if status?.path}
+                            <code {@attach tip(status.path)}>{status.path}</code> · found on your PATH
+                          {:else}
+                            Automatic: found on your PATH
+                          {/if}
+                        </span>
+                        <Button
+                          id="{info.id}-path-change"
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Change {info.name}’s path"
+                          onclick={() => openPath(info.id)}>Change path</Button
+                        >
+                      </div>
+                    {/if}
                   </li>
                 {/each}
               </ul>
@@ -608,8 +643,8 @@
             <div class="card">
               <h2 class="name" id="tailoring-title">Tailoring</h2>
               <p class="lede">
-                The model for each step, and what suggestions draw on. Bank-aware brings in an entry from Experience
-                where it fits a posting better than one the master shows.
+                {active.name}’s model for each step, and what suggestions draw on. Bank-aware brings in an entry from
+                Experience where it fits a posting better than one the master shows.
               </p>
               <dl class="fields">
                 {#each MODEL_ROWS as row (row.key)}
@@ -623,7 +658,7 @@
                             size="md"
                             bind:value={drafts[row.key]}
                             placeholder="Model name"
-                            aria-label="{row.label}: model name"
+                            aria-label="{row.label}: {active.name} model name"
                             spellcheck="false"
                             autocomplete="off"
                             onblur={() => commitModel(row.key)}
@@ -633,8 +668,8 @@
                       {/if}
                       <Menu
                         value={menuValue(row.key)}
-                        options={MODELS}
-                        label="Model for {row.label.toLowerCase()}"
+                        options={modelOptions}
+                        label="{active.name} model for {row.label.toLowerCase()}"
                         placement="bottom-end"
                         onchange={(v) => chooseModel(row.key, v)}
                       />
@@ -1159,8 +1194,8 @@
     font-family: var(--font-mono);
     font-size: var(--text-sm);
   }
-  /* The agents: a 28px mark, the name over its maker and what's known of it, the status and actions at the end;
-     hairlines between, as the fields'. One gliide can't run yet is grayed: its mark off, its name in ink 3. */
+  /* The agents: a 28px mark, the name (with "In use" on the one model calls run on) over its maker and what's known of
+     it, then Use or How to install, the status and Check again at the end; hairlines between, as the fields'. */
   .agents {
     display: grid;
     margin: var(--space-3) 0 0;
@@ -1187,8 +1222,17 @@
   }
   .agent__name {
     grid-area: name;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     min-width: 0;
     font-weight: var(--weight-medium);
+  }
+  .agent__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .agent__sub {
     grid-area: sub;
@@ -1205,9 +1249,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-  }
-  .agent--later .agent__name {
-    color: var(--ink-3);
   }
   /* Under the name: the problem, then the path: one line ending in Change path, or its editor (the field after its
      label, the hint under the field, then Remove, Discard and Save at the trailing edge). */

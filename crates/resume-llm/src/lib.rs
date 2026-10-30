@@ -1,10 +1,15 @@
-//! Model access: the [`Llm`] trait, the `claude -p` provider and the built-in prompts.
+//! Model access: the [`Llm`] trait, the agent CLI providers (`claude -p`, `codex exec`, `agy -p`) and the built-in
+//! prompts.
 //!
 //! Every call is stateless: instructions, input and a JSON Schema in, JSON valid against that schema out. Output is
 //! validated here, whatever the provider promises; an invalid reply gets one repair turn that quotes the validation
 //! errors, then the call fails with the raw text.
 
+mod agent;
+mod antigravity;
 mod claude;
+mod cli;
+mod codex;
 pub mod cover;
 pub mod debrief;
 pub mod dig;
@@ -24,7 +29,10 @@ use std::time::Duration;
 use serde::Serialize;
 use serde_json::Value;
 
-pub use claude::{ClaudeCli, find_claude};
+pub use agent::{Agent, AgentKind};
+pub use antigravity::AntigravityCli;
+pub use claude::ClaudeCli;
+pub use codex::CodexCli;
 
 /// One stateless call: no tools, no history.
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +53,48 @@ pub trait Llm {
         call: Call<'_>,
         schema: &Schema,
     ) -> impl Future<Output = Result<Structured, LlmError>> + Send;
+}
+
+/// One turn with an agent CLI: its reply before validation, and the turn's record.
+pub(crate) trait Turn: Sync {
+    fn turn(
+        &self,
+        call: Call<'_>,
+        schema: &Schema,
+    ) -> impl Future<Output = Result<(Reply, Attempt), LlmError>> + Send;
+}
+
+/// `agent`'s turn, and when its reply fails `schema`, exactly one repair turn quoting the errors.
+pub(crate) async fn with_repair(
+    agent: &impl Turn,
+    call: Call<'_>,
+    schema: &Schema,
+) -> Result<Structured, LlmError> {
+    let (reply, attempt) = agent.turn(call, schema).await?;
+    let mut attempts = vec![attempt];
+    let rejected = match check(schema, reply) {
+        Ok(value) => return Ok(Structured { value, attempts }),
+        Err(r) => r,
+    };
+    let input = repair_input(call.input, &rejected);
+    let (reply, attempt) = agent
+        .turn(
+            Call {
+                input: &input,
+                ..call
+            },
+            schema,
+        )
+        .await?;
+    attempts.push(attempt);
+    match check(schema, reply) {
+        Ok(value) => Ok(Structured { value, attempts }),
+        Err(r) => Err(LlmError::Invalid {
+            errors: r.errors,
+            raw: r.raw,
+            attempts,
+        }),
+    }
 }
 
 /// A JSON Schema: its text (handed to providers that enforce it) and its compiled validator.
@@ -128,7 +178,7 @@ pub struct Attempt {
     /// Wall time from spawn to exit.
     pub latency_ms: u64,
     pub usage: Usage,
-    /// The agent's raw output (for `claude -p`, its JSON result envelope).
+    /// The agent's raw output (`claude -p`'s and `agy -p`'s JSON result envelope, `codex exec`'s JSON Lines events).
     pub raw: String,
 }
 
@@ -150,24 +200,25 @@ pub struct Usage {
 
 #[derive(Debug, thiserror::Error)]
 pub enum LlmError {
-    #[error("`{0}` CLI not found; install it or set its path")]
-    NotFound(String),
+    #[error("{} (`{}`) not found; install it or set its path", .0.name(), .0.bin())]
+    NotFound(AgentKind),
     #[error("could not start {}: {source}", bin.display())]
     Spawn {
+        agent: AgentKind,
         bin: PathBuf,
         source: std::io::Error,
     },
-    #[error("model timed out after {}s", after.as_secs())]
-    Timeout { after: Duration },
-    #[error("{agent} exited {}: {message}", code.map_or("by signal".to_owned(), |c| c.to_string()))]
+    #[error("{} timed out after {}s", agent.name(), after.as_secs())]
+    Timeout { agent: AgentKind, after: Duration },
+    #[error("{} exited {}: {message}", agent.name(), code.map_or("by signal".to_owned(), |c| c.to_string()))]
     Exit {
-        agent: String,
+        agent: AgentKind,
         code: Option<i32>,
         message: String,
     },
     /// The agent ran but reported an error or returned no output.
-    #[error("{agent}: {message}")]
-    Agent { agent: String, message: String },
+    #[error("{}: {message}", agent.name())]
+    Agent { agent: AgentKind, message: String },
     #[error("invalid schema: {0}")]
     Schema(String),
     /// Still invalid after the repair turn; `raw` is the last reply as text.
@@ -186,11 +237,32 @@ pub enum LlmError {
     },
 }
 
+impl LlmError {
+    /// The agent the error came from; `None` for the schema and output-shape errors, which are gliide's own checks.
+    pub fn agent(&self) -> Option<AgentKind> {
+        match self {
+            Self::NotFound(agent)
+            | Self::Spawn { agent, .. }
+            | Self::Timeout { agent, .. }
+            | Self::Exit { agent, .. }
+            | Self::Agent { agent, .. } => Some(*agent),
+            Self::Schema(_) | Self::Invalid { .. } | Self::Decode { .. } => None,
+        }
+    }
+}
+
 /// What one turn produced, before validation.
 pub(crate) enum Reply {
     Json(Value),
     /// Output that isn't JSON.
     Text(String),
+}
+
+impl Reply {
+    /// `text` as JSON when it parses, else as text.
+    pub(crate) fn of_text(text: &str) -> Self {
+        serde_json::from_str(text.trim()).map_or_else(|_| Self::Text(text.to_owned()), Self::Json)
+    }
 }
 
 /// A reply that failed validation.

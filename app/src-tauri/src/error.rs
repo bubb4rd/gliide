@@ -1,7 +1,7 @@
 //! Every failure as an [`AppError`]: a sentence the UI shows as is, and its kind.
 
 use resume_ingest::IngestError;
-use resume_llm::LlmError;
+use resume_llm::{AgentKind, LlmError};
 use resume_pipeline::PipelineError;
 use resume_render::RenderError;
 use resume_store::StoreError;
@@ -9,6 +9,7 @@ use resume_tailor::TailorError;
 
 pub use crate::dto::AppError;
 use crate::dto::ErrorKind;
+use crate::settings;
 
 pub type Result<T, E = AppError> = std::result::Result<T, E>;
 
@@ -46,38 +47,39 @@ impl AppError {
     }
 }
 
-/// What to tell you when `claude` failed: signed out, missing, slow, or an answer of the wrong shape.
+/// What to tell you when the agent failed: signed out, missing, slow, or an answer of the wrong shape.
 impl From<LlmError> for AppError {
     fn from(e: LlmError) -> Self {
+        let name = e.agent().map_or("The agent", AgentKind::name);
         let message = match &e {
-            LlmError::NotFound(_) => {
-                "Claude Code isn't installed, or the app can't find it. Install it, or set its path in Settings."
-                    .to_owned()
-            }
-            LlmError::Spawn { source, .. } => format!("Claude Code couldn't start: {source}."),
-            LlmError::Timeout { after } => format!(
-                "Claude Code didn't answer within {} seconds. Try again.",
+            LlmError::NotFound(_) => format!(
+                "{name} isn't installed, or gliide can't find it. Install it, or set its path in Settings."
+            ),
+            LlmError::Spawn { source, .. } => format!("{name} couldn't start: {source}."),
+            LlmError::Timeout { after, .. } => format!(
+                "{name} didn't answer within {} seconds. Try again.",
                 after.as_secs()
             ),
-            LlmError::Exit { message, .. } | LlmError::Agent { message, .. } => {
+            LlmError::Exit { agent, message, .. } | LlmError::Agent { agent, message } => {
                 if signed_out(message) {
-                    "Claude Code isn't signed in. Run `claude` in Terminal and sign in.".to_owned()
+                    format!("{name} isn't signed in. {}", settings::sign_in(*agent))
                 } else if message.is_empty() {
-                    "Claude Code stopped without an answer. Try again.".to_owned()
+                    format!("{name} stopped without an answer. Try again.")
                 } else {
-                    format!("Claude Code failed: {message}")
+                    format!("{name} failed: {message}")
                 }
             }
             LlmError::Schema(m) => format!("A built-in prompt's schema is invalid: {m}"),
             LlmError::Invalid { .. } | LlmError::Decode { .. } => {
-                "Claude's answer didn't have the expected shape, even after one repair. Try again.".to_owned()
+                "The agent's answer didn't have the expected shape, even after one repair. Try again."
+                    .to_owned()
             }
         };
         Self::new(ErrorKind::Agent, message)
     }
 }
 
-/// `claude`'s message says it has no usable login.
+/// The agent's message says it has no usable login.
 fn signed_out(message: &str) -> bool {
     let m = message.to_lowercase();
     [

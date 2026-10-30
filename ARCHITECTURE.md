@@ -23,7 +23,7 @@ runs, and model access through the agent subscription you already pay for.
 | Choice | Why |
 |---|---|
 | An experience bank (everything you've done) and masters that select from it (SWE, IT, design…), rather than one resume file | Relevant experience outside a master isn't lost |
-| `Llm` trait over your own agent CLIs: ACP agents (Codex, Gemini CLI, any registry agent) and `claude -p` | Your subscription, no API bill |
+| `Llm` trait over your own agent CLIs in their headless modes: `claude -p`, `codex exec`, `agy -p` | Your subscription, no API bill |
 | Typst embedded as a Rust library, not the `typst` CLI | No install; metrics in-process |
 | Two calls, **extract** (cached per posting) then **suggest** (streamed), rather than one evaluate call (25 s–2 min) | Score appears in seconds |
 | A composite of six components, shown as now / projected / ceiling | Shows which part of the fit is missing and what edits can still move |
@@ -37,7 +37,7 @@ runs, and model access through the agent subscription you already pay for.
 **Decided: Rust core + Tauri 2 shell + TypeScript UI (Svelte).**
 
 - Typst is a Rust library; embedding it is the largest speed and portability win.
-- The ACP client SDK is a Rust crate (`agent-client-protocol`, 1.0, the one Zed uses).
+- Each agent's CLI has a headless mode that enforces a JSON Schema, so a subprocess call is the whole integration.
 - Tauri 2 builds macOS, Windows and iOS from one UI codebase over that core.
 
 | Piece | Technology | Role |
@@ -48,7 +48,7 @@ runs, and model access through the agent subscription you already pay for.
 | Rendering | `typst`, `typst-pdf`, `typst-svg`, `typst-render` | PDF export, SVG/PNG preview, line and page metrics |
 | Fonts | Bundled OFL fonts (Liberation Serif / Tinos are metric-compatible with Times New Roman) | Same line breaks on every OS |
 | Storage | SQLite (`rusqlite`) | Bank, masters and revisions, postings, analyses, drafts, applications, interview rounds, preps, practice and debriefs, stories |
-| Model | Your agent CLI over ACP (`agent-client-protocol`) or `claude -p`, as a subprocess | Extract, suggest, rewrite, import, cover letter, invite, prep, practice, nudge, Dig, debrief |
+| Model | Your agent CLI in its headless mode (`claude -p`, `codex exec`, `agy -p`), as a subprocess | Extract, suggest, rewrite, import, cover letter, invite, prep, practice, nudge, Dig, debrief |
 | Posting fetch | `reqwest` + HTML parsing (`scraper`) | Board APIs, JSON-LD `JobPosting`, `<main>` text |
 | Resume import | PDF text and link annotations in pure Rust (`resume_render::pdf_read`, the read-back's glyph layout over `hayro`); DOCX via its XML (`zip` + `roxmltree`); Markdown and text as written | Import into the bank |
 
@@ -94,62 +94,67 @@ flowchart TD
 ## 1. Model access: your subscription, through your own agent
 
 The app never calls a model API itself, and never ships, reads or stores a credential. It launches an agent CLI you
-installed and signed in to yourself, and talks to it over stdio: Agent Client Protocol (ACP) for agents that speak it,
-`claude -p` for Claude. Usage bills to your own subscription, and your own agreement with each lab applies to it.
+installed and signed in to yourself, in the headless mode each lab ships for scripts, as a subprocess. Usage bills to
+your own subscription, and your own agreement with each lab applies to it. One agent runs every call: Settings →
+Agents (or the first-run setup) chooses which, and each agent keeps its own path and models while another runs.
 
 ### Per lab
 
 | Lab | Agent the app launches | Subscription sign-in |
 |---|---|---|
-| OpenAI | `codex-acp` (ACP adapter that runs the Codex CLI) | ChatGPT login, advertised by the adapter as an ACP auth method |
-| Google | `gemini --acp` (native ACP mode) | Google AI Pro/Ultra, done by the official Gemini CLI itself; the app never touches its tokens |
 | Anthropic | `claude -p` (the unmodified Claude Code binary), not the ACP adapter (`claude-agent-acp` is built on the Agent SDK) | Pro/Max via Claude Code's own `/login` |
-| Others (Copilot, Cursor, Mistral, Qwen…) | Any agent in the ACP registry, through the same ACP path; not tested by default | Theirs |
+| OpenAI | `codex exec` (the Codex CLI's non-interactive mode) | ChatGPT login, done by `codex login` |
+| Google | `agy -p` (the Antigravity CLI's headless mode) | Google AI plan, done by the Antigravity CLI or app (one sign-in shared through the system keyring); the app never touches its tokens |
 
 Each lab's own documentation: [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
 [Claude plan usage of the Agent SDK](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan),
 [Codex authentication](https://developers.openai.com/codex/auth),
-[codex-acp](https://github.com/agentclientprotocol/codex-acp), [Gemini CLI ACP mode](https://geminicli.com/docs/cli/acp-mode/),
-[Gemini CLI FAQ](https://geminicli.com/docs/resources/faq), [ACP agents](https://agentclientprotocol.com/get-started/agents).
+[Codex non-interactive mode](https://developers.openai.com/codex/noninteractive),
+[Antigravity CLI headless mode](https://antigravity.google/docs/cli/headless),
+[Antigravity permissions](https://antigravity.google/docs/permissions?tab=cli).
 These terms change; whether your use fits them is between you and the lab.
 
-### What ACP doesn't give, and how the app makes up for it
+### How each agent runs a call
 
-ACP is built for coding agents in editors, not for one-shot structured calls.
+Each headless mode takes one prompt, returns one answer and enforces a JSON Schema on it. gliide still validates every
+reply against the schema; an invalid one gets one repair turn quoting the errors, then the call fails with the raw
+text shown. Every call runs in an empty temp folder (`$TMPDIR/resume-llm`).
 
-| Gap | Handling |
-|---|---|
-| No JSON-schema output | Schema and rules go in the prompt; core validates against the JSON Schema; one repair turn quoting the error; then fail with the raw text shown |
-| No system prompt in v1 (an unstable `systemPrompt` capability is in the spec; `claude-agent-acp` and others use `_meta`) | Use `systemPrompt` when the agent advertises it; otherwise the instructions open the first prompt block |
-| Agents have tools (read files, run shells, search the web) | Client advertises no `fs` or terminal capability, passes no MCP servers, denies every permission request, and sets `cwd` to an empty temp folder per call |
-| Agent process start-up and a large built-in prompt | One warm process per agent, started with the app; a new session per call (`session/new`), so calls stay independent |
-| Model choice | ACP session config options (the model category is stable); the header lists what the agent offers |
-| Prompt caching | Not controllable; the agent decides |
-| Desktop only: stdio means a subprocess | iOS can't spawn processes; Streamable HTTP transport is a draft. See iOS below |
+| | `claude -p` | `codex exec` | `agy -p` |
+|---|---|---|---|
+| Schema | `--json-schema` | `--output-schema` (a file): OpenAI's strict structured outputs, so every object lists all its properties as required and sets `additionalProperties: false` (every `prompts/*.schema.json` does) | `--json-schema`, translated: Gemini takes it as a tool's parameters, whose `enum` holds strings only, so a `null` in an enum becomes a nullable `type` and numbers become a range (`priority` 1–3) |
+| Instructions | `--system-prompt`, in place of Claude Code's | `model_instructions_file`, in place of Codex's own | no system prompt: they open the prompt, in `<instructions>` |
+| Input | stdin | stdin | the `-p` argument (it reads no prompt from stdin; a long prompt meets the OS argument limit, about 1 MB on macOS) |
+| Tools | `--tools ""`, `--setting-sources ""`, `--strict-mcp-config` | the shell (both kinds), image viewing, sub-agents and web search turned off; `--ignore-user-config` (so no MCP servers), `--ignore-rules`, read-only sandbox | every action denied by session-only rules (`--settings`, deny holds in every permission mode): files, URLs, commands, MCP; slash commands off |
+| Session | `--no-session-persistence` | `--ephemeral` | none to turn off: each call is a conversation of its own in the CLI's history |
+| Output | JSON envelope: `structured_output`, usage, cost, the models that served it | JSON Lines events: the last `agent_message`, `turn.completed`'s usage | JSON envelope: `status`, `structured_output`, usage |
+| Default model | `sonnet` | `gpt-6-luna` | `gemini-3.8-flash-low` |
 
-`claude -p` is called with `--json-schema`, `--system-prompt`, `--tools ""`, no settings and no session, so Claude
-gets real schema enforcement.
+Default models are what the spikes measured: Claude in M0 (below); Codex and Antigravity on today's 12 fixture
+postings (Extract, `--no-golden`): `gpt-6-luna` 12/12 valid first try, p50 9.3 s, p90 11.3 s;
+`gemini-3.8-flash-low` 12/12, p50 8.5 s, p90 12.9 s (its priority 1 share is the highest: 0.32 on average, 0.53 on
+its worst posting, against the prompt's "at most a third"). Antigravity's slug carries the thinking level:
+`gemini-3.8-flash-medium` thought for about 8,800 tokens a call and took 64–142 s on the 6 postings it ran.
 
 ### The provider trait
 
 ```rust
 trait Llm {
     /// One stateless call: instructions + input → JSON valid against `schema`.
-    async fn structured(&self, call: Call<'_>, schema: &Schema) -> Result<Value>;
-    /// Same, streaming partial JSON for the suggestion list.
-    fn stream(&self, call: Call<'_>, schema: &Schema) -> BoxStream<'_, Result<Partial>>;
+    async fn structured(&self, call: Call<'_>, schema: &Schema) -> Result<Structured, LlmError>;
 }
 ```
 
 | Provider | Platforms |
 |---|---|
-| `Acp { command, args }` (codex-acp, `gemini --acp`, registry agents) | macOS, Windows |
-| `ClaudeCli` | macOS, Windows |
+| `ClaudeCli`, `CodexCli`, `AntigravityCli`, and `Agent` over whichever is chosen | macOS, Windows |
 | iOS: decided at M6 | `MacRelay` (the desktop app runs the call for the phone) or `ApiKey` (your own key) |
 
-Settings shows each found agent, whether it's signed in (ACP auth methods; `claude` exit status), and its models.
-Setup links install a missing agent; the app never bundles one. A new install's first-run setup (`/welcome`) checks
-the agent too and links to its install guide; whether that setup is done is the `onboarded` setting. The setup puts
+Settings shows every agent, found or not: its version, whether it's signed in (`claude auth status`'s `loggedIn`,
+`codex login status`, `agy models` answering; never an email or a token), and the models it offers (Claude Code's
+aliases, `codex debug models`' listed ones, `agy models`). Setup links install a missing agent; the app never bundles
+one. A new install's first-run setup (`/welcome`) has you choose the agent and checks it too, linking to its install
+guide; whether that setup is done is the `onboarded` setting. The setup puts
 you before your tools: the resume is imported before the Agents step, so when the agent is known not to be ready the
 Experience step says so and links ahead to it (import runs the model). Its What it says step writes the feed's
 settings as Settings → Feed does: a filter you never touch stays Auto (`None`, following the bank); the first change
@@ -377,7 +382,7 @@ you only name in a request ("add Bash") is asked about rather than added. **Yes,
 a fact of that entry ("Used Bash", `source.kind` review, the posting and its company), so no later review asks again
 there; **Not on my resume** confirms it for that ask alone. The grounding validator takes the instruction and the
 confirmed skills as sources for that call's names and numbers. `cargo run -p resume-llm --example instruct` runs a
-list of asks against a bank and master through `claude -p` to see what the prompt does.
+list of asks against a bank and master through an agent (`--agent`, `claude -p` by default) to see what the prompt does.
 
 **Prep and Practice** read the resume you sent (`applications.sent`), not the master: what the interviewer holds. Their
 honesty rules add to Suggest's. A gap answer never claims the skill: it says what you haven't done, then the nearest
@@ -858,7 +863,7 @@ gliide/
   crates/
     resume-core/             bank/master types (serde + JSON Schema), resolve, ids, change engine, apply, matcher, score, validator
     resume-render/           Typst World, fonts, templates, measure, PDF/SVG/PNG, PDF text read-back, PDF files as SVG
-    resume-llm/              Llm trait, ACP client provider, claude CLI provider, agent discovery, JSON repair, prompts
+    resume-llm/              Llm trait, the claude / codex / agy CLI providers, agent discovery, JSON repair, prompts
     resume-ingest/           posting fetch/parse
     resume-store/            SQLite schema, migrations, queries; the draft event log; applications.csv
     resume-tailor/           the fit check: states, page loop, now / projected / ceiling, points
@@ -882,7 +887,7 @@ gliide/
 | Unit (`resume-core`) | Resolve, matcher (whole terms, aliases, near forms), dates and years, `apply` per op, key stability across re-runs, validator cases, bank candidate ranking |
 | Golden | `fixtures/postings` × the fixture bank's masters (`fixtures/banks/`) with recorded model outputs → score components, tailored JSON, page count; deterministic, in CI |
 | Templates | Every template × every fixture resume compiles, emits the contract's metadata, and round-trips its PDF text |
-| Providers | A fake ACP agent (the SDK's `Agent` trait) in tests: permission requests denied, malformed JSON repaired once, timeouts |
+| Providers | Each CLI provider against a fake binary (a shell script): its flags, output parsing, errors and exit codes, one repair turn, timeouts; Antigravity's schema translation |
 | Prompt evals (`ez eval`, not CI) | Live runs per agent over fixtures: schema failures, repairs, validator and line-budget violations, latency; both modes |
 
 ## 12. Speed targets
@@ -905,7 +910,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 
 | Milestone | Delivers | Done when |
 |---|---|---|
-| M0 Spike: providers ✓ (Claude) | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over 11 postings; `codex-acp` and `gemini --acp` join once core features work | Done for Claude: 33/33 valid first try (sonnet, haiku, haiku `--effort low`); sonnet default; sonnet's outputs for today's fixture postings in `fixtures/requirements/sonnet/` |
+| M0 Spike: providers ✓ | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over 11 postings; then `CodexCli` and `AntigravityCli` (the spike's `--agent`) | Done for Claude: 33/33 valid first try (sonnet, haiku, haiku `--effort low`); sonnet default; sonnet's outputs for today's fixture postings in `fixtures/requirements/sonnet/`. Codex and Antigravity: §1, How each agent runs a call |
 | M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to the `typst` CLI's output with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (a junior SWE posting, now `northwind-jr-swe`: 74.2 → 84.2); a bank with roles outside the master is needed to settle the mode experiment |
@@ -922,7 +927,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | Decision | Status |
 |---|---|
 | UI stack | **Decided:** Tauri 2 + Svelte over a Rust core |
-| Model access on desktop | **Decided:** your own agents: `claude -p` first; ACP (Codex, Gemini CLI, registry) added after core features work; no API keys |
+| Model access on desktop | **Decided:** your own agents in their headless modes (`claude -p`, `codex exec`, `agy -p`), one chosen at a time; no API keys. ACP (once planned for Codex and Gemini CLI) is not used: each lab's headless mode now enforces a schema, ACP doesn't |
 | Bank-aware vs master-only suggestions | **Decided:** bank-aware by default, bank suggestions in like the rest; master only a setting |
 | Sync | **Not yet** |
 | Company logo source | **Decided:** first party (posting pages, the company's own site); logo.dev if coverage needs a third party |
@@ -935,10 +940,10 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | Risk | Mitigation |
 |---|---|
 | A lab changes its terms or blocks subscription use from other apps | Several labs behind one trait; the app never handles credentials; re-check terms each release |
-| Agent CLIs change flags, auth or ACP versions | Pin tested versions in settings; the M0 spike becomes `ez eval` run before each release |
-| Agents return prose or broken JSON without schema enforcement | Validation + one repair turn; `claude -p` keeps real schema enforcement; per-agent failure rates tracked |
-| An agent tries to use tools | No fs/terminal capability, no MCP servers, every permission denied, empty temp `cwd` |
-| Users must install and sign in to a CLI (and Node for adapters) | Settings detects agents and links the install and sign-in steps |
+| Agent CLIs change flags, auth or output | Each provider's flags and parsing pinned by fake-binary tests; the spike (`--agent`) becomes `ez eval` run before each release |
+| An agent returns prose or broken JSON | Every headless mode enforces the schema; gliide validates anyway, with one repair turn; per-agent failure rates tracked |
+| An agent tries to use tools | Its tools turned off or every action denied (§1, How each agent runs a call), no MCP servers, empty temp `cwd` |
+| Users must install and sign in to a CLI | Settings and the setup detect every agent and link the install and sign-in steps |
 | The score is mistaken for a real ATS's | Label it as literal-match coverage; show components; read back from the PDF |
 | Model wording claims more than the bank | Validator, sources per rewrite, your variants preferred, everything reviewable before export |
 | Bank suggestions add noise or crowd the page | Own group, each a toggle; candidates only when they state the posting's terms; the fit check leaves them out first |

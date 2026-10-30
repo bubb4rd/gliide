@@ -132,13 +132,13 @@ pub fn posting(app: &App, job: &str) -> Result<PostingRow> {
 /// The posting's requirements: from the store when this text, prompt and model were extracted before, else one
 /// Extract call (cancellable under the posting's id), joined by any asking for the same while it runs.
 pub async fn requirements(app: &Arc<App>, row: &PostingRow) -> Result<Requirements> {
-    let model = app.settings().extract_model;
+    let model = app.settings().current().extract_model.clone();
     let key = extract_key(&row.posting);
     single_flight(app, &format!("extract {model} {key}"), async |_| {
         if let Some(req) = lock(&app.store).requirements(&key, &model)? {
             return Ok(req);
         }
-        let llm = app.claude().await?;
+        let llm = app.agent().await?;
         let posting = row.posting.clone();
         let m = model.clone();
         let (req, out) = model_call(app, &row.id, Stage::Extracting, async move {

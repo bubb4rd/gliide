@@ -1,11 +1,12 @@
-//! `ClaudeCli` against a fake `claude`: a shell script that records each call's arguments and stdin, then prints
-//! the reply queued for that call and exits with its status.
+//! `ClaudeCli` against a fake `claude` (`fake::Fake`).
 #![cfg(unix)]
 
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+mod fake;
+
+use std::path::Path;
 use std::time::Duration;
 
+use fake::Fake;
 use resume_llm::{Call, ClaudeCli, Llm, LlmError, Schema};
 use serde_json::{Value, json};
 
@@ -16,66 +17,10 @@ const SCHEMA: &str = r#"{
   "properties": { "greeting": { "type": "string" } }
 }"#;
 
-const SCRIPT: &str = r#"#!/bin/sh
-dir="$(dirname "$0")"
-n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 ))
-echo "$n" > "$dir/count"
-for a in "$@"; do printf '%s\n' "$a"; done > "$dir/args.$n"
-cat > "$dir/stdin.$n"
-if [ -f "$dir/sleep" ]; then sleep "$(cat "$dir/sleep")"; fi
-reply="$dir/reply.$n"; [ -f "$reply" ] || reply="$dir/reply"
-cat "$reply"
-status="$dir/status.$n"; [ -f "$status" ] || status="$dir/status"
-exit "$(cat "$status" 2>/dev/null || echo 0)"
-"#;
-
-struct Fake {
-    dir: tempfile::TempDir,
-}
-
-impl Fake {
-    fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
-        let bin = dir.path().join("claude");
-        std::fs::write(&bin, SCRIPT).unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        Self { dir }
-    }
-
-    fn path(&self, name: &str) -> PathBuf {
-        self.dir.path().join(name)
-    }
-
-    /// Queues `body` for call `n` (or every call, with `None`).
-    fn reply(&self, n: Option<u32>, body: &str) -> &Self {
-        let name = n.map_or("reply".to_owned(), |n| format!("reply.{n}"));
-        std::fs::write(self.path(&name), body).unwrap();
-        self
-    }
-
-    fn status(&self, code: i32) -> &Self {
-        std::fs::write(self.path("status"), code.to_string()).unwrap();
-        self
-    }
-
-    fn sleep(&self, secs: u32) -> &Self {
-        std::fs::write(self.path("sleep"), secs.to_string()).unwrap();
-        self
-    }
-
-    fn calls(&self) -> u32 {
-        std::fs::read_to_string(self.path("count")).map_or(0, |s| s.trim().parse().unwrap())
-    }
-
-    fn read(&self, name: &str) -> String {
-        std::fs::read_to_string(self.path(name)).unwrap()
-    }
-
-    fn provider(&self) -> ClaudeCli {
-        ClaudeCli::new(self.path("claude"))
-            .with_model("haiku")
-            .with_timeout(Duration::from_secs(10))
-    }
+fn provider(fake: &Fake) -> ClaudeCli {
+    ClaudeCli::new(fake.bin())
+        .with_model("haiku")
+        .with_timeout(Duration::from_secs(10))
 }
 
 fn envelope(structured: Value) -> String {
@@ -102,12 +47,12 @@ const CALL: Call<'static> = Call {
 
 async fn run(fake: &Fake) -> Result<resume_llm::Structured, LlmError> {
     let schema = Schema::parse(SCHEMA).unwrap();
-    fake.provider().structured(CALL, &schema).await
+    provider(fake).structured(CALL, &schema).await
 }
 
 #[tokio::test]
 async fn valid_output_passes_in_one_call() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     fake.reply(None, &envelope(json!({ "greeting": "hello" })));
     let out = run(&fake).await.unwrap();
     assert_eq!(out.value, json!({ "greeting": "hello" }));
@@ -153,14 +98,14 @@ async fn valid_output_passes_in_one_call() {
 
 #[tokio::test]
 async fn effort_follows_the_model() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     fake.reply(None, &envelope(json!({ "greeting": "hello" })));
     let schema = Schema::parse(SCHEMA).unwrap();
     let call = Call {
         model: Some("sonnet"),
         ..CALL
     };
-    fake.provider()
+    provider(&fake)
         .with_effort("low")
         .structured(call, &schema)
         .await
@@ -174,7 +119,7 @@ async fn effort_follows_the_model() {
 
 #[tokio::test]
 async fn invalid_output_gets_exactly_one_repair() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     fake.reply(Some(1), &envelope(json!({ "greeting": 7 })));
     fake.reply(Some(2), &envelope(json!({ "greeting": "fixed" })));
     let out = run(&fake).await.unwrap();
@@ -195,7 +140,7 @@ async fn invalid_output_gets_exactly_one_repair() {
 
 #[tokio::test]
 async fn still_invalid_after_repair_fails_with_raw_text() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     fake.reply(None, &envelope(json!({ "greeting": "hi", "extra": true })));
     let err = run(&fake).await.unwrap_err();
     assert_eq!(fake.calls(), 2);
@@ -214,7 +159,7 @@ async fn still_invalid_after_repair_fails_with_raw_text() {
 
 #[tokio::test]
 async fn non_json_text_gets_one_repair() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     let text =
         json!({ "type": "result", "is_error": false, "result": "Sure! Here is a greeting." })
             .to_string();
@@ -227,7 +172,7 @@ async fn non_json_text_gets_one_repair() {
 
 #[tokio::test]
 async fn non_zero_exit_is_an_error() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     fake.reply(None, "Invalid API key · Please run /login\n")
         .status(1);
     let err = run(&fake).await.unwrap_err();
@@ -241,7 +186,7 @@ async fn non_zero_exit_is_an_error() {
 
 #[tokio::test]
 async fn reported_error_is_an_error() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     let body =
         json!({ "type": "result", "subtype": "error_max_turns", "is_error": true }).to_string();
     fake.reply(None, &body);
@@ -255,14 +200,14 @@ async fn reported_error_is_an_error() {
 
 #[tokio::test]
 async fn timeout_is_a_typed_error() {
-    let fake = Fake::new();
+    let fake = Fake::new("claude");
     fake.reply(None, &envelope(json!({ "greeting": "late" })))
         .sleep(5);
     let schema = Schema::parse(SCHEMA).unwrap();
-    let provider = fake.provider().with_timeout(Duration::from_millis(300));
+    let provider = provider(&fake).with_timeout(Duration::from_millis(300));
     let err = provider.structured(CALL, &schema).await.unwrap_err();
     assert!(
-        matches!(err, LlmError::Timeout { after } if after == Duration::from_millis(300)),
+        matches!(err, LlmError::Timeout { after, .. } if after == Duration::from_millis(300)),
         "{err:?}"
     );
 }

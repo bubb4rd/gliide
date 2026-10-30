@@ -9,9 +9,8 @@ use resume_core::change::{Change, Draft, Mode, Op, State};
 use resume_core::changes::{changes_of, draft_changes};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, resolve};
-use resume_llm::ClaudeCli;
-use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
-use resume_llm::suggest::{self, DEFAULT_SUGGEST_MODEL, SuggestInput};
+use resume_llm::Agent;
+use resume_llm::suggest::{self, SuggestInput};
 use resume_pipeline::{heading, mode_name, suggest_key, today};
 use resume_render::{FontOptions, Renderer};
 use resume_tailor::{Tailored, tailor};
@@ -31,12 +30,12 @@ pub struct Args {
     /// Your decisions, wording and own changes (a `Draft` JSON).
     #[arg(long)]
     draft: Option<PathBuf>,
-    /// Model for Suggest.
-    #[arg(long, default_value = DEFAULT_SUGGEST_MODEL)]
-    model: String,
-    /// Model for Extract.
-    #[arg(long, default_value = DEFAULT_EXTRACT_MODEL)]
-    extract_model: String,
+    /// Model for Suggest; the agent's default unless given.
+    #[arg(long)]
+    model: Option<String>,
+    /// Model for Extract; the agent's default unless given.
+    #[arg(long)]
+    extract_model: Option<String>,
     /// Folder for tailored.json, resume.pdf, page-N.png (highlighted) and changes.json.
     #[arg(long)]
     out: PathBuf,
@@ -62,7 +61,8 @@ impl From<ModeArg> for Mode {
 
 pub fn run(args: Args) -> anyhow::Result<()> {
     let rt = runtime()?;
-    let (posting, req) = rt.block_on(job::requirements(&args.source, &args.extract_model))?;
+    let extract_model = args.source.model(&args.extract_model);
+    let (posting, req) = rt.block_on(job::requirements(&args.source, extract_model))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let master: Master = super::read_json(&args.master)?;
     let draft: Draft = match &args.draft {
@@ -119,23 +119,24 @@ async fn suggestions(
     mode: Mode,
 ) -> anyhow::Result<Suggestions> {
     let mode_name = mode_name(mode);
+    let model = args.source.model(&args.model);
     let cached = args
         .source
         .cache
         .join("suggestions")
-        .join(&args.model)
+        .join(model)
         .join(format!("{}.json", suggest_key(input, mode)));
     if !args.source.fresh && cached.exists() {
         eprintln!("suggestions: cached ({})", cached.display());
         return super::read_json(&cached);
     }
-    let llm = ClaudeCli::discover().await?;
+    let llm = Agent::discover(args.source.agent.into()).await?;
     eprintln!(
-        "suggestions: claude -p --model {} ({mode_name}, {} bank candidate(s)) …",
-        args.model,
+        "suggestions: {} --model {model} ({mode_name}, {} bank candidate(s)) …",
+        llm.kind().bin(),
         input.candidates.len()
     );
-    let (s, out) = suggest::suggest(&llm, &suggest::schema(), input, &args.model).await?;
+    let (s, out) = suggest::suggest(&llm, &suggest::schema(), input, model).await?;
     eprintln!(
         "suggestions: {:.1} s{}",
         out.latency().as_secs_f64(),

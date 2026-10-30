@@ -487,8 +487,8 @@ fn ats(board: &Board) -> &'static str {
 
 /// Checks `New` and `Waiting` rows until the day's checks are used up: the rest wait for the next pull. The checks are
 /// shared between sources: each next one goes to the source with the fewest checks today among those with jobs waiting,
-/// its best overlap first (then the employer's newest). Stops at the first failure that isn't the job's own (`claude`,
-/// the network).
+/// its best overlap first (then the employer's newest). Stops at the first failure that isn't the job's own (the
+/// agent, the network).
 async fn drain(app: &Arc<App>) -> Result<()> {
     let mut tried = HashSet::new();
     loop {

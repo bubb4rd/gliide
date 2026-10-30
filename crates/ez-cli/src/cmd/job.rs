@@ -4,23 +4,52 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use resume_core::{Posting, Requirements};
-use resume_llm::ClaudeCli;
-use resume_llm::extract;
+use resume_llm::{Agent, AgentKind, extract};
 use resume_pipeline::{extract_key, posting_file};
 
-/// Where the posting comes from, the bank, and the model-output cache.
+/// Where the posting comes from, the bank, the agent, and the model-output cache.
 #[derive(clap::Args)]
 pub struct Source {
     /// A job link, a posting file (`.md` fixtures keep their front matter as hints), `-` for stdin, or the text.
     pub posting: String,
     #[arg(long)]
     pub bank: PathBuf,
+    /// The agent CLI the model calls run on.
+    #[arg(long, value_enum, default_value = "claude")]
+    pub agent: AgentArg,
     /// Cache folder: requirements keyed by posting text, prompt and model (and suggestions, for `tailor`).
     #[arg(long, default_value = "local/cache")]
     pub cache: PathBuf,
     /// Ignore cached model output and call the model again.
     #[arg(long)]
     pub fresh: bool,
+}
+
+impl Source {
+    /// `model`, else the agent's default.
+    pub fn model<'a>(&self, model: &'a Option<String>) -> &'a str {
+        model
+            .as_deref()
+            .unwrap_or(AgentKind::from(self.agent).default_model())
+    }
+}
+
+/// An agent CLI gliide runs.
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub enum AgentArg {
+    Claude,
+    Codex,
+    Antigravity,
+}
+
+impl From<AgentArg> for AgentKind {
+    fn from(a: AgentArg) -> Self {
+        match a {
+            AgentArg::Claude => Self::Claude,
+            AgentArg::Codex => Self::Codex,
+            AgentArg::Antigravity => Self::Antigravity,
+        }
+    }
 }
 
 pub fn runtime() -> anyhow::Result<tokio::runtime::Runtime> {
@@ -42,8 +71,11 @@ pub async fn requirements(src: &Source, model: &str) -> anyhow::Result<(Posting,
         eprintln!("requirements: cached ({})", cached.display());
         return Ok((posting, super::read_json(&cached)?));
     }
-    let llm = ClaudeCli::discover().await?;
-    eprintln!("requirements: extracting with claude -p --model {model} …");
+    let llm = Agent::discover(src.agent.into()).await?;
+    eprintln!(
+        "requirements: extracting with {} --model {model} …",
+        llm.kind().bin()
+    );
     let (req, out) = extract::extract(&llm, &extract::schema(), &posting, model).await?;
     eprintln!(
         "requirements: {:.1} s{}",

@@ -82,7 +82,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::agent_status,
+            commands::agent_statuses,
             commands::get_settings,
             commands::set_settings,
             commands::models,

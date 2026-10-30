@@ -133,8 +133,8 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
     if let Some(p) = kept {
         return view(&p, &cx.stories);
     }
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let today = Local::now().format("%Y-%m-%d").to_string();
     let Context {
         round,
@@ -265,8 +265,8 @@ pub async fn practice(
         .as_ref()
         .map(|r| r.skills.iter().map(|k| k.term.clone()).collect())
         .unwrap_or_default();
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let (m, s, a, qt, st) = (
         model.clone(),
         cx.sent.clone(),
@@ -352,8 +352,8 @@ pub async fn nudge(
         Some(p) => Some((p.answer, serde_json::from_str::<practice::Feedback>(&p.feedback)?)),
         None => None,
     };
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let (m, s, d, qt, st, la) = (
         model.clone(),
         cx.sent.clone(),

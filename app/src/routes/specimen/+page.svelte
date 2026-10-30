@@ -26,8 +26,10 @@
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import X from "@lucide/svelte/icons/x";
+  import { AGENT_LIST, AGENTS, makerIcon } from "$lib/agents";
   import type { Theme } from "$lib/api";
   import { bindKeys } from "$lib/keys";
+  import { modelName } from "$lib/models";
   import { app } from "$lib/stores/app.svelte";
   import { theme } from "$lib/stores/theme.svelte";
   import {
@@ -124,7 +126,7 @@
 
   // ── Section nav: Settings' links to its cards, over a sample scroll in each orientation ──
   const JUMPS: (NavSection & { body: string; tall?: boolean })[] = [
-    { id: "agent", label: "Claude Code", body: "Short: a jump lands it at the top." },
+    { id: "agent", label: "Agents", body: "Short: a jump lands it at the top." },
     { id: "tailoring", label: "Tailoring", body: "Scroll: each section turns current as its top reaches the top." },
     { id: "feed", label: "Feed", body: "Tall, as Settings’ Feed card.", tall: true },
     { id: "sources", label: "Sources", body: "A part of the one before: indented, regular weight.", sub: true },
@@ -1208,30 +1210,35 @@
             <CompanyMark>Northwind Traders, a company name long enough that it truncates in a narrow cell</CompanyMark>
             <CompanyMark src={LOGO}>Northwind Traders, with its logo</CompanyMark>
             <p class="meta">Blank until you set a logo. A logo shows as the company publishes it: scaled to fit, rounded like the tile, never recolored.</p>
-            <p class="label">Agents (the setup's Agents step) · Claude · off: Codex, Gemini, not supported yet</p>
+            <p class="label">Agents (Settings → Agents, the setup's Agents step) · Claude Code · Codex · Antigravity</p>
             <div class="row">
-              <CompanyMark size={28} src="/agents/claude.png" />
-              <CompanyMark size={28} src="/agents/openai.png" off />
-              <CompanyMark size={28} src="/agents/gemini.png" off />
-              <CompanyMark size={28} off />
+              {#each AGENT_LIST as agent (agent.id)}<CompanyMark size={28} src={agent.icon} />{/each}
             </div>
-            <p class="meta">Off: grayscale at half opacity, the one treatment a logo gets, for an agent gliide can’t run yet.</p>
+            <p class="label">A model's maker (who answered in a chat or a dig) · Claude · GPT · Gemini · another, on Antigravity: the agent's icon</p>
+            <div class="row">
+              {#each ["claude-sonnet-5-5-20261001", "gpt-6-luna", "gemini-3.8-flash-medium", "kimi-k2"] as model (model)}
+                <CompanyMark size={20} src={makerIcon(model) ?? AGENTS.antigravity.icon}>{modelName(model)}</CompanyMark>
+              {/each}
+            </div>
+            <p class="meta">Each shows as its maker publishes it; none is ever grayed.</p>
           </div>
         </Card>
         <Card pad>
           <div class="tile">
             <p class="label">Agent mark · the sidebar's foot · signed in · signed out · not installed · not checked or unknown</p>
-            <div class="row">
-              <AgentMark src="/agents/claude.png" tone="gain" />
-              <AgentMark src="/agents/claude.png" tone="warn" />
-              <AgentMark src="/agents/claude.png" tone="danger" />
-              <AgentMark src="/agents/claude.png" tone="neutral" />
-            </div>
+            {#each AGENT_LIST as agent (agent.id)}
+              <div class="row">
+                <AgentMark src={agent.icon} tone="gain" />
+                <AgentMark src={agent.icon} tone="warn" />
+                <AgentMark src={agent.icon} tone="danger" />
+                <AgentMark src={agent.icon} tone="neutral" />
+              </div>
+            {/each}
             <Nav label="Agent states (specimen)">
-              {#each [{ tone: "gain", sub: "Signed in · Max" }, { tone: "warn", sub: "Signed out" }, { tone: "danger", sub: "Not installed" }, { tone: "neutral", sub: "Couldn't check sign-in" }] as const as state (state.sub)}
+              {#each [{ agent: AGENTS.claude, tone: "gain", sub: "Signed in · Max" }, { agent: AGENTS.codex, tone: "gain", sub: "Signed in · ChatGPT" }, { agent: AGENTS.antigravity, tone: "gain", sub: "Signed in" }, { agent: AGENTS.codex, tone: "warn", sub: "Signed out" }, { agent: AGENTS.antigravity, tone: "danger", sub: "Not installed" }, { agent: AGENTS.claude, tone: "neutral", sub: "Couldn't check sign-in" }] as const as state (state.agent.id + state.sub)}
                 <NavItem href="#review" sub={state.sub}>
-                  {#snippet lead()}<AgentMark src="/agents/claude.png" tone={state.tone} />{/snippet}
-                  Claude Code
+                  {#snippet lead()}<AgentMark src={state.agent.icon} tone={state.tone} />{/snippet}
+                  {state.agent.name}
                 </NavItem>
               {/each}
             </Nav>

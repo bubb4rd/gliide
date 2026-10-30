@@ -35,8 +35,8 @@
     type EntryView,
     type FactLine,
   } from "$lib/api";
+  import { makerIcon } from "$lib/agents";
   import { bindKeys } from "$lib/keys";
-  import { modelName } from "$lib/models";
   import { kindLabel } from "$lib/rounds";
   import { app } from "$lib/stores/app.svelte";
   import { themeLabel } from "$lib/stories";
@@ -326,7 +326,11 @@
     {#if turn.kind === "ask"}
       <article class="agent">
         {#if turn.read}
-          <p class="who"><CompanyMark size={20} src="/agents/claude.png" /><span class="who__name">{modelName(turn.model)}</span></p>
+          <p class="who">
+            <CompanyMark size={20} src={makerIcon(turn.model) ?? app.agentInfo.icon} /><span class="who__name"
+              >{app.modelName(turn.model)}</span
+            >
+          </p>
           <p class="read">{turn.read}</p>
         {/if}
         <section class="card" aria-label="Questions">
@@ -412,7 +416,11 @@
     {:else}
       {@const c = turn.capture}
       <article class="agent">
-        <p class="who"><CompanyMark size={20} src="/agents/claude.png" /><span class="who__name">{modelName(c.model)}</span></p>
+        <p class="who">
+          <CompanyMark size={20} src={makerIcon(c.model) ?? app.agentInfo.icon} /><span class="who__name"
+            >{app.modelName(c.model)}</span
+          >
+        </p>
         <p class="read">{c.reply}</p>
 
         {#if c.facts.length}

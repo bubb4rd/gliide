@@ -3,13 +3,14 @@
   only in tooltips and to assistive tech), you first and then your tools: Welcome (what gliide does and its three
   promises), Experience (drop or choose a resume; the import review comes back here; building one with your agent is
   coming), What it says (what the feed looks for, worked out from the resume and changed in place, what only you can
-  say, and whether it pulls), Agents (Claude Code found and signed in, checked again as you arrive and on R; the
-  agents coming), Appearance (the theme, applied as you choose) and Ready (your experience, what you're looking for and
-  your agent, each a way back to its step). The step is in the URL (`?step=says`) so the import review can come back to
-  it. ⏎ goes on, ⌘[ goes back, a done step in the bar goes back to it; Skip setup and the last step's button end the
-  setup for good. The footer follows the step (held at the window's foot once a step is taller than it). A step leaves
-  sideways toward where you came from and the next enters from where you're going, its parts 100ms apart; with reduced
-  motion they only fade.
+  say, and whether it pulls), Agents (Claude Code, Codex and Antigravity as a choice of one, saved as the agent every
+  model call runs on, each found and signed in or not, checked again as you arrive and on R; the chosen one's problem
+  and how to install it), Appearance (the theme, applied as you choose) and Ready (your experience, what you're looking
+  for and your agent, each a way back to its step). The step is in the URL (`?step=says`) so the import review can come
+  back to it. ⏎ goes on, ⌘[ goes back, a done step in the bar goes back to it; Skip setup and the last step's button
+  end the setup for good. The footer follows the step (held at the window's foot once a step is taller than it). A
+  step leaves sideways toward where you came from and the next enters from where you're going, its parts 100ms apart;
+  with reduced motion they only fade.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
@@ -29,6 +30,8 @@
   import UserRound from "@lucide/svelte/icons/user-round";
   import { Badge, Button, Card, Checkbox, CompanyMark, FileDrop, Icon, Segmented, Steps, Toolbar, exit, toast } from "$lib/ui";
   import {
+    type Agent,
+    type AgentStatus,
     appError,
     feedSettings,
     setFeedSettings,
@@ -37,18 +40,13 @@
     type Settings,
     type Theme,
   } from "$lib/api";
+  import { AGENT_LIST, type AgentInfo } from "$lib/agents";
   import { CATEGORY, COUNTRIES, EMPLOYMENT, SENIORITY, countryName } from "$lib/feed";
   import { RESUME_FORMATS, chooseResume, watchResumeDrop } from "$lib/import";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { theme } from "$lib/stores/theme.svelte";
-
-  /** Agents gliide will run once they're supported (ARCHITECTURE.md §1): shown, grayed, so you know what's coming. */
-  const LATER = [
-    { name: "Codex", maker: "OpenAI, with your ChatGPT plan", src: "/agents/openai.png" },
-    { name: "Gemini CLI", maker: "Google, with your Google AI plan", src: "/agents/gemini.png" },
-  ];
 
   const STEPS = [
     { id: "welcome", name: "Welcome" },
@@ -82,7 +80,6 @@
       body: "Every edit is yours to take or leave, and your master is never changed.",
     },
   ];
-  const INSTALL = "https://code.claude.com/docs/en/setup";
 
   const at = $derived(
     Math.max(
@@ -164,26 +161,38 @@
   // ── Agents ──
   let checking = $state(false);
 
-  async function checkAgent() {
+  /** One check, every agent. */
+  async function checkAgents() {
     if (checking) return;
     checking = true;
-    await app.refreshAgent();
+    await app.refreshAgents();
     checking = false;
   }
 
+  /** The agent model calls run on (Claude Code until you choose another), and its status. */
+  const chosen = $derived(app.agentInfo);
   const agent = $derived(app.agent);
-  const agentBadge = $derived.by(() => {
-    if (!agent) return { tone: "neutral", text: checking ? "Checking…" : "Not checked" } as const;
-    if (!agent.found) return { tone: "danger", text: "Not found" } as const;
-    if (agent.signedIn === false) return { tone: "danger", text: "Signed out" } as const;
-    if (agent.signedIn === null) return { tone: "neutral", text: "Sign-in unknown" } as const;
+  const statusOf = (id: Agent) => app.agents?.find((a) => a.agent === id) ?? null;
+  function badgeOf(status: AgentStatus | null) {
+    if (!status) return { tone: "neutral", text: checking ? "Checking…" : "Not checked" } as const;
+    if (!status.found) return { tone: "danger", text: "Not found" } as const;
+    if (status.signedIn === false) return { tone: "danger", text: "Signed out" } as const;
+    if (status.signedIn === null) return { tone: "neutral", text: "Sign-in unknown" } as const;
     return { tone: "gain", text: "Signed in" } as const;
-  });
-  const agentMeta = $derived(
-    agent?.found ? [agent.version, agent.plan].filter(Boolean).join(" · ") || "Found" : "Not installed on this Mac",
-  );
+  }
+  /** "Anthropic · 2.1.0 · Max" once found; before it's checked, whose plan it runs on. */
+  function metaOf(info: AgentInfo, status: AgentStatus | null) {
+    if (!status) return `${info.maker}, ${info.plan}`;
+    if (!status.found) return `${info.maker} · not installed on this Mac`;
+    return [info.maker, status.version, status.plan].filter(Boolean).join(" · ");
+  }
+  const agentBadge = $derived(badgeOf(agent));
   /** Reading a resume runs the agent: known not to be ready, the Experience step says so before you try. */
   const agentMissing = $derived(agentBadge.tone === "danger");
+
+  function chooseAgent(id: Agent) {
+    if (app.settings?.agent !== id) void save({ agent: id });
+  }
 
   function visit(url: string) {
     openUrl(url).catch((e) => toast(`Couldn’t open ${url}: ${appError(e).message}`, { tone: "danger" }));
@@ -284,7 +293,7 @@
   // What each step needs fresh as you arrive: the agent may have been installed meanwhile (and the Experience step
   // reads a resume through it); the feed's Auto follows the bank you just imported.
   $effect(() => {
-    if (step === "agent" || step === "resume" || step === "ready") untrack(() => void checkAgent());
+    if (step === "agent" || step === "resume" || step === "ready") untrack(() => void checkAgents());
     if (step === "says" || step === "ready") untrack(() => void loadFeed());
   });
 
@@ -327,7 +336,7 @@
       },
       r: () => {
         if (step !== "agent") return false;
-        void checkAgent();
+        void checkAgents();
       },
     }),
   );
@@ -338,10 +347,6 @@
     <h1 class="headline turn" id="step-{step}" tabindex="-1" style:--i="0">{title}</h1>
     <p class="lede turn" style:--i="1">{body}</p>
   </header>
-{/snippet}
-
-{#snippet agentLead(src: string, off = false)}
-  <span class="lead"><CompanyMark size={28} {src} {off} /></span>
 {/snippet}
 
 <Toolbar over clear={!scrolled}>
@@ -409,7 +414,7 @@
               </FileDrop>
               {#if agentMissing}
                 <div class="guard turn" style:--i="3">
-                  <p class="meta">Reading a resume takes an agent, and Claude Code isn’t ready yet.</p>
+                  <p class="meta">Reading a resume takes an agent, and {chosen.name} isn’t ready yet.</p>
                   <Button size="sm" onclick={() => go(indexOf("agent"))}>Set up an agent</Button>
                 </div>
               {/if}
@@ -519,7 +524,7 @@
                           <span class="row__name">Pull new postings</span>
                           <span class="row__sub num">
                             At launch and every {plural(fs.everyHours, "hour", "hours")}, up to {fs.dailyChecks} checked
-                            a day on your agent’s plan.
+                            a day {chosen.plan}.
                           </span>
                         </span>
                         <Checkbox
@@ -537,46 +542,52 @@
             {/if}
           {:else if step === "agent"}
             {@render intro(
-              "Connect your agent",
-              "gliide reads your resume and postings, and suggests edits, through an agent you’re signed in to, on your own plan. It never sees a credential.",
+              "Choose your agent",
+              "gliide reads your resume and postings, and suggests edits, through the agent you choose, signed in on your own plan. It never sees a credential.",
             )}
             <Card class="turn" style="--i: 2">
               <div class="rows">
-                <div class="row row--status">
-                  {@render agentLead("/agents/claude.png")}
-                  <span class="row__name">Claude Code</span>
-                  <span class="row__sub num">{agentMeta}</span>
-                  <span class="row__end"><Badge tone={agentBadge.tone} dot>{agentBadge.text}</Badge></span>
+                <div class="rows choices" role="radiogroup" aria-label="The agent model calls run on">
+                  {#each AGENT_LIST as info (info.id)}
+                    {@const status = statusOf(info.id)}
+                    {@const badge = badgeOf(status)}
+                    {@const on = chosen.id === info.id}
+                    <label class={["row", "row--status", "row--choice", on && "row--chosen"]}>
+                      <input
+                        class="visually-hidden"
+                        type="radio"
+                        name="agent"
+                        value={info.id}
+                        checked={on}
+                        disabled={!app.settings}
+                        onchange={() => chooseAgent(info.id)}
+                      />
+                      <span class="lead"><CompanyMark size={28} src={info.icon} /></span>
+                      <span class="row__name">{info.name}</span>
+                      <span class="row__sub num">{metaOf(info, status)}</span>
+                      <span class="row__end row__end--badge">
+                        <Badge tone={badge.tone} dot>{badge.text}</Badge>
+                        <span class={["chosen", on && "chosen--on"]} aria-hidden="true"
+                          ><Icon icon={Check} weight="medium" /></span
+                        >
+                      </span>
+                    </label>
+                  {/each}
                 </div>
                 {#if agent?.problem}<p class="problem">{agent.problem}</p>{/if}
                 <div class="actions">
                   {#if agent && !agent.found}
-                    <Button icon={ExternalLink} onclick={() => visit(INSTALL)}>How to install</Button>
+                    <Button icon={ExternalLink} onclick={() => visit(chosen.install)}>How to install {chosen.name}</Button>
                   {/if}
-                  <Button icon={RotateCw} kbd="R" disabled={checking} onclick={checkAgent}>
+                  <Button icon={RotateCw} kbd="R" disabled={checking} onclick={checkAgents}>
                     {checking ? "Checking…" : "Check again"}
                   </Button>
                 </div>
               </div>
             </Card>
-            <section class="group turn" style:--i="3" aria-labelledby="later-label">
-              <h2 class="label" id="later-label">Other agents</h2>
-              <Card>
-                <ul class="rows">
-                  {#each LATER as later (later.name)}
-                    <li class="row row--status row--later">
-                      {@render agentLead(later.src, true)}
-                      <span class="row__name">{later.name}</span>
-                      <span class="row__sub">{later.maker}</span>
-                      <span class="row__end"><Badge>Not supported yet</Badge></span>
-                    </li>
-                  {/each}
-                </ul>
-              </Card>
-            </section>
             {#if agentBadge.tone !== "gain"}
-              <p class="note meta turn" style:--i="4">
-                You can go on and connect one later in Settings. Until then, resumes can’t be read and postings can’t be
+              <p class="note meta turn" style:--i="3">
+                You can go on and set it up later in Settings. Until then, resumes can’t be read and postings can’t be
                 scored.
               </p>
             {/if}
@@ -645,9 +656,9 @@
                 <ul class="rows">
                   <li>
                     <button type="button" class="row row--status row--button" onclick={() => go(indexOf("agent"))}>
-                      {@render agentLead("/agents/claude.png")}
-                      <span class="row__name">Claude Code</span>
-                      <span class="row__sub num">{agent?.found ? agentMeta : "Not installed on this Mac"}</span>
+                      <span class="lead"><CompanyMark size={28} src={chosen.icon} /></span>
+                      <span class="row__name">{chosen.name}</span>
+                      <span class="row__sub num">{metaOf(chosen, agent)}</span>
                       <span class="row__end row__end--badge">
                         <Badge tone={agentBadge.tone} dot>{agentBadge.text}</Badge>
                         <span class="meta">{agentBadge.tone === "gain" ? "Change" : "Set up"}</span>
@@ -745,7 +756,7 @@
   .group > .label {
     margin: 0;
   }
-  /* What isn't here yet: names and lines in ink 3, agent marks grayed. */
+  /* What isn't here yet: names, lines and icons in ink 3. */
   .row--later .row__name,
   .row--later .row__sub,
   .row--later .lead {
@@ -840,6 +851,33 @@
   .row__end--badge {
     align-items: center;
     gap: var(--space-3);
+  }
+
+  /* The agents, a choice of one: the chosen row in the selection wash with a check at its end (the radio itself is
+     hidden; its focus ring is the row's, inset). The check changes at once; the wash as a row's hover does. */
+  .choices {
+    overflow: visible;
+    border-radius: 0;
+  }
+  .row--choice {
+    position: relative;
+    cursor: default;
+    transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .row--choice:has(:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .row--chosen {
+    background: var(--selected);
+  }
+  .chosen {
+    display: flex;
+    color: var(--accent-text);
+    visibility: hidden;
+  }
+  .chosen--on {
+    visibility: visible;
   }
 
   .field {
@@ -940,7 +978,8 @@
   }
 
   @media (hover: hover) {
-    .row--button:hover {
+    .row--button:hover,
+    .row--choice:not(.row--chosen):hover {
       background: var(--hover);
     }
   }

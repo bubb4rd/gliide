@@ -127,8 +127,8 @@ pub async fn read_invite(app: &Arc<App>, application: &str, text: String) -> Res
     let id = application.to_owned();
     let a = blocking(app, move |app| application_of(&lock(&app.store), &id)).await?;
     let job = a.posting_id.clone().unwrap_or_else(|| a.id.clone());
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let now = Local::now();
     let (today, weekday, offset) = (
         now.format("%Y-%m-%d").to_string(),

@@ -1,5 +1,5 @@
 //! The Tauri commands: `app/src/lib/api/index.ts` names them and their arguments. Each is async and runs its work
-//! on the blocking pool or as a model-call task, so the UI thread never waits on SQLite, Typst or `claude`.
+//! on the blocking pool or as a model-call task, so the UI thread never waits on SQLite, Typst or the agent.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,9 +26,10 @@ type St<'a> = State<'a, Arc<App>>;
 
 // ── Settings and the agent ──
 
+/// Every agent's status: Claude Code, Codex, Antigravity.
 #[tauri::command]
-pub async fn agent_status(app: St<'_>) -> Res<AgentStatus> {
-    Ok(settings::agent_status(&app).await)
+pub async fn agent_statuses(app: St<'_>) -> Res<Vec<AgentStatus>> {
+    Ok(settings::agent_statuses(&app).await)
 }
 
 #[tauri::command]
@@ -41,7 +42,7 @@ pub async fn set_settings(app: St<'_>, settings: Settings) -> Res<Settings> {
     blocking(&app, move |app| settings::set_settings(app, settings)).await
 }
 
-/// Each asked `claude --model` alias or name → the model id that last served it.
+/// Each asked `--model` alias or name → the model id that last served it.
 #[tauri::command]
 pub async fn models(app: St<'_>) -> Res<HashMap<String, String>> {
     blocking(&app, |app| app.served_models()).await

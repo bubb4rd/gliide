@@ -1,14 +1,13 @@
 <!--
   The company's logo slot: the logo you set (ARCHITECTURE.md §7, Company logos), else a blank tile. A logo shows as
   the company publishes it, scaled to fit the square and rounded like the tile: never recolored, filtered or outlined.
-  Sizes: 16 (one-line sidebar items), 20 (one-line table cells, beside a name), 28 (two lines: the sidebar's Recent
-  jobs, the Applications table and the Overview's Up next, from the company's cap height to the role's baseline), 48
-  (the job header: from the company's cap height to the title's baseline). With children, the company's name follows
-  the mark and truncates. With `label` (its accessible name) it's a button that sets the logo (`onclick`, or
-  `popovertarget` for a panel): the blank tile shows an image icon on hover and focus, and `over` (files dragged over
-  it) rings it in the accent. `off` grays a brand gliide can't use yet (an agent it doesn't support), so it reads as
-  unavailable beside the ones that are; with `AgentMark`'s presence cut-out, the only exceptions to showing a logo as
-  published.
+  Sizes: 16 (one-line sidebar items), 20 (one-line table cells, beside a name, the model that answered in a chat), 28
+  (two lines: the sidebar's Recent jobs, the Applications table and the Overview's Up next, from the company's cap
+  height to the role's baseline; the agents in Settings and the setup), 48 (the job header: from the company's cap
+  height to the title's baseline). With children, the company's name follows the mark and truncates. With `label` (its
+  accessible name) it's a button that sets the logo (`onclick`, or `popovertarget` for a panel): the blank tile shows an
+  image icon on hover and focus, and `over` (files dragged over it) rings it in the accent. `AgentMark`'s presence
+  cut-out is the only exception to showing a logo as published.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -24,8 +23,6 @@
     over?: boolean;
     /** Makes the mark a button, named this. */
     label?: string;
-    /** Not available yet: grayscale at half opacity. */
-    off?: boolean;
     element?: HTMLElement;
     /** The company's name beside the mark. */
     children?: Snippet;
@@ -36,7 +33,6 @@
     src = null,
     over = false,
     label,
-    off = false,
     element = $bindable(),
     children,
     class: className,
@@ -49,7 +45,7 @@
     <button
       bind:this={element}
       type="button"
-      class={["mark", `mark--${size}`, "mark--button", src && "mark--logo", over && "mark--over", off && "mark--off", className]}
+      class={["mark", `mark--${size}`, "mark--button", src && "mark--logo", over && "mark--over", className]}
       aria-label={label}
       {...rest}
     >
@@ -60,9 +56,9 @@
       {/if}
     </button>
   {:else if src}
-    <img bind:this={element} class={["mark", `mark--${size}`, "mark--logo", off && "mark--off", className]} {src} alt="" aria-hidden="true" draggable="false" />
+    <img bind:this={element} class={["mark", `mark--${size}`, "mark--logo", className]} {src} alt="" aria-hidden="true" draggable="false" />
   {:else}
-    <span bind:this={element} class={["mark", `mark--${size}`, off && "mark--off", className]} aria-hidden="true"></span>
+    <span bind:this={element} class={["mark", `mark--${size}`, className]} aria-hidden="true"></span>
   {/if}
 {/snippet}
 
@@ -119,12 +115,6 @@
     height: 100%;
     object-fit: contain;
   }
-  /* A brand gliide can't use yet: grayed, so it reads as unavailable (the only treatment a logo ever gets). */
-  .mark--off {
-    filter: grayscale(1);
-    opacity: 0.5;
-  }
-
   .mark--button {
     display: grid;
     place-items: center;

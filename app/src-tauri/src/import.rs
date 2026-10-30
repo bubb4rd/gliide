@@ -46,8 +46,8 @@ pub async fn read_import(app: &Arc<App>, path: String) -> Result<ImportView> {
     let (resume, pages) = match source {
         ResumeSource::AtsFit(r) => (r, None),
         ResumeSource::File(f) => {
-            let llm = app.claude().await?;
-            let model = app.settings().extract_model;
+            let llm = app.agent().await?;
+            let model = app.settings().current().extract_model.clone();
             let pages = f.pages;
             let m = model.clone();
             let (resume, out) = model_call(app, JOB, Stage::Importing, async move {

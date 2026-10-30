@@ -13,8 +13,6 @@ use crate::{Call, Llm, LlmError, Schema, Structured};
 pub const PROMPT: &str = include_str!("../../../prompts/import.md");
 /// The reply's schema (`prompts/import.schema.json`): the v1 master JSON shape.
 pub const SCHEMA: &str = include_str!("../../../prompts/import.schema.json");
-/// The model Import runs on unless the user picks another.
-pub const DEFAULT_IMPORT_MODEL: &str = "sonnet";
 
 pub fn schema() -> Schema {
     Schema::parse(SCHEMA).expect("prompts/import.schema.json is a valid schema")

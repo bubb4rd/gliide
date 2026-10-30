@@ -8,7 +8,7 @@
   import CompanyMark from "./CompanyMark.svelte";
 
   interface Props {
-    /** The agent's icon (`/agents/claude.png`). */
+    /** The agent's icon (`app.agentInfo.icon`: `/agents/claude.png`, `openai.png` or `antigravity.png`). */
     src: string;
     tone: "gain" | "warn" | "danger" | "neutral";
   }

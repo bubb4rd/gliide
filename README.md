@@ -10,7 +10,7 @@ Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 
 | Document | What it covers |
 |---|---|
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Stack, data model, model access through your own subscription (ACP, `claude -p`), scoring, change engine, rendering, roadmap |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Stack, data model, model access through your own subscription (`claude -p`, `codex exec`, `agy -p`), scoring, change engine, rendering, roadmap |
 | [`design/DESIGN.md`](design/DESIGN.md) | The "Paper & Ink" design system: tokens, components, motion, screen recipes |
 | [`AGENTS.md`](AGENTS.md) | Rules for coding agents working in this repo |
 
@@ -18,9 +18,11 @@ Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 
 Download `gliide_<version>_aarch64.dmg` from the [latest release](https://github.com/bubb4rd/gliide/releases/latest),
 open it and drag gliide to Applications. The app is signed with a Developer ID and notarized by Apple, so it opens
-without a Gatekeeper warning. It runs on macOS on Apple Silicon and needs
-[Claude Code](https://code.claude.com) (`claude`) installed and signed in with your own Claude subscription: gliide
-launches it for every model call and never asks for or stores an API key. First-run setup checks for it.
+without a Gatekeeper warning. It runs on macOS on Apple Silicon and needs one agent CLI installed and signed in with
+your own subscription: [Claude Code](https://code.claude.com) (`claude`), [Codex](https://developers.openai.com/codex/cli)
+(`codex`, with a ChatGPT plan) or [Antigravity](https://antigravity.google/docs/getting-started) (`agy`, with a Google AI
+plan). gliide launches the one you choose for every model call and never asks for or stores an API key. First-run
+setup checks for them.
 
 From 0.2.0 on, gliide looks for a newer release at launch and once a day and says so in the sidebar; **Restart to
 update** (Settings → About) installs it. Only a release signed with the project's update key installs. Copies older
@@ -31,8 +33,10 @@ than 0.2.0 update once by hand, from the latest release.
 - macOS on Apple Silicon (the tested platform; no other platform is built yet).
 - Rust stable, 1.90 or newer (the workspace uses edition 2024; the updater plugin needs 1.90), via [rustup](https://rustup.rs).
 - Node.js 20.19+ or 22.12+ (Vite 8) and pnpm 9 (`corepack enable` picks up `packageManager` in `app/package.json`).
-- An agent CLI installed and signed in with your own subscription, such as
-  [Claude Code](https://code.claude.com) (`claude`). gliide launches it; it never asks for or stores an API key.
+- An agent CLI installed and signed in with your own subscription: [Claude Code](https://code.claude.com) (`claude`),
+  [Codex](https://developers.openai.com/codex/cli) (`codex`) or
+  [Antigravity](https://antigravity.google/docs/getting-started) (`agy`). gliide launches it; it never asks for or
+  stores an API key.
 
 ## Build and run
 
@@ -83,12 +87,12 @@ Core and rendering (`cargo run -p ez-cli --bin ez -- …`; outputs belong under 
 | Command | Does |
 |---|---|
 | `ez migrate <master.json> --out <dir>` | A v1 single-resume `master.json` → `bank.json` + `masters/swe.json` |
-| `ez import <file> --out <dir> [--bank <f>] [--title "Graphic Design"] [--separate <id,…>] [--contact] [--model sonnet]` | A resume (`.pdf`, `.docx`, `.md`, `.txt`; or a v1 JSON such as an earlier run's `imported.json`, which skips the model) copied with `claude -p` and merged into the bank; writes `imported.json`, `bank.json`, `masters/<id>.json` and prints where each part went |
+| `ez import <file> --out <dir> [--bank <f>] [--title "Graphic Design"] [--separate <id,…>] [--contact] [--agent claude\|codex\|antigravity] [--model <name>]` | A resume (`.pdf`, `.docx`, `.md`, `.txt`; or a v1 JSON such as an earlier run's `imported.json`, which skips the model) copied with the agent (`claude -p` unless `--agent` names another; `--model` defaults to the agent's) and merged into the bank; writes `imported.json`, `bank.json`, `masters/<id>.json` and prints where each part went |
 | `ez render --bank <f> --master <f> --out <dir> [--highlight] [--system-fonts] [--scale N] [--bench N]` | `resume.pdf`, `page-N.svg`, `page-N.png`, `metrics.json` |
 | `ez schema --out schemas/` | Regenerates `schemas/bank.schema.json`, `schemas/master.schema.json` and `schemas/story.schema.json` |
-| `ez score <link\|file\|-\|text> --bank <f> --master <f> [--model sonnet] [--fresh] [--json <f>]` | Reads the posting, extracts its requirements with `claude -p` (cached in `local/cache/`), prints the composite score and every component |
-| `ez rank <link\|file\|-\|text> --bank <f> --masters <dir>` | Scores every master in the folder against the posting, best first |
-| `ez tailor <link\|file\|-\|text> --bank <f> --master <f> --out <dir> [--mode master-only\|bank-aware] [--draft <f>] [--model sonnet] [--extract-model sonnet] [--fresh]` | Extract and Suggest (both cached in `local/cache/`), the change set, the fit check; writes `tailored.json`, `resume.pdf`, highlighted `page-N.png`, `changes.json` (state, points, flags per change); prints now → projected (ceiling), the page status and every change |
+| `ez score <link\|file\|-\|text> --bank <f> --master <f> [--agent claude\|codex\|antigravity] [--model <name>] [--fresh] [--json <f>]` | Reads the posting, extracts its requirements with the agent (cached in `local/cache/`, per model), prints the composite score and every component |
+| `ez rank <link\|file\|-\|text> --bank <f> --masters <dir> [--agent claude\|codex\|antigravity] [--model <name>]` | Scores every master in the folder against the posting, best first |
+| `ez tailor <link\|file\|-\|text> --bank <f> --master <f> --out <dir> [--mode master-only\|bank-aware] [--draft <f>] [--agent claude\|codex\|antigravity] [--model <name>] [--extract-model <name>] [--fresh]` | Extract and Suggest (both cached in `local/cache/`), the change set, the fit check; writes `tailored.json`, `resume.pdf`, highlighted `page-N.png`, `changes.json` (state, points, flags per change); prints now → projected (ceiling), the page status and every change |
 
 ## What leaves your machine
 
@@ -97,7 +101,7 @@ network requests are these (links you open, such as a posting or Maps, go to you
 
 | Request | When | What is sent |
 |---|---|---|
-| Your agent CLI (e.g. `claude -p`) | Extract, Suggest, Rewrite, Instruct, import, cover letters | The prompt (posting text, the resume being tailored, your notes) goes to the model through the CLI you installed, under your own account with its maker |
+| Your agent CLI (`claude -p`, `codex exec` or `agy -p`) | Extract, Suggest, Rewrite, Instruct, import, cover letters | The prompt (posting text, the resume being tailored, your notes) goes to the model through the CLI you installed, under your own account with its maker |
 | A posting's page or its board's API (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee…) | You paste a link; a feed job is read | The link |
 | [freehire](https://freehire.me) public API and `logo.freehire.me` | Feed pulls and searches (when the feed is on); company logos | Your feed filters and search words; company names |
 | Company websites | A feed company's logo freehire doesn't have | A request for the site's icon |

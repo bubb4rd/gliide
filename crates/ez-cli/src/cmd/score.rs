@@ -5,7 +5,6 @@ use std::time::Instant;
 
 use anyhow::{Context, bail};
 use resume_core::{Bank, Master, PageFacts, Posting, Requirements, Score, rank, score};
-use resume_llm::extract::DEFAULT_EXTRACT_MODEL;
 use resume_pipeline::{heading, master_page as page, today};
 use serde::Serialize;
 
@@ -15,9 +14,9 @@ use super::job::{self, Source, runtime};
 pub struct ScoreArgs {
     #[command(flatten)]
     source: Source,
-    /// Model for Extract.
-    #[arg(long, default_value = DEFAULT_EXTRACT_MODEL)]
-    model: String,
+    /// Model for Extract; the agent's default unless given.
+    #[arg(long)]
+    model: Option<String>,
     #[arg(long)]
     master: PathBuf,
     /// Also write posting, requirements and score as JSON here.
@@ -29,16 +28,17 @@ pub struct ScoreArgs {
 pub struct RankArgs {
     #[command(flatten)]
     source: Source,
-    /// Model for Extract.
-    #[arg(long, default_value = DEFAULT_EXTRACT_MODEL)]
-    model: String,
+    /// Model for Extract; the agent's default unless given.
+    #[arg(long)]
+    model: Option<String>,
     /// Folder of master JSON files.
     #[arg(long)]
     masters: PathBuf,
 }
 
 pub fn score_cmd(args: ScoreArgs) -> anyhow::Result<()> {
-    let (posting, req) = runtime()?.block_on(job::requirements(&args.source, &args.model))?;
+    let model = args.source.model(&args.model);
+    let (posting, req) = runtime()?.block_on(job::requirements(&args.source, model))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let master: Master = super::read_json(&args.master)?;
     let (resume, facts) = page(&bank, &master).with_context(|| format!("master {}", master.id))?;
@@ -68,7 +68,8 @@ pub fn score_cmd(args: ScoreArgs) -> anyhow::Result<()> {
 }
 
 pub fn rank_cmd(args: RankArgs) -> anyhow::Result<()> {
-    let (posting, req) = runtime()?.block_on(job::requirements(&args.source, &args.model))?;
+    let model = args.source.model(&args.model);
+    let (posting, req) = runtime()?.block_on(job::requirements(&args.source, model))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let mut candidates = Vec::new();
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&args.masters)

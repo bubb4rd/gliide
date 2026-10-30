@@ -1,7 +1,8 @@
-//! Extract spike: Extract through `claude -p` on every fixture posting, sequentially, compared with a baseline run.
+//! Extract spike: Extract through an agent CLI (`claude -p` unless `--agent` names another) on every fixture posting,
+//! sequentially, compared with a baseline run.
 //!
-//! `cargo run -p resume-llm --example spike -- [--model sonnet] [--only <id>] [--baseline <dir>] [--out <dir>]
-//! [--no-golden] [--report]`
+//! `cargo run -p resume-llm --example spike -- [--agent claude|codex|antigravity] [--model <the agent's default>]
+//! [--only <id>] [--baseline <dir>] [--out <dir>] [--no-golden] [--report]`
 //!
 //! Each fixture becomes a `Posting`: front matter `method: pasted text`, or no front matter, is pasted text with no
 //! metadata; any other method passes the front matter's title, company and location as hints. Writes each run to
@@ -16,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use resume_core::{Method, Posting};
-use resume_llm::extract::{self, DEFAULT_EXTRACT_MODEL};
-use resume_llm::{Attempt, ClaudeCli, LlmError};
+use resume_llm::extract;
+use resume_llm::{Agent, AgentKind, Attempt, LlmError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -88,7 +89,8 @@ async fn main() {
         .join("../..")
         .canonicalize()
         .unwrap();
-    let mut model = DEFAULT_EXTRACT_MODEL.to_owned();
+    let mut agent = AgentKind::Claude;
+    let mut model = None;
     let mut only = None;
     let mut baseline = root.join("local/m0/sonnet");
     let mut out_dir = root.join("local/m2/extract");
@@ -97,18 +99,20 @@ async fn main() {
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--model" => model = args.next().expect("--model needs a name"),
+            "--agent" => agent = args.next().expect("--agent needs a name").parse().unwrap(),
+            "--model" => model = Some(args.next().expect("--model needs a name")),
             "--only" => only = Some(args.next().expect("--only needs an id")),
             "--baseline" => baseline = PathBuf::from(args.next().expect("--baseline needs a dir")),
             "--out" => out_dir = PathBuf::from(args.next().expect("--out needs a dir")),
             "--no-golden" => golden = false,
             "--report" => report_only = true,
             _ => panic!(
-                "unknown argument {a}; usage: spike [--model sonnet] [--only <id>] [--baseline <dir>] [--out <dir>] \
-                 [--no-golden] [--report]"
+                "unknown argument {a}; usage: spike [--agent claude|codex|antigravity] [--model <name>] [--only <id>] \
+                 [--baseline <dir>] [--out <dir>] [--no-golden] [--report]"
             ),
         }
     }
+    let model = model.unwrap_or_else(|| agent.default_model().to_owned());
 
     let fixtures = fixtures(&root.join("fixtures/postings"));
     let raw_dir = out_dir.join(&model);
@@ -120,14 +124,14 @@ async fn main() {
             .filter(|f| only.as_ref().is_none_or(|o| *o == f.id))
             .collect();
         assert!(!chosen.is_empty(), "no posting matches");
-        let provider = match ClaudeCli::discover().await {
+        let provider = match Agent::discover(agent).await {
             Ok(p) => p.with_timeout(TIMEOUT),
             Err(e) => {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
         };
-        eprintln!("claude: {}", provider.bin().display());
+        eprintln!("{}: {}", agent.bin(), provider.bin().display());
         let schema = extract::schema();
         let golden_dir = root.join("fixtures/requirements").join(&model);
         if golden {

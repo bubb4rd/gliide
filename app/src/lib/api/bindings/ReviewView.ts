@@ -22,7 +22,7 @@ id: string, job: JobRow, head: JobHead, verdict: Verdict,
  */
 headline: string, 
 /**
- * The `claude --model` alias or name the suggestions were made with (`models` maps it to the id that served it).
+ * The `--model` alias or name the suggestions were made with (`models` maps it to the id that served it).
  */
 model: string, master: MasterChoice, masters: Array<MasterChoice>, now: ScoreView, projected: ScoreView, ceiling: ScoreView, skills: Array<SkillChip>, 
 /**

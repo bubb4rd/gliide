@@ -1,10 +1,10 @@
 // What the shell and every screen share: jobs (the sidebar's counts and Recent), applications, company logos, the
-// library (bank and masters counts), settings, the agent's status, the models its aliases last ran, the model calls
-// running and updates. Each refresh keeps the last good value when a command fails (lists start empty, the agent
-// unknown), so the window always draws; the failure goes to the console.
+// library (bank and masters counts), settings, the agents' statuses (and the active one's), the models their aliases
+// last ran, the model calls running and updates. Each refresh keeps the last good value when a command fails (lists
+// start empty, the agents unknown), so the window always draws; the failure goes to the console.
 
 import {
-  agentStatus,
+  agentStatuses,
   appError,
   applications,
   checkUpdate,
@@ -33,6 +33,7 @@ import {
   type Settings,
   type UpdateStatus,
 } from "$lib/api";
+import { AGENTS } from "$lib/agents";
 import { modelName } from "$lib/models";
 import { LIFETIME_WITH_ACTION_MS, toast } from "$lib/ui/toast.svelte";
 import { theme } from "./theme.svelte";
@@ -59,9 +60,13 @@ class AppStore {
   /** Null until the first load, or when it failed. */
   library = $state<Library | null>(null);
   settings = $state<Settings | null>(null);
-  /** Null while unknown (not checked yet, or the check failed). */
-  agent = $state<AgentStatus | null>(null);
-  /** Each `claude --model` alias or name asked for → the model id that last answered it; empty until one has. */
+  /** Every agent's status, in the order claude, codex, antigravity; null while unknown (not checked, or it failed). */
+  agents = $state<AgentStatus[] | null>(null);
+  /** The agent model calls run on, as screens name it: Claude Code until settings say otherwise. */
+  agentInfo = $derived(AGENTS[this.settings?.agent ?? "claude"]);
+  /** Its status (`agents`); null while either is unknown. */
+  agent = $derived(this.agents?.find((a) => a.agent === this.settings?.agent) ?? null);
+  /** Each `--model` alias or name asked for → the model id that last answered it; empty until one has. */
   models = $state<Record<string, string>>({});
   /** The model calls running, oldest first (`listen` keeps it current). */
   calls = $state<Progress[]>([]);
@@ -184,9 +189,10 @@ class AppStore {
     if (lib) this.library = lib;
   }
 
-  async refreshAgent() {
-    const status = await attempt("agent status", agentStatus);
-    if (status) this.agent = status;
+  /** Checks every agent again (all three at once). */
+  async refreshAgents() {
+    const statuses = await attempt("agent statuses", agentStatuses);
+    if (statuses) this.agents = statuses;
   }
 
   /** Looks for a newer release now (Settings → About's Check now). */
@@ -210,9 +216,17 @@ class AppStore {
     if (served) this.models = served;
   }
 
-  /** The model `asked` (an alias or name) runs, by name: "Sonnet 5.5" once a call said which, "Sonnet" before. */
+  /**
+   * The model `asked` (an alias, slug or name) runs, by name: "Sonnet 5.5" once a call said which, "Sonnet" before;
+   * an agent's own name for it ("Gemini 3.8 Flash (Medium)") when one lists it.
+   */
   modelName(asked: string) {
-    return modelName(this.models[asked] ?? asked);
+    const served = this.models[asked] ?? asked;
+    for (const status of this.agents ?? []) {
+      const listed = status.models.find((m) => m.id === served);
+      if (listed) return listed.name;
+    }
+    return modelName(served);
   }
 
   /** Keeps `calls` and `update` current until the returned function runs. */
@@ -273,7 +287,7 @@ class AppStore {
       this.refreshJobs(),
       this.refreshApplications(),
       this.refreshLogos(),
-      this.refreshAgent(),
+      this.refreshAgents(),
       this.refreshModels(),
     ]);
     await Promise.all([this.loadSettings(), this.refreshLibrary()]);

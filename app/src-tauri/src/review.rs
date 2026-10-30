@@ -41,7 +41,7 @@ pub struct Review {
     pub bank: Bank,
     pub master: Master,
     pub req: Requirements,
-    /// The `claude --model` alias or name the suggestions were made with.
+    /// The `--model` alias or name the suggestions were made with.
     pub model: String,
     pub suggestions: Suggestions,
     /// `changes_of` the suggestions: before your wording and your own edits.
@@ -136,7 +136,7 @@ async fn make_review(
         },
         mode,
     );
-    let model = settings.suggest_model;
+    let model = settings.current().suggest_model.clone();
     let analysis = single_flight(app, &format!("suggest {model} {key}"), async |joined| {
         // Joined: the call waited for made the answer, fresh or not.
         let cached = if fresh && !joined {
@@ -148,7 +148,7 @@ async fn make_review(
             lock(&app.store).touch_analysis(&a.id)?;
             return Ok(a);
         }
-        let llm = app.claude().await?;
+        let llm = app.agent().await?;
         let (p, rq, rs, bk, cs, m) = (
             row.posting.clone(),
             req.clone(),
@@ -652,8 +652,8 @@ pub async fn rewrite_line(
 
 /// The Rewrite model call for `job`: the new line, per `note`.
 async fn rewritten(app: &Arc<App>, job: RewriteJob, note: String) -> Result<String> {
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let (line, facts, terms, budget) = (job.line, job.facts, job.terms, job.budget);
     let m = model.clone();
     let (text, out) = model_call(app, &job.posting_id, Stage::Rewriting, async move {
@@ -792,8 +792,8 @@ pub async fn instruct(
         })
     })
     .await?;
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let s = scope.clone();
     let c = confirmed.clone();
     let m = model.clone();

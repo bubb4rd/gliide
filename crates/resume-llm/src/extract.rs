@@ -9,8 +9,6 @@ use crate::{Call, Llm, LlmError, Schema, Structured};
 pub const PROMPT: &str = include_str!("../../../prompts/extract.md");
 /// The `Requirements` schema (`prompts/extract.schema.json`).
 pub const SCHEMA: &str = include_str!("../../../prompts/extract.schema.json");
-/// The model Extract runs on unless the user picks another: the fastest in the M0 spike and the best at priorities.
-pub const DEFAULT_EXTRACT_MODEL: &str = "sonnet";
 
 pub fn schema() -> Schema {
     Schema::parse(SCHEMA).expect("prompts/extract.schema.json is a valid schema")
@@ -48,7 +46,8 @@ pub fn input(posting: &Posting) -> String {
     s
 }
 
-/// Runs Extract on `posting` with `model` ([`DEFAULT_EXTRACT_MODEL`] unless the user picked another).
+/// Runs Extract on `posting` with `model` (the agent's [`crate::AgentKind::default_model`] unless the user picked
+/// another).
 pub async fn extract(
     llm: &impl Llm,
     schema: &Schema,

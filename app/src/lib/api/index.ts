@@ -62,6 +62,9 @@ import type { StoryView } from "./bindings/StoryView";
 import type { UpdateStatus } from "./bindings/UpdateStatus";
 
 export type * from "./bindings/Accepted";
+export type * from "./bindings/Agent";
+export type * from "./bindings/AgentSettings";
+export type * from "./bindings/AgentsSettings";
 export type * from "./bindings/AgentStatus";
 export type * from "./bindings/AppError";
 export type * from "./bindings/ApplicationRow";
@@ -133,6 +136,7 @@ export type * from "./bindings/MasterRef";
 export type * from "./bindings/MasterRow";
 export type * from "./bindings/Mismatch";
 export type * from "./bindings/Mode";
+export type * from "./bindings/ModelOption";
 export type * from "./bindings/NewClaim";
 export type * from "./bindings/NoteLine";
 export type * from "./bindings/NotificationPermission";
@@ -193,11 +197,12 @@ export function appError(e: unknown): AppError {
   return { kind: "other", message: e instanceof Error ? e.message : String(e) };
 }
 
-// ── Settings and the agent ──
-export const agentStatus = () => invoke<AgentStatus>("agent_status");
+// ── Settings and the agents ──
+/** Claude Code, Codex and Antigravity, in that order, checked at once. */
+export const agentStatuses = () => invoke<AgentStatus[]>("agent_statuses");
 export const getSettings = () => invoke<Settings>("get_settings");
 export const setSettings = (settings: Settings) => invoke<Settings>("set_settings", { settings });
-/** Each asked `claude --model` alias or name → the model id that last served it (what names a chat's model). */
+/** Each asked `--model` alias or name → the model id that last served it (what names a chat's model). */
 export const models = () => invoke<Record<string, string>>("models");
 
 // ── Startup ──

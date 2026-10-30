@@ -191,9 +191,10 @@ pub async fn rewrite_paragraph(
         .await?;
     match Paragraph::deserialize(&output.value) {
         Ok(p) if !p.paragraph.trim().is_empty() => Ok((p.paragraph.trim().to_owned(), output)),
-        Ok(_) => Err(LlmError::Agent {
-            agent: "claude".to_owned(),
-            message: "returned an empty paragraph".to_owned(),
+        Ok(_) => Err(LlmError::Decode {
+            target: "Paragraph",
+            message: "an empty paragraph".to_owned(),
+            output,
         }),
         Err(e) => Err(LlmError::Decode {
             target: "Paragraph",

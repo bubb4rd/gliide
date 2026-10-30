@@ -1,9 +1,13 @@
 # Agent icons
 
-The agents' brand icons in the first-run setup's Claude Code step and Settings → Agents (`CompanyMark` in `$lib/ui`),
-bundled so the app makes no third-party request for them. Each is the brand's own published icon, unmodified except
-scaled down to 64px. Fetched 2026-10-14. Claude's shows as published; Codex's, Gemini's and Antigravity's show grayed
-(`CompanyMark` `off`) until gliide supports them (DESIGN.md, Company logos).
+The agents' and their makers' brand icons, bundled so the app makes no third-party request for them. Each is the
+brand's own published icon, unmodified except scaled down to 64px, and always shown as published (`CompanyMark` in
+`$lib/ui`; DESIGN.md, Company logos). Fetched 2026-10-14. `$lib/agents` names which is which:
+
+- `claude.png`, `openai.png`, `antigravity.png`: Claude Code, Codex and Antigravity, in Settings → Agents, the setup's
+  Agents and Ready steps, the sidebar's foot (`AgentMark`, the agent model calls run on) and the chat's composer.
+- `claude.png`, `openai.png`, `gemini.png`: the maker of the model that answered, beside its name in a review's chat
+  and an entry's dig (`makerIcon`); a model from any other maker shows the agent's icon instead.
 
 | File | Source |
 |---|---|

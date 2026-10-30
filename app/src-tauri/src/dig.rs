@@ -62,8 +62,8 @@ pub async fn dig_questions(app: &Arc<App>, entry: &str, again: bool) -> Result<D
     if let Some(d) = kept {
         return view(&d);
     }
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let today = Local::now().format("%Y-%m-%d").to_string();
     let job = format!("entry:{}", e.id);
     let (m, ee) = (model.clone(), e.clone());
@@ -133,8 +133,8 @@ pub async fn dig_capture(
         Ok(find(&bank, &id)?.clone())
     })
     .await?;
-    let llm = app.claude().await?;
-    let model = app.settings().suggest_model;
+    let llm = app.agent().await?;
+    let model = app.settings().current().suggest_model.clone();
     let today = Local::now().format("%Y-%m-%d").to_string();
     let job = format!("entry:{}", e.id);
     let (m, ee, aa, nn) = (model.clone(), e.clone(), answers.clone(), note.clone());
