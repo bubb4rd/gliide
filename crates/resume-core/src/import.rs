@@ -353,6 +353,17 @@ pub fn master_id(title: &str, taken: &[&str]) -> String {
     unique(&base, |id| taken.contains(&id))
 }
 
+/// An entry id for `name` (`Tidepool Labs` → `tidepool-labs`) that no entry of `bank` holds.
+pub fn entry_id(bank: &Bank, name: &str) -> String {
+    let base = slug(name, "entry");
+    unique(&base, |id| {
+        bank.sections
+            .iter()
+            .flat_map(|s| &s.entries)
+            .any(|e| e.id == id)
+    })
+}
+
 /// The bank section `s` goes into, if any.
 fn target<'a>(bank: &'a Bank, s: &BankSection) -> Option<&'a BankSection> {
     let title = key(&s.title);

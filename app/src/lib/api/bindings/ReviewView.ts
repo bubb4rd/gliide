@@ -5,7 +5,6 @@ import type { JobHead } from "./JobHead";
 import type { JobRow } from "./JobRow";
 import type { LineView } from "./LineView";
 import type { MasterChoice } from "./MasterChoice";
-import type { Mode } from "./Mode";
 import type { ScoreView } from "./ScoreView";
 import type { SkillChip } from "./SkillChip";
 import type { Verdict } from "./Verdict";
@@ -25,7 +24,7 @@ headline: string,
 /**
  * The `claude --model` alias or name the suggestions were made with (`models` maps it to the id that served it).
  */
-model: string, master: MasterChoice, masters: Array<MasterChoice>, mode: Mode, now: ScoreView, projected: ScoreView, ceiling: ScoreView, skills: Array<SkillChip>, 
+model: string, master: MasterChoice, masters: Array<MasterChoice>, now: ScoreView, projected: ScoreView, ceiling: ScoreView, skills: Array<SkillChip>, 
 /**
  * In the resume's section order, then `bank` ("From your bank") last; empty groups omitted.
  */

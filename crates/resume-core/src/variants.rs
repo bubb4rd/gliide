@@ -2,8 +2,11 @@
 //! of each bullet it holds, its text or a variant by index, and Suggest prefers choosing one of them over writing new
 //! words. These edits keep every master showing the words it showed, whatever moves: removing a variant or making one
 //! the bullet's text renumbers what masters point at, and folding a bullet into another moves the masters that showed
-//! it onto the same words, now a variant of the other. A new bullet (Dig's add-bullet) joins its entry in no master, and
-//! a bullet's skills are set whole.
+//! it onto the same words, now a variant of the other. A new bullet (Dig's add-bullet, the editor's) joins its entry in
+//! no master, and a bullet's skills are set whole. Removing a bullet takes it out of the bank and every master that
+//! shows it; restoring it (Undo) puts it back where it was, shown as it was.
+
+use std::collections::HashMap;
 
 use crate::bank::{Bank, BankBullet};
 use crate::master::{Master, MasterBullet};
@@ -28,10 +31,13 @@ pub enum VariantError {
     BothShown(String),
     #[error("Your bank has no entry `{0}`")]
     Entry(String),
+    #[error("Another bullet took its place; add it again")]
+    Taken(String),
 }
 
-/// Adds a bullet reading `text` at the end of entry `entry`, in no master yet: its id, the next free `{entry}.{n}`
-/// in the bank (as an import numbers them). Refuses a text one of the entry's bullets already reads.
+/// Adds a bullet reading `text` at the end of entry `entry`, in no master yet: its id, `{entry}.{n}` with `n` one past
+/// the highest the entry holds (as facts are numbered), so a bullet removed from the middle keeps its id unused while
+/// a story may still name it. Refuses a text one of the entry's bullets already reads.
 pub fn add_bullet(bank: &mut Bank, entry: &str, text: &str) -> Result<String, VariantError> {
     let text = wording_text(text)?;
     let taken: std::collections::HashSet<String> = bank
@@ -50,7 +56,14 @@ pub fn add_bullet(bank: &mut Bank, entry: &str, text: &str) -> Result<String, Va
     if e.bullets.iter().flat_map(wordings).any(|w| same_text(w, &text)) {
         return Err(VariantError::Duplicate);
     }
-    let id = (1..)
+    let prefix = format!("{entry}.");
+    let highest = e
+        .bullets
+        .iter()
+        .filter_map(|b| b.id.strip_prefix(&prefix)?.parse::<usize>().ok())
+        .max()
+        .unwrap_or(0);
+    let id = (highest + 1..)
         .map(|n| format!("{entry}.{n}"))
         .find(|id| !taken.contains(id))
         .expect("some number is free");
@@ -213,6 +226,96 @@ pub fn fold_into(
             id: into.to_owned(),
             variant: map.get(w).copied().flatten(),
         };
+    }
+    Ok(())
+}
+
+/// Removes `bullet`, every wording of it, from its entry and from every master that shows it; their other lines stay as
+/// they are. A story that names it reads it as removed until [`restore_bullet`] puts it back.
+pub fn remove_bullet(
+    bank: &mut Bank,
+    masters: &mut [Master],
+    bullet: &str,
+) -> Result<(), VariantError> {
+    let entry = bank
+        .sections
+        .iter_mut()
+        .flat_map(|s| &mut s.entries)
+        .find(|e| e.bullets.iter().any(|b| b.id == bullet))
+        .ok_or_else(|| VariantError::Bullet(bullet.to_owned()))?;
+    entry.bullets.retain(|b| b.id != bullet);
+    for e in masters
+        .iter_mut()
+        .flat_map(|m| &mut m.sections)
+        .flat_map(|s| &mut s.entries)
+    {
+        e.bullets.retain(|b| b.id != bullet);
+    }
+    Ok(())
+}
+
+/// Puts removed `bullet` back into entry `entry` as it was: at `at` among its bullets (last when there are fewer now),
+/// under its own id, and into each master of `shown` that still shows the entry, with that wording (its text when the
+/// variant is gone), before the first bullet the master shows that comes after it in the entry. Refused when another
+/// bullet holds its id.
+pub fn restore_bullet(
+    bank: &mut Bank,
+    masters: &mut [Master],
+    entry: &str,
+    at: usize,
+    bullet: BankBullet,
+    shown: &[(String, Wording)],
+) -> Result<(), VariantError> {
+    let text = wording_text(&bullet.text)?;
+    let held = bank
+        .sections
+        .iter()
+        .flat_map(|s| &s.entries)
+        .flat_map(|e| &e.bullets)
+        .any(|b| b.id == bullet.id);
+    if held {
+        return Err(VariantError::Taken(bullet.id));
+    }
+    let e = bank
+        .sections
+        .iter_mut()
+        .flat_map(|s| &mut s.entries)
+        .find(|e| e.id == entry)
+        .ok_or_else(|| VariantError::Entry(entry.to_owned()))?;
+    let at = at.min(e.bullets.len());
+    let (id, variants) = (bullet.id.clone(), bullet.variants.len());
+    e.bullets.insert(at, BankBullet { text, ..bullet });
+    let order: HashMap<&str, usize> = e
+        .bullets
+        .iter()
+        .enumerate()
+        .map(|(i, b)| (b.id.as_str(), i))
+        .collect();
+    for (master, wording) in shown {
+        let Some(me) = masters
+            .iter_mut()
+            .filter(|m| m.id == *master)
+            .flat_map(|m| &mut m.sections)
+            .flat_map(|s| &mut s.entries)
+            .find(|me| me.id == entry)
+        else {
+            continue;
+        };
+        if me.bullets.iter().any(|b| b.id == id) {
+            continue;
+        }
+        let place = me
+            .bullets
+            .iter()
+            .position(|b| order.get(b.id.as_str()).is_some_and(|&i| i > at))
+            .unwrap_or(me.bullets.len());
+        me.bullets.insert(
+            place,
+            MasterBullet {
+                id: id.clone(),
+                variant: wording.filter(|&v| v < variants),
+            },
+        );
     }
     Ok(())
 }

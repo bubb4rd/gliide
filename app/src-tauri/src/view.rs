@@ -65,7 +65,6 @@ pub fn review(
         model: r.model.clone(),
         master,
         masters: r.masters.clone(),
-        mode: r.mode.into(),
         now: score_view(&t.now),
         projected: score_view(&t.projected),
         ceiling: score_view(&t.ceiling),

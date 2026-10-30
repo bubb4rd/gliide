@@ -264,7 +264,7 @@
   // ── Toolbar ──
   function chooseMaster(master: string) {
     s.master = master;
-    void s.suggest(master, s.mode);
+    void s.suggest(master);
   }
 
   async function exportNow() {
@@ -280,7 +280,7 @@
   }
 
   function rerun() {
-    if (ready) void s.suggest(s.master, s.mode, true);
+    if (ready) void s.suggest(s.master, true);
   }
 
   // The sidebar's Recent shows this job's names (from Extract) and projected score: refresh them once they settle.
@@ -662,14 +662,14 @@
           {:else if !app.library?.bank}
             <Button variant="primary" onclick={() => goto("/bank")}>Open Experience</Button>
           {/if}
-          <Button icon={RotateCcw} onclick={() => (s.view ? s.suggest(null, null) : s.open())}>Try again</Button>
+          <Button icon={RotateCcw} onclick={() => (s.view ? s.suggest(null) : s.open())}>Try again</Button>
         </div>
       </div>
     {:else if s.phase === "stopped"}
       <div class="problem">
         <p class="meta">Stopped. Nothing was changed.</p>
         <div class="row">
-          <Button icon={Sparkles} onclick={() => (s.view ? s.suggest(null, null) : s.open())}>
+          <Button icon={Sparkles} onclick={() => (s.view ? s.suggest(null) : s.open())}>
             {s.view ? "Suggest edits" : "Read the requirements"}
           </Button>
         </div>

@@ -36,7 +36,6 @@ import {
   type Exported,
   type JobView,
   type KeyDecision,
-  type Mode,
   type ReviewView,
   type Stage,
 } from "$lib/api";
@@ -96,9 +95,8 @@ export class Session {
   running = $state<Running | null>(null);
   /** The model calls of this run already done (Extract while Suggest runs), for the status's trail. */
   steps = $state<Step[]>([]);
-  /** What the toolbar shows: the review's master and mode, or the ones just asked for. */
+  /** What the toolbar shows: the review's master, or the one just asked for. */
   master = $state<string | null>(null);
-  mode = $state<Mode | null>(null);
   /** Commands waiting or running. */
   pending = $state(0);
   /** Bumped when a review arrives from Suggest (not from an edit): the column enters once per arrival. */
@@ -134,7 +132,7 @@ export class Session {
   async start() {
     if (this.#started) {
       this.#kept = false;
-      return this.suggest(this.master, this.mode);
+      return this.suggest(this.master);
     }
     this.#started = true;
     const unlisten = await onProgress((calls) => {
@@ -167,7 +165,7 @@ export class Session {
     if (this.running && !KEEPS.includes(this.running.stage)) void cancel(this.job).catch(() => {});
   }
 
-  /** Extract (cached per posting), then Suggest with the job's last master and mode: both, even if you leave. */
+  /** Extract (cached per posting), then Suggest with the job's last master: both, even if you leave. */
   async open() {
     this.phase = "opening";
     this.error = null;
@@ -192,11 +190,12 @@ export class Session {
       this.steps = [{ stage: done.stage, ms: performance.now() - done.startedAt }];
       this.running = null;
     }
-    await this.suggest(null, null);
+    await this.suggest(null);
   }
 
-  /** Opens the review for `master` × `mode` (null: the last ones); `fresh` asks Suggest again. */
-  suggest(master: string | null, mode: Mode | null, fresh = false) {
+  /** Opens the review for `master` (null: the last one) as Settings' suggestions-from has it; `fresh` asks Suggest
+   *  again. */
+  suggest(master: string | null, fresh = false) {
     return this.#queue(async () => {
       if (!this.#alive) return;
       // A run of its own (another master, a re-run) starts its trail afresh; after `open` it carries Extract on.
@@ -204,7 +203,7 @@ export class Session {
       this.phase = "suggesting";
       this.error = null;
       try {
-        const review = await startReview(this.job, master, mode, fresh);
+        const review = await startReview(this.job, master, fresh);
         if (!this.#alive) return;
         this.#show(review);
         this.arrival++;
@@ -557,8 +556,7 @@ export class Session {
   #show(review: ReviewView) {
     this.review = review;
     this.master = review.master.id;
-    this.mode = review.mode;
-    // Another review (master, mode, a re-run) has a thread of its own.
+    // Another review (master, Settings' suggestions-from, a re-run) has a thread of its own.
     if (review.id !== this.#thread) {
       this.#thread = review.id;
       this.turns = loadThread(this.job, review.id, (key) => find(review, key) !== undefined);
@@ -570,7 +568,6 @@ export class Session {
   /** A failed open or Suggest: cancelling goes back quietly to what was there; anything else says why. */
   #stop(error: AppError) {
     this.master = this.review?.master.id ?? this.view?.masters[0]?.id ?? null;
-    this.mode = this.review?.mode ?? null;
     if (this.review) {
       this.phase = "ready";
       if (error.kind !== "cancelled") this.onerror(error);

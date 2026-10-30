@@ -659,7 +659,7 @@
           aria-label="Suggest again"
           {@attach tip("Suggest again (your edits stay)")}
           disabled={!ready || busy}
-          onclick={() => void s.suggest(s.master, s.mode, true)}
+          onclick={() => void s.suggest(s.master, true)}
         />
       {/if}
     </span>

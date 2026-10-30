@@ -2,9 +2,9 @@
   A bank entry's editor (DESIGN.md, Experience): the entry's details (its name, subtitle, place and dates, then the
   lines under it, each edited in place; masters hold none of them, so every master that shows the entry prints the
   new ones), then each bullet as rows, one per wording (its text, then the variants you wrote), with the masters that
-  show each, then its facts (what you've said about it that no line prints: never on a page, a source for its lines),
-  then its stories. Details · Interview (`Tab`): the Interview tab is Dig (`Dig`), gliide asking about the entry;
-  `?debrief=<round>` opens it on that round's debrief questions about the entry.
+  show each, and Add a bullet (in no master), then its facts (what you've said about it that no line prints: never on
+  a page, a source for its lines), then its stories. Details · Interview (`Tab`): the Interview tab is Dig (`Dig`),
+  gliide asking about the entry; `?debrief=<round>` opens it on that round's debrief questions about the entry.
   Every edit goes to the bank and the whole view comes back; the desk previews the entry, highlighted, in a master
   that shows it (or alone in the default template when none does). One request at a time: its answer replaces the
   view, a failure leaves it and says why.
@@ -147,11 +147,12 @@
   const selectedWording = $derived(selected?.kind === "wording" ? selected : undefined);
 
   /** The open editor: a detail, a line under the entry (`index` null: a new one), a wording of `bullet`'s (a new
-   *  variant when `adding`), or a fact (`index` null: a new one). */
+   *  variant when `adding`), a new bullet, or a fact (`index` null: a new one). */
   type Editing =
     | { kind: "detail"; key: string; field: Field }
     | { kind: "note"; key: string; index: number | null }
     | { kind: "wording"; key: string; bullet: string; variant: number | null; adding: boolean }
+    | { kind: "bullet"; key: string }
     | { kind: "fact"; key: string; index: number | null };
   let editing = $state<Editing | null>(null);
   let draft = $state("");
@@ -280,6 +281,12 @@
     draft = "";
   }
 
+  function startBullet() {
+    if (!view) return;
+    editing = { kind: "bullet", key: "bullet:new" };
+    draft = "";
+  }
+
   function startFact() {
     if (!view) return;
     editing = { kind: "fact", key: "fact:new", index: null };
@@ -303,6 +310,11 @@
         open.index === null ? [...details.notes, line] : details.notes.map((n, i) => (i === open.index ? line : n));
       if (!(await setDetails({ ...details, notes }))) return;
       selectedKey = noteKey(open.index ?? details.notes.length);
+    } else if (open.kind === "bullet") {
+      if (!text) return void (editing = null);
+      if (!(await edit({ kind: "add-bullet", text }))) return;
+      const added = view.bullets.at(-1);
+      if (added) selectedKey = keyOf(added.id, null);
     } else if (open.kind === "fact") {
       const was = open.index === null ? undefined : view.facts[open.index];
       if (!text || text === was?.text) return void (editing = null);
@@ -343,14 +355,33 @@
       selectedKey = keyOf(row.bullet.id, null);
   }
 
-  /** What ⌫ removes: a line under the entry, a variant (a bullet's text stays) or a fact. */
-  const removable = (row: Row | undefined) =>
-    row?.kind === "note" || row?.kind === "fact" || (row?.kind === "wording" && row.wording.variant !== null);
+  /** What ⌫ removes: a line under the entry, a variant, a whole bullet (from its text's row) or a fact. */
+  const removable = (row: Row | undefined) => row?.kind === "note" || row?.kind === "fact" || row?.kind === "wording";
 
   function remove(row: Row | undefined) {
     if (row?.kind === "note") return removeLine(row);
-    if (row?.kind === "wording") return removeVariant(row);
+    if (row?.kind === "wording") return row.wording.variant === null ? removeBullet(row) : removeVariant(row);
     if (row?.kind === "fact") return removeFact(row);
+  }
+
+  /** Removes a bullet, every wording, from the bank and every master that shows it; the toast's Undo puts it back
+   *  where it was, under its id, shown as each master showed it. */
+  async function removeBullet(row: WordingRow) {
+    if (!view) return;
+    const { bullet } = row;
+    const at = view.bullets.findIndex((b) => b.id === bullet.id);
+    const shownIn = view.masters.filter(showing(bullet)).map((m) => m.id);
+    if (!(await edit({ kind: "remove-bullet", bullet: bullet.id }))) return;
+    const near = view.bullets[at - 1] ?? view.bullets[at];
+    selectedKey = near ? keyOf(near.id, null) : null;
+    toast(shownIn.length ? `Removed the bullet from Experience and ${list(shownIn)}` : "Removed the bullet", {
+      action: {
+        label: "Undo",
+        run: async () => {
+          if (await edit({ kind: "restore-bullet", bullet, at })) selectedKey = keyOf(bullet.id, null);
+        },
+      },
+    });
   }
 
   /** Removes a fact; the toast's Undo puts it back where it was, as it was (its id and where it came from). */
@@ -433,6 +464,7 @@
     { keys: ["↑", "↓"], label: "Select" },
     { keys: ["⏎"], label: "Edit", run: () => startEdit(selected), disabled: !selected },
     { keys: ["L"], label: "Add a line", run: startLine, disabled: !view },
+    { keys: ["B"], label: "Add a bullet", run: startBullet, disabled: !view },
     { keys: ["A"], label: "Add a fact", run: startFact, disabled: !view },
     {
       keys: ["V"],
@@ -449,7 +481,14 @@
     ...(view?.masters.length ? [{ keys: [view.masters.length > 1 ? "1–9" : "1"], label: "Show in a master" }] : []),
     {
       keys: ["⌫"],
-      label: selected?.kind === "note" ? "Remove line" : selected?.kind === "fact" ? "Remove fact" : "Remove variant",
+      label:
+        selected?.kind === "note"
+          ? "Remove line"
+          : selected?.kind === "fact"
+            ? "Remove fact"
+            : selectedWording?.wording.variant === null
+              ? "Remove bullet"
+              : "Remove variant",
       run: () => void remove(selected),
       disabled: !removable(selected),
     },
@@ -483,6 +522,7 @@
         startEdit(selected);
       },
       l: startLine,
+      b: startBullet,
       a: startFact,
       v: () => startAdd(selectedWording?.bullet),
       m: () => void makeMain(selectedWording),
@@ -675,13 +715,38 @@
           </div>
         </section>
 
+        <!-- A new bullet: after the last bullet, in its group; with none yet, in a group of its own. -->
+        {#snippet newBullet()}
+          {#if editing?.kind === "bullet"}
+            <div class="adding">
+              <Textarea
+                size="lg"
+                bind:value={draft}
+                placeholder="What you did and what came of it, like “Built a Rust service that cut deploys to 4 minutes”"
+                aria-label="New bullet"
+                {@attach focus}
+                onkeydown={onEditorKey}
+              />
+              <p class="meta hint">
+                {showingEntry.length
+                  ? "In no master yet: masters keep the bullets they show."
+                  : "On the page with the entry when a review brings it in."}
+              </p>
+            </div>
+          {/if}
+        {/snippet}
+        {#snippet addBullet()}
+          <Button variant="ghost" size="sm" icon={Plus} kbd="B" onclick={startBullet}>Add a bullet</Button>
+        {/snippet}
+
         {#each view.bullets as bullet, b (bullet.id)}
           {@const variants = bullet.wordings.length - 1}
           {@const others = view.bullets.filter((o) => o.id !== bullet.id)}
+          {@const last = b === view.bullets.length - 1}
           <section
             class="group"
             aria-label="Bullet {b + 1}"
-            data-current={selectedWording?.bullet.id === bullet.id || undefined}
+            data-current={selectedWording?.bullet.id === bullet.id || (last && editing?.kind === "bullet") || undefined}
           >
             <GroupHead
               label="Bullet {b + 1}"
@@ -737,7 +802,17 @@
                       onclick={() => show(row, target.master.id)}>Show in {target.master.title}</Button
                     >
                   {/each}
-                  {#if wording.variant !== null}
+                  {#if wording.variant === null}
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      square
+                      icon={Trash2}
+                      aria-label="Remove bullet {b + 1}"
+                      {@attach tip(variants ? "Remove this bullet and its variants (⌫)" : "Remove this bullet (⌫)")}
+                      onclick={() => removeBullet(row)}
+                    />
+                  {:else}
                     <Button
                       variant="danger"
                       size="sm"
@@ -765,6 +840,7 @@
                 <p class="meta hint">Masters keep the words they show; show it in one from its row.</p>
               </div>
             {/if}
+            {#if last}{@render newBullet()}{/if}
 
             <div class="foot">
               <Button variant="ghost" size="sm" icon={Plus} kbd="V" onclick={() => startAdd(bullet)}
@@ -787,9 +863,21 @@
                   </span>
                 {/key}
               {/if}
+              {#if last}{@render addBullet()}{/if}
             </div>
           </section>
         {/each}
+
+        {#if !view.bullets.length}
+          <section class="group" aria-label="Bullets" data-current={editing?.kind === "bullet" || undefined}>
+            <GroupHead label="Bullets" />
+            {#if editing?.kind !== "bullet"}
+              <p class="meta empty">None yet. Say what you did here, a line each, as the page would read it.</p>
+            {/if}
+            {@render newBullet()}
+            <div class="foot">{@render addBullet()}</div>
+          </section>
+        {/if}
 
         <section class="group" aria-label="Facts" data-current={selected?.kind === "fact" || undefined}>
           <GroupHead label="Facts" meta="Never printed · they back this entry’s lines" />
