@@ -96,7 +96,10 @@ flowchart TD
 The app never calls a model API itself, and never ships, reads or stores a credential. It launches an agent CLI you
 installed and signed in to yourself, in the headless mode each lab ships for scripts, as a subprocess. Usage bills to
 your own subscription, and your own agreement with each lab applies to it. One agent runs every call: Settings →
-Agents (or the first-run setup) chooses which, and each agent keeps its own path and models while another runs.
+Agents (or the first-run setup) chooses which, and each agent keeps its own path and models while another runs. Each
+can be switched off there (`agents.<agent>.enabled`): off, it never runs a call and isn't offered, but is still checked,
+so it can come back on once found and signed in; the agent in use is always on, and when it can't run, Settings
+offers another rather than switching by itself.
 
 ### Per lab
 
@@ -280,7 +283,7 @@ The bank model holds both methods, so the app switches between them without a se
 there to be used where they fit: an entry that backs a posting better than one the master shows takes its place.
 Bank suggestions are listed in their own group, **From your bank**, each with its points and the line cost, and start
 in like every other suggestion; the fit check leaves them out first when the page runs over. Master only stays as a
-setting (Settings → Tailoring → Suggestions from, `suggestionsFrom`), and every review follows it, the jobs you
+setting (Settings → Agents → Suggestions from, `suggestionsFrom`), and every review follows it, the jobs you
 already have included: a review whose mode changed runs Suggest again and carries your draft over from that master's
 last review. Settings saved while master-only was the experiment's default (as `defaultMode`) load bank-aware.
 

@@ -1,6 +1,7 @@
 <!--
   Menu (a select): a button showing the current choice, opening a listbox of options with optional meta (a master's
-  score). Keys: ↑↓ or Space/⏎ open; inside, ↑↓ Home End move, ⏎/Space choose, Esc closes, Tab closes.
+  score). `lead` draws something before each option's label and the button's (an agent's logo). Keys: ↑↓ or Space/⏎
+  open; inside, ↑↓ Home End move, ⏎/Space choose, Esc closes, Tab closes.
 -->
 <script lang="ts" generics="T">
   import type { Snippet } from "svelte";
@@ -28,6 +29,8 @@
     onchange?: (value: T) => void;
     /** What the closed menu shows for the current choice (a status `Badge`); its label by default. */
     trigger?: Snippet<[Option | undefined]>;
+    /** Drawn before each option's label, and the current one's in the button (unless `trigger` replaces it). */
+    lead?: Snippet<[Option]>;
     /** Whether the list is open (bindable): a screen key can open it. */
     open?: boolean;
     /** The screen key that opens it, as a hint inside the button. */
@@ -44,6 +47,7 @@
     placement = "bottom-start",
     onchange,
     trigger,
+    lead,
     open = $bindable(false),
     kbd,
   }: Props = $props();
@@ -120,7 +124,9 @@
   aria-label="{label}: {current?.label ?? 'None'}"
   onkeydown={onTriggerKey}
 >
-  {#if trigger}{@render trigger(current)}{:else}<span class="current">{current?.label ?? "Choose…"}</span>{/if}
+  {#if trigger}{@render trigger(current)}{:else}{#if lead && current}{@render lead(current)}{/if}<span class="current"
+      >{current?.label ?? "Choose…"}</span
+    >{/if}
 </Button>
 
 <Popover bind:open anchor={button} {placement} id="{id}-menu" matchWidth>
@@ -150,6 +156,7 @@
         <span class="check-slot">
           {#if option.value === value}<Icon icon={Check} size={14} />{/if}
         </span>
+        {#if lead}{@render lead(option)}{/if}
         <span class="label-text">{option.label}</span>
         {#if option.meta}<span class="meta num">{option.meta}</span>{/if}
       </div>

@@ -34,6 +34,7 @@ export { default as Segmented } from "./Segmented.svelte";
 export { default as Sources, type Source } from "./Sources.svelte";
 export { default as SectionNav, type NavSection } from "./SectionNav.svelte";
 export { default as Steps } from "./Steps.svelte";
+export { default as Switch } from "./Switch.svelte";
 export { default as Table, sortRows, type TableColumn, type TableSort } from "./Table.svelte";
 export { default as Textarea } from "./Textarea.svelte";
 export { default as Thinking } from "./Thinking.svelte";

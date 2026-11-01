@@ -2,7 +2,11 @@
 
 The agents' and their makers' brand icons, bundled so the app makes no third-party request for them. Each is the
 brand's own published icon, unmodified except scaled down to 64px, and always shown as published (`CompanyMark` in
-`$lib/ui`; DESIGN.md, Company logos). Fetched 2026-10-14. `$lib/agents` names which is which:
+`$lib/ui`; DESIGN.md, Company logos). Fetched 2026-10-14. `openai.png` (at `?size=460`, served at 200px) and
+`antigravity.png` were fetched again 2026-10-30 and cropped to a square around their artwork before scaling
+(`openai.png` keeps 8px of its white square around the knot, `antigravity.png` none of its transparent margin), so
+they fill the square as Claude's does and `AgentMark`'s presence dot sits on their corner. `$lib/agents` names which
+is which:
 
 - `claude.png`, `openai.png`, `antigravity.png`: Claude Code, Codex and Antigravity, in Settings → Agents, the setup's
   Agents and Ready steps, the sidebar's foot (`AgentMark`, the agent model calls run on) and the chat's composer.

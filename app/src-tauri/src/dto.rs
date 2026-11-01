@@ -104,6 +104,11 @@ impl From<resume_llm::AgentKind> for Agent {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AgentSettings {
+    /// Model calls may run on it, and the agent picker offers it. Off, it never runs a call but is still checked
+    /// (found, signed in), so it can be turned back on. The agent in use is always on. On for settings saved before
+    /// it existed.
+    #[serde(default = "on")]
+    pub enabled: bool,
     /// The binary; `None` finds it (`resume_llm::AgentKind::find`).
     pub path: Option<String>,
     /// A `--model` alias, slug or name for reading postings and resumes; the agent's default to begin with.
@@ -116,11 +121,16 @@ impl AgentSettings {
     pub fn new(agent: Agent) -> Self {
         let model = resume_llm::AgentKind::from(agent).default_model();
         Self {
+            enabled: true,
             path: None,
             extract_model: model.to_owned(),
             suggest_model: model.to_owned(),
         }
     }
+}
+
+fn on() -> bool {
+    true
 }
 
 /// Each agent's settings.
@@ -2145,6 +2155,18 @@ mod tests {
             codex.extract_model,
             resume_llm::AgentKind::Codex.default_model()
         );
+    }
+
+    #[test]
+    fn agents_saved_before_switches_load_on() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"theme":"light","exportDir":"/tmp","agent":"codex","agents":{
+                "claude":{"path":null,"extractModel":"sonnet","suggestModel":"opus"},
+                "codex":{"path":null,"extractModel":"gpt-5.5","suggestModel":"gpt-5.5"}}}"#,
+        )
+        .unwrap();
+        let a = &settings.agents;
+        assert!(a.claude.enabled && a.codex.enabled && a.antigravity.enabled);
     }
 
     #[test]

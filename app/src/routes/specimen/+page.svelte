@@ -68,6 +68,7 @@
     Segmented,
     Sources,
     Steps,
+    Switch,
     Table,
     Textarea,
     Thinking,
@@ -344,6 +345,8 @@
   // ── States gallery ──
   let seg = $state("light");
   let check = $state({ off: false, on: true });
+  let switches = $state({ off: false, on: true });
+  let specimenAgent = $state<string>("claude");
   let text = $state("");
   let filled = $state("Globex · Junior Software Engineer");
   let longText = $state("");
@@ -945,6 +948,13 @@
               <Checkbox checked={false} label="Disabled off" disabled />
               <Checkbox checked label="Disabled on" disabled />
             </div>
+            <p class="label">Switch · off · on · locked off · locked on (focusable, its tooltip says why)</p>
+            <div class="row">
+              <Switch bind:checked={switches.off} label="Off example" />
+              <Switch bind:checked={switches.on} label="On example" />
+              <Switch checked={false} locked label="Locked off" {@attach tip("Sign in to Codex to turn it on.")} />
+              <Switch checked locked label="Locked on" {@attach tip("Model calls run on Claude Code.")} />
+            </div>
           </div>
         </Card>
 
@@ -1129,6 +1139,16 @@
                 {#snippet trigger()}Set status{/snippet}
               </Menu>
             </div>
+            <p class="label">Menu · with a lead (Settings' agent picker: each agent's 16px icon and presence dot)</p>
+            <div class="row">
+              <Menu
+                bind:value={specimenAgent}
+                options={AGENT_LIST.map((a) => ({ value: a.id as string, label: a.name }))}
+                label="Model calls run on"
+              >
+                {#snippet lead(option)}<AgentMark size={16} src={AGENTS[option.value as keyof typeof AGENTS].icon} tone="gain" />{/snippet}
+              </Menu>
+            </div>
             <p class="meta">↑↓ or click opens; ↑↓ Home End move; ⏎ chooses; Esc closes.</p>
             <p class="label">Popover</p>
             <div class="row">
@@ -1225,13 +1245,16 @@
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">Agent mark · the sidebar's foot · signed in · signed out · not installed · not checked or unknown</p>
+            <p class="label">Agent mark · 28 · signed in · signed out · not installed · not checked or unknown · 16 (the agent picker)</p>
             {#each AGENT_LIST as agent (agent.id)}
               <div class="row">
                 <AgentMark src={agent.icon} tone="gain" />
                 <AgentMark src={agent.icon} tone="warn" />
                 <AgentMark src={agent.icon} tone="danger" />
                 <AgentMark src={agent.icon} tone="neutral" />
+                <AgentMark size={16} src={agent.icon} tone="gain" />
+                <AgentMark size={16} src={agent.icon} tone="warn" />
+                <AgentMark size={16} src={agent.icon} tone="neutral" />
               </div>
             {/each}
             <Nav label="Agent states (specimen)">

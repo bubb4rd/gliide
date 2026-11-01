@@ -252,7 +252,7 @@
                     {#if bankAware}
                       In no master: a review brings it in where it fits a posting better than what the master shows.
                     {:else}
-                      In no master: suggestions come from the master only (Settings, Tailoring).
+                      In no master: suggestions come from the master only (Settings, Agents).
                     {/if}
                   </p>
                 </li>

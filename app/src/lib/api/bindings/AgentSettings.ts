@@ -5,6 +5,12 @@
  */
 export type AgentSettings = { 
 /**
+ * Model calls may run on it, and the agent picker offers it. Off, it never runs a call but is still checked
+ * (found, signed in), so it can be turned back on. The agent in use is always on. On for settings saved before
+ * it existed.
+ */
+enabled: boolean, 
+/**
  * The binary; `None` finds it (`resume_llm::AgentKind::find`).
  */
 path: string | null, 

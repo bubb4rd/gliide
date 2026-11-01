@@ -1,9 +1,11 @@
 <!--
   Settings: one column of cards, with a rail of links to them (`SectionNav`; a row over the cards under 720px).
-  Every control saves as you change it (fields on blur or ⏎); the theme applies at once. Agents lists Claude Code,
-  Codex and Antigravity (each checked by running it, never by reading its credentials; one check runs them all), each
-  with its own path; Use moves every model call to one that's found, and Tailoring's models are that agent's own.
-  Feed holds the job feed's own settings (saved apart from the rest): each filter is Auto (worked out from your
+  Every control saves as you change it (fields on blur or ⏎); the theme applies at once. Agents picks the agent every
+  model call runs on (a menu of the ones that are on and signed in), its models for each step and what suggestions
+  draw on; then lists Claude Code, Codex and Antigravity (each checked by running it, never by reading its
+  credentials; one check runs them all, off ones too), each with its presence on its icon, a switch, and its path
+  behind a disclosure. When the agent in use can't run, a prompt under the picker offers another; it never switches by
+  itself. Feed holds the job feed's own settings (saved apart from the rest): each filter is Auto (worked out from your
   experience and masters, shown as it stands) or Custom;
   then its sources besides freehire: LinkedIn's search, a watchlist of careers boards and Fantastic.jobs through an
   Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
@@ -16,6 +18,9 @@
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import RotateCw from "@lucide/svelte/icons/rotate-cw";
@@ -37,13 +42,13 @@
     type Settings,
     type Theme,
   } from "$lib/api";
-  import { AGENT_LIST, type AgentInfo } from "$lib/agents";
+  import { AGENT_LIST, AGENTS, type AgentInfo } from "$lib/agents";
   import { CATEGORY, COUNTRIES, EMPLOYMENT, SENIORITY, countryName } from "$lib/feed";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { theme } from "$lib/stores/theme.svelte";
   import {
-    Badge,
+    AgentMark,
     Button,
     Card,
     Checkbox,
@@ -54,6 +59,7 @@
     type NavSection,
     SectionNav,
     Segmented,
+    Switch,
     Toolbar,
     tip,
     toast,
@@ -134,7 +140,6 @@
   /** The cards in their order; Feed and its Sources once the feed's settings are in. */
   const sections = $derived<NavSection[]>([
     { id: "agents", label: "Agents" },
-    { id: "tailoring", label: "Tailoring" },
     ...(feedView
       ? [
           { id: "feed", label: "Feed" },
@@ -376,6 +381,11 @@
     await save({ agent });
   }
 
+  /** Turns an agent on (offered by the picker, may run calls) or off (never runs one; still checked). */
+  function setEnabled(agent: Agent, enabled: boolean) {
+    if (s) void save({ agents: { ...s.agents, [agent]: { ...s.agents[agent], enabled } } });
+  }
+
   function setTheme(t: Theme) {
     // Applied before the save returns, so the switch feels instant.
     theme.apply(t);
@@ -421,15 +431,23 @@
     if (await saveModel(key, value)) custom[key] = !listed.has(value);
   }
 
-  // ── Each agent's path: shown, then edited behind Change path (Save, Discard, or Remove to find it again); one
-  //    editor open at a time ──
+  // ── Each agent's details: its path, behind the row's disclosure (one open at a time), then edited behind Change
+  //    path (Save, Discard, or Remove to find it again) ──
+  let detailsOpen = $state<Agent | null>(null);
   let pathOpen = $state<Agent | null>(null);
   let pathDraft = $state("");
   let pathBusy = $state(false);
   const pathUnchanged = $derived(pathOpen !== null && pathDraft.trim() === (s?.agents[pathOpen].path ?? ""));
 
+  function toggleDetails(agent: Agent) {
+    pathOpen = null;
+    pathDraft = "";
+    detailsOpen = detailsOpen === agent ? null : agent;
+  }
+
   function openPath(agent: Agent) {
     pathDraft = s?.agents[agent].path ?? "";
+    detailsOpen = agent;
     pathOpen = agent;
     tick().then(() => document.getElementById(`${agent}-path`)?.focus());
   }
@@ -492,19 +510,62 @@
   }
 
   const statusOf = (agent: Agent) => app.agents?.find((a) => a.agent === agent) ?? null;
-  function badgeOf(status: AgentStatus | null) {
+  /** Found and signed in: the picker offers it, and it can be turned on. */
+  const ready = (status: AgentStatus | null) => !!status?.found && status.signedIn === true;
+
+  /** The presence dot's tone and its words (the icon's tooltip): amber signed out, as the sidebar's. */
+  function presence(status: AgentStatus | null) {
     if (checking) return { tone: "neutral", text: "Checking…" } as const;
     if (!status) return { tone: "neutral", text: "Not checked" } as const;
-    if (!status.found) return { tone: "danger", text: "Not found" } as const;
-    if (status.signedIn === false) return { tone: "danger", text: "Signed out" } as const;
-    if (status.signedIn === null) return { tone: "neutral", text: "Sign-in unknown" } as const;
-    return { tone: "gain", text: "Signed in" } as const;
+    if (!status.found) return { tone: "danger", text: "Not installed" } as const;
+    if (status.signedIn === false) return { tone: "warn", text: "Signed out" } as const;
+    if (status.signedIn === null) return { tone: "neutral", text: "Couldn’t check sign-in" } as const;
+    return { tone: "gain", text: status.plan ? `Signed in · ${status.plan}` : "Signed in" } as const;
   }
-  /** Its maker, then what the agent says about itself: "Anthropic · 2.1.0 · Max". */
-  const metaOf = (info: AgentInfo, status: AgentStatus | null) =>
-    [info.maker, ...(status && !status.found ? ["not installed on this Mac"] : [status?.version, status?.plan])]
-      .filter(Boolean)
-      .join(" · ");
+
+  /**
+   * Why an agent's switch can't change, or null. An agent that's on can always go off, unless model calls run on it;
+   * one that's off goes on only once it's found and signed in.
+   */
+  function lockOf(info: AgentInfo, status: AgentStatus | null, on: boolean) {
+    if (status?.found === false) return `${info.name} isn’t installed on this Mac.`;
+    if (s?.agent === info.id) return `Model calls run on ${info.name}. Choose another agent first.`;
+    if (on || ready(status)) return null;
+    if (status?.signedIn === false)
+      return `Sign in to ${info.name} to turn it on. Run ${info.bin} in Terminal, then Check again.`;
+    return `Couldn’t check ${info.name}’s sign-in. Check again first.`;
+  }
+
+  /** "/Users/jane/.nvm/versions/node/v20.19.0/bin/claude" → "~/.nvm/…/bin/claude"; in full in its tooltip. */
+  function shortPath(path: string) {
+    const parts = path.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").split("/");
+    return parts.length > 5 ? [...parts.slice(0, 2), "…", ...parts.slice(-2)].join("/") : parts.join("/");
+  }
+
+  // ── The picker: the agents that are on and signed in, and always the one in use ──
+  let pickerOpen = $state(false);
+  const pickerOptions = $derived(
+    AGENT_LIST.filter((a) => a.id === s?.agent || (s?.agents[a.id].enabled && ready(statusOf(a.id)))).map((a) => ({
+      value: a.id,
+      label: a.name,
+      meta: statusOf(a.id)?.plan ?? undefined,
+    })),
+  );
+  /** Agents the prompt can offer instead of the one in use: on and signed in, in the list's order. */
+  const alternatives = $derived(
+    AGENT_LIST.filter((a) => a.id !== s?.agent && s?.agents[a.id].enabled && ready(statusOf(a.id))),
+  );
+  /** The agent in use, checked and unable to run: what the prompt says, in the tone of its dot. */
+  const stuck = $derived.by(() => {
+    const a = app.agent;
+    if (!a || ready(a)) return null;
+    const name = active.name;
+    if (!a.found)
+      return { tone: "danger", signedOut: false, head: `${name} isn’t found on this Mac anymore, so model calls will fail.` };
+    if (a.signedIn === false)
+      return { tone: "warn", signedOut: true, head: `${name} is signed out, so model calls will fail.` };
+    return { tone: "neutral", signedOut: false, head: `Couldn’t check ${name}’s sign-in, so model calls may fail.` };
+  });
 
   // ── About: this build and updates ──
   const update = $derived(app.update);
@@ -541,112 +602,70 @@
         <div class="column">
           <Card pad as="section" id="agents" tabindex={-1} aria-labelledby="agents-title">
             <div class="card">
-              <h2 class="name" id="agents-title">Agents</h2>
+              <div class="head">
+                <h2 class="name" id="agents-title">Agents</h2>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  square
+                  icon={RotateCw}
+                  disabled={checking}
+                  aria-label="Check the agents again"
+                  {@attach tip("Check again")}
+                  onclick={refreshAgents}
+                />
+              </div>
               <p class="lede">
-                Every model call runs on the agent you choose, with your own plan. gliide never sees a credential.
-              </p>
-              <ul class="agents">
-                {#each AGENT_LIST as info (info.id)}
-                  {@const status = statusOf(info.id)}
-                  {@const badge = badgeOf(status)}
-                  {@const inUse = s.agent === info.id}
-                  {@const path = s.agents[info.id].path}
-                  <li class="agent">
-                    <span class="agent__mark"><CompanyMark size={28} src={info.icon} /></span>
-                    <span class="agent__name">
-                      <span class="agent__title">{info.name}</span>
-                      {#if inUse}<Badge tone="accent">In use</Badge>{/if}
-                    </span>
-                    <span class="agent__sub num">{metaOf(info, status)}</span>
-                    <span class="agent__end">
-                      {#if !inUse && status?.found}
-                        <Button size="sm" aria-label="Use {info.name} for model calls" onclick={() => void useAgent(info.id)}
-                          >Use</Button
-                        >
-                      {:else if status && !status.found}
-                        <Button size="sm" variant="ghost" icon={ExternalLink} onclick={() => visit(info.install)}
-                          >How to install</Button
-                        >
-                      {/if}
-                      <Badge tone={badge.tone} dot>{badge.text}</Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        square
-                        icon={RotateCw}
-                        disabled={checking}
-                        aria-label="Check the agents again"
-                        {@attach tip("Check again")}
-                        onclick={refreshAgents}
-                      />
-                    </span>
-                    {#if status?.problem}<p class="problem agent__more">{status.problem}</p>{/if}
-                    {#if pathOpen === info.id}
-                      <form class="agent__more path-edit" onsubmit={submitPath} {@attach discardOnEscape}>
-                        <label for="{info.id}-path">Path</label>
-                        <Input
-                          id="{info.id}-path"
-                          size="md"
-                          bind:value={pathDraft}
-                          placeholder="Automatic"
-                          spellcheck="false"
-                          autocomplete="off"
-                          aria-describedby="{info.id}-path-hint"
-                        />
-                        <p class="hint" id="{info.id}-path-hint">
-                          Where the <code>{info.bin}</code> to run is. Empty finds it on your PATH.
-                        </p>
-                        <div class="path-actions">
-                          {#if path}
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              disabled={pathBusy}
-                              {@attach tip(`Find ${info.bin} on your PATH again`)}
-                              onclick={() => void savePath(null)}>Remove</Button
-                            >
-                          {/if}
-                          <Button variant="ghost" size="sm" kbd="Esc" disabled={pathBusy} onclick={closePath}>Discard</Button>
-                          <Button type="submit" variant="primary" size="sm" kbd="⏎" disabled={pathBusy || pathUnchanged}>
-                            {pathBusy ? "Saving…" : "Save"}
-                          </Button>
-                        </div>
-                      </form>
-                    {:else}
-                      <div class="agent__more path-row">
-                        <span class="path-label">Path</span>
-                        <span class="path-value">
-                          {#if path}
-                            <code {@attach tip(path)}>{path}</code>
-                          {:else if status?.path}
-                            <code {@attach tip(status.path)}>{status.path}</code> · found on your PATH
-                          {:else}
-                            Automatic: found on your PATH
-                          {/if}
-                        </span>
-                        <Button
-                          id="{info.id}-path-change"
-                          variant="ghost"
-                          size="sm"
-                          aria-label="Change {info.name}’s path"
-                          onclick={() => openPath(info.id)}>Change path</Button
-                        >
-                      </div>
-                    {/if}
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          </Card>
-
-          <Card pad as="section" id="tailoring" tabindex={-1} aria-labelledby="tailoring-title">
-            <div class="card">
-              <h2 class="name" id="tailoring-title">Tailoring</h2>
-              <p class="lede">
-                {active.name}’s model for each step, and what suggestions draw on. Bank-aware brings in an entry from
-                Experience where it fits a posting better than one the master shows.
+                Every model call runs on the agent you choose, with your own plan, and on the {active.name} model you pick
+                for each step. gliide never sees a credential.
               </p>
               <dl class="fields">
+                <div class="field">
+                  <dt>Model calls run on</dt>
+                  <dd>
+                    <Menu
+                      bind:open={pickerOpen}
+                      value={s.agent}
+                      options={pickerOptions}
+                      label="Model calls run on"
+                      placement="bottom-end"
+                      onchange={(a) => void useAgent(a)}
+                    >
+                      {#snippet lead(option)}
+                        <AgentMark size={16} src={AGENTS[option.value].icon} tone={presence(statusOf(option.value)).tone} />
+                      {/snippet}
+                    </Menu>
+                  </dd>
+                </div>
+              </dl>
+              {#if stuck}
+                {@const next = alternatives[0]}
+                <div class="prompt prompt--{stuck.tone}" role="status">
+                  <Icon icon={CircleAlert} />
+                  <div>
+                    <p class="prompt__head">{stuck.head}</p>
+                    <p class="prompt__how">
+                      {#if stuck.signedOut}Run <code>{active.bin}</code> in Terminal and sign in, then Check again.{:else}Check
+                        again.{/if}
+                      {next ? "Or carry on with another agent:" : "No other agent is on and signed in."}
+                    </p>
+                  </div>
+                  <div class="prompt__actions">
+                    {#if next}
+                      <Button size="sm" variant="primary" onclick={() => void useAgent(next.id)}>
+                        <CompanyMark size={16} src={next.icon} />Continue with {next.name}
+                      </Button>
+                    {/if}
+                    {#if alternatives.length > 1}
+                      <Button size="sm" variant="ghost" onclick={() => (pickerOpen = true)}>Choose another…</Button>
+                    {/if}
+                    <Button size="sm" variant="ghost" icon={RotateCw} disabled={checking} onclick={refreshAgents}
+                      >Check again</Button
+                    >
+                  </div>
+                </div>
+              {/if}
+              <dl class="fields fields--after">
                 {#each MODEL_ROWS as row (row.key)}
                   <div class="field">
                     <dt>{row.label}</dt>
@@ -676,8 +695,14 @@
                     </dd>
                   </div>
                 {/each}
-                <div class="field">
-                  <dt>Suggestions from</dt>
+                <div class="field field--two">
+                  <dt>
+                    Suggestions from
+                    <span class="hint">
+                      Bank-aware brings in an entry from Experience where it fits a posting better than one the master
+                      shows.
+                    </span>
+                  </dt>
                   <dd>
                     <Segmented
                       options={MODES}
@@ -688,6 +713,127 @@
                   </dd>
                 </div>
               </dl>
+              <p class="label list-label" id="agents-list">Supported agents</p>
+              <ul class="agents" aria-labelledby="agents-list">
+                {#each AGENT_LIST as info (info.id)}
+                  {@const status = statusOf(info.id)}
+                  {@const dot = presence(status)}
+                  {@const inUse = s.agent === info.id}
+                  {@const missing = status?.found === false}
+                  {@const on = s.agents[info.id].enabled && !missing}
+                  {@const lock = lockOf(info, status, on)}
+                  {@const path = s.agents[info.id].path}
+                  {@const open = detailsOpen === info.id}
+                  <li class={["agent", !on && "agent--off"]}>
+                    <span class="agent__mark" role="img" aria-label="{info.name}: {dot.text}" {@attach tip(dot.text)}>
+                      {#if missing}
+                        <CompanyMark size={28} src={info.icon} />
+                      {:else}
+                        <AgentMark src={info.icon} tone={dot.tone} />
+                      {/if}
+                    </span>
+                    <span class="agent__name">
+                      <span class="agent__title">{info.name}</span>
+                      {#if missing}
+                        <span class="meta">Not installed</span>
+                      {:else if !on}
+                        <span class="meta">Off</span>
+                      {:else}
+                        {#if status?.version}<span class="meta num">v{status.version}</span>{/if}
+                        {#if inUse}<span class="meta">In use</span>{/if}
+                      {/if}
+                    </span>
+                    <span class="agent__end">
+                      {#if missing}
+                        <Button size="sm" variant="ghost" icon={ExternalLink} onclick={() => visit(info.install)}
+                          >How to install</Button
+                        >
+                      {/if}
+                      <Switch
+                        checked={on}
+                        label={info.name}
+                        locked={!!lock}
+                        {@attach tip(lock)}
+                        onchange={(next) => setEnabled(info.id, next)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        square
+                        icon={open ? ChevronDown : ChevronRight}
+                        aria-expanded={open}
+                        aria-controls="{info.id}-details"
+                        aria-label="{info.name} details"
+                        onclick={() => toggleDetails(info.id)}
+                      />
+                    </span>
+                    {#if on && !inUse && status?.problem}
+                      <!-- Its problem names commands in backticks ("Run `codex` in Terminal…"): shown as code. -->
+                      <p class="problem problem--{dot.tone} agent__more">
+                        {#each status.problem.split("`") as part, i (i)}{#if i % 2}<code>{part}</code>{:else}{part}{/if}{/each}
+                      </p>
+                    {/if}
+                    {#if open}
+                      <div class="agent__more" id="{info.id}-details">
+                        {#if pathOpen === info.id}
+                          <form class="path-edit" onsubmit={submitPath} {@attach discardOnEscape}>
+                            <label for="{info.id}-path">Path</label>
+                            <Input
+                              id="{info.id}-path"
+                              size="md"
+                              bind:value={pathDraft}
+                              placeholder="Automatic"
+                              spellcheck="false"
+                              autocomplete="off"
+                              aria-describedby="{info.id}-path-hint"
+                            />
+                            <p class="hint" id="{info.id}-path-hint">
+                              Where the <code>{info.bin}</code> to run is. Empty finds it on your PATH.
+                            </p>
+                            <div class="path-actions">
+                              {#if path}
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  disabled={pathBusy}
+                                  {@attach tip(`Find ${info.bin} on your PATH again`)}
+                                  onclick={() => void savePath(null)}>Remove</Button
+                                >
+                              {/if}
+                              <Button variant="ghost" size="sm" kbd="Esc" disabled={pathBusy} onclick={closePath}
+                                >Discard</Button
+                              >
+                              <Button type="submit" variant="primary" size="sm" kbd="⏎" disabled={pathBusy || pathUnchanged}>
+                                {pathBusy ? "Saving…" : "Save"}
+                              </Button>
+                            </div>
+                          </form>
+                        {:else}
+                          <div class="path-row">
+                            <span class="path-label">Path</span>
+                            <span class="path-value">
+                              {#if path}
+                                <code {@attach tip(path)}>{shortPath(path)}</code>
+                              {:else if status?.path}
+                                <code {@attach tip(status.path)}>{shortPath(status.path)}</code> · found on your PATH
+                              {:else}
+                                {missing ? "Not found on your PATH" : "Automatic: found on your PATH"}
+                              {/if}
+                            </span>
+                            <Button
+                              id="{info.id}-path-change"
+                              variant="ghost"
+                              size="sm"
+                              aria-label="Change {info.name}’s path"
+                              onclick={() => openPath(info.id)}>Change path</Button
+                            >
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
             </div>
           </Card>
 
@@ -1159,6 +1305,16 @@
     display: grid;
     gap: var(--space-1);
   }
+  /* A card's heading with a control at its end (Agents' Check again). */
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-sm);
+  }
+  .head .name {
+    flex: 1;
+  }
   .name {
     min-width: 0;
     margin: 0;
@@ -1183,6 +1339,15 @@
     color: var(--danger);
     background: var(--danger-soft);
   }
+  /* An agent's problem in its dot's tone: amber signed out, neutral when its sign-in couldn't be checked. */
+  .problem--warn {
+    color: var(--warn);
+    background: var(--warn-soft);
+  }
+  .problem--neutral {
+    color: var(--ink-2);
+    background: var(--sunken);
+  }
   .hint {
     margin-top: var(--space-1-5);
     font-size: var(--text-sm);
@@ -1194,64 +1359,118 @@
     font-family: var(--font-mono);
     font-size: var(--text-sm);
   }
-  /* The agents: a 28px mark, the name (with "In use" on the one model calls run on) over its maker and what's known of
-     it, then Use or How to install, the status and Check again at the end; hairlines between, as the fields'. */
+  /* Under the picker, when the agent in use can't run: what's wrong and how to fix it, then Continue with the first
+     other agent that's on and signed in, Choose another… (the picker) when there are more, and Check again. In its
+     dot's tone: amber signed out, danger no longer found, neutral sign-in unknown. It never switches by itself. */
+  .prompt {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    column-gap: var(--space-2-5);
+    margin-block: calc(var(--space-1) * -1) var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--warn-soft);
+  }
+  .prompt > :global(svg) {
+    margin-top: 2px;
+    color: var(--warn);
+  }
+  .prompt--danger {
+    background: var(--danger-soft);
+  }
+  .prompt--danger > :global(svg) {
+    color: var(--danger);
+  }
+  .prompt--neutral {
+    background: var(--sunken);
+  }
+  .prompt--neutral > :global(svg) {
+    color: var(--ink-2);
+  }
+  .prompt__head,
+  .prompt__how {
+    margin: 0;
+    text-wrap: pretty;
+  }
+  .prompt__head {
+    font-weight: var(--weight-medium);
+  }
+  .prompt__how {
+    color: var(--ink-2);
+  }
+  .prompt__actions {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2-5);
+  }
+  /* The fields go on under the picker (and the prompt) as one list. */
+  .fields:has(+ .prompt) .field:last-child,
+  .fields:has(+ .fields--after) .field:last-child {
+    padding-bottom: var(--space-2);
+  }
+  .fields.fields--after {
+    margin-top: calc(var(--space-1) * -1);
+  }
+  /* A field whose name has a sentence under it (Suggestions from). */
+  .field--two dt {
+    flex: 1;
+    min-width: 0;
+  }
+  .field--two .hint {
+    display: block;
+    margin-top: var(--space-0-5);
+  }
+  .list-label {
+    padding: var(--space-5) 0 var(--space-2);
+  }
+  /* The agents: a 28px icon with its presence dot (its state in words in its tooltip), the name and version (or Off,
+     Not installed), "In use" on the one model calls run on, then How to install, the switch and the disclosure; one
+     line each, hairlines between, as the fields'. */
   .agents {
     display: grid;
-    margin: var(--space-3) 0 0;
+    margin: 0;
     padding: 0;
     list-style: none;
   }
   .agent {
     display: grid;
     grid-template-columns: 28px minmax(0, 1fr) auto;
-    grid-template-areas:
-      "mark name end"
-      "mark sub end";
     align-items: center;
     column-gap: var(--space-3);
-    padding-block: var(--space-3);
+    padding-block: var(--space-2-5);
     box-shadow: inset 0 1px 0 var(--line);
   }
   .agent:last-child {
     padding-bottom: 0;
   }
   .agent__mark {
-    grid-area: mark;
     display: flex;
   }
   .agent__name {
-    grid-area: name;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: var(--space-2);
     min-width: 0;
-    font-weight: var(--weight-medium);
+    white-space: nowrap;
   }
   .agent__title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    font-weight: var(--weight-medium);
   }
-  .agent__sub {
-    grid-area: sub;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--ink-3);
+  .agent--off .agent__title {
+    color: var(--ink-2);
   }
   .agent__end {
-    grid-area: end;
     display: flex;
     align-items: center;
     gap: var(--space-2);
   }
-  /* Under the name: the problem, then the path: one line ending in Change path, or its editor (the field after its
-     label, the hint under the field, then Remove, Discard and Save at the trailing edge). */
+  /* Under the name: the problem, then the details: the path, one line ending in Change path, or its editor (the field
+     after its label, the hint under the field, then Remove, Discard and Save at the trailing edge). */
   .agent__more {
     grid-column: 2 / -1;
   }

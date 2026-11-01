@@ -26,8 +26,9 @@ pub fn get_settings(app: &App) -> Settings {
     app.settings()
 }
 
-/// Saves `s` (trimmed; an empty model falls back to its agent's default). A new export folder holding an existing
-/// `applications.csv` has its rows imported (when it can be read: every write imports again first).
+/// Saves `s` (trimmed; an empty model falls back to its agent's default; the agent in use turned on, since choosing
+/// one, in Settings or the setup, is using it). A new export folder holding an existing `applications.csv` has its
+/// rows imported (when it can be read: every write imports again first).
 pub fn set_settings(app: &App, mut s: Settings) -> Result<Settings> {
     for agent in AgentKind::ALL {
         let a = s.agents.get_mut(agent.into());
@@ -43,6 +44,7 @@ pub fn set_settings(app: &App, mut s: Settings) -> Result<Settings> {
             .map(|p| p.trim().to_owned())
             .filter(|p| !p.is_empty());
     }
+    s.agents.get_mut(s.agent).enabled = true;
     s.export_dir = s.export_dir.trim().to_owned();
     if !Path::new(&s.export_dir).is_absolute() {
         return Err(AppError::other("Choose a full folder path for exports"));

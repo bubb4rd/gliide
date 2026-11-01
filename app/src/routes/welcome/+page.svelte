@@ -176,7 +176,7 @@
   function badgeOf(status: AgentStatus | null) {
     if (!status) return { tone: "neutral", text: checking ? "Checking…" : "Not checked" } as const;
     if (!status.found) return { tone: "danger", text: "Not found" } as const;
-    if (status.signedIn === false) return { tone: "danger", text: "Signed out" } as const;
+    if (status.signedIn === false) return { tone: "warn", text: "Signed out" } as const;
     if (status.signedIn === null) return { tone: "neutral", text: "Sign-in unknown" } as const;
     return { tone: "gain", text: "Signed in" } as const;
   }
@@ -187,8 +187,9 @@
     return [info.maker, status.version, status.plan].filter(Boolean).join(" · ");
   }
   const agentBadge = $derived(badgeOf(agent));
-  /** Reading a resume runs the agent: known not to be ready, the Experience step says so before you try. */
-  const agentMissing = $derived(agentBadge.tone === "danger");
+  /** Reading a resume runs the agent: known not to be ready (not found or signed out), the Experience step says so
+   *  before you try. */
+  const agentMissing = $derived(agentBadge.tone === "danger" || agentBadge.tone === "warn");
 
   function chooseAgent(id: Agent) {
     if (app.settings?.agent !== id) void save({ agent: id });
