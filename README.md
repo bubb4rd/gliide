@@ -1,10 +1,12 @@
+<p align="center">
+  <img src="app/src-tauri/icons/128x128@2x.png" alt="gliide logo" width="128">
+</p>
+
 # gliide
 
 From a job posting to a tailored, one-page resume: score the fit against one of your master resumes, review honest
 edits (rewrites, skills, entries from your experience bank) with a click each, and export a PDF in your design.
 macOS first; Windows and iOS from the same Rust core.
-
-![gliide's first-run setup: score with code, nothing invented, your resume stays yours](.github/assets/welcome.png)
 
 Status: early development; see the roadmap in `ARCHITECTURE.md` §13.
 
