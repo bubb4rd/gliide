@@ -40,7 +40,7 @@ export APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH
 
 TAURI_SIGNING_PRIVATE_KEY=${TAURI_SIGNING_PRIVATE_KEY:-$HOME/.tauri/gliide-updater.key}
 case $TAURI_SIGNING_PRIVATE_KEY in
-/*) [ -f "$TAURI_SIGNING_PRIVATE_KEY" ] || fail "no update key at $TAURI_SIGNING_PRIVATE_KEY (see the README's Releasing)" ;;
+/*) [ -f "$TAURI_SIGNING_PRIVATE_KEY" ] || fail "no update key at $TAURI_SIGNING_PRIVATE_KEY (see RELEASING.md)" ;;
 esac
 if [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ]; then
 	[ -t 0 ] || fail "set TAURI_SIGNING_PRIVATE_KEY_PASSWORD (no terminal to ask in)"
