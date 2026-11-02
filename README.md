@@ -7,7 +7,7 @@
 
 From a job posting to a tailored, one-page resume.
 
-https://github.com/user-attachments/assets/415dc9a9-9671-48af-aaad-349568dc7af6
+https://github.com/user-attachments/assets/f9a51564-1cff-4b48-8423-5c957fda79a1
 
 - **Score the fit** of a posting, from a link or pasted text, against one of your master resumes.
 - **Review honest edits** with a click each: rewrites, skills, and entries from your experience bank.
