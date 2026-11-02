@@ -1,8 +1,9 @@
 <p align="center">
   <img src="app/src-tauri/icons/128x128@2x.png" alt="gliide logo" width="128">
 </p>
-
-# gliide
+<h1 align="center">
+  gliide
+</h1>
 
 From a job posting to a tailored, one-page resume: score the fit against one of your master resumes, review honest
 edits (rewrites, skills, entries from your experience bank) with a click each, and export a PDF in your design.
