@@ -2241,6 +2241,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "ts-rs",
+ "url",
  "uuid",
  "window-vibrancy",
 ]

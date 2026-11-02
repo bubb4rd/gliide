@@ -20,8 +20,10 @@ import {
   onUpdate,
   restoreRounds,
   running,
+  setApplicationUrl,
   setSettings,
   setStatus as saveStatus,
+  setUrl,
   updateStatus,
   type AgentStatus,
   type AppStatus,
@@ -171,6 +173,26 @@ class AppStore {
   #putApplications(rows: ApplicationRow[]) {
     const saved = new Map(rows.map((a) => [a.id, a]));
     this.applications = this.applications.map((a) => saved.get(a.id) ?? a);
+  }
+
+  /**
+   * Sets a link as yours: a posting's (its application's follows), or the link of an application with no posting
+   * (`null`: removed). Puts the saved rows in place; a failure goes to a toast. Resolves whether it saved.
+   */
+  async setLink(target: { job: string } | { application: string }, url: string | null): Promise<boolean> {
+    try {
+      if ("job" in target) {
+        const row = await setUrl(target.job, url);
+        this.jobs = this.jobs.map((j) => (j.id === row.id ? row : j));
+        this.applications = this.applications.map((a) => (a.job === row.id ? { ...a, url: row.url } : a));
+      } else {
+        this.#putApplications([await setApplicationUrl(target.application, url)]);
+      }
+      return true;
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+      return false;
+    }
   }
 
   async refreshLogos() {

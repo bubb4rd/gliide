@@ -747,7 +747,12 @@ pub struct JobRow {
     /// The company's logo key (`LogoRow.key`); empty without a company name.
     pub company_key: String,
     pub location: String,
+    /// Yours once you've set one, else the one it was read from, else the one you gave; `None` for pasted text.
     pub url: Option<String>,
+    /// `url` is the one you set (Remove takes it back to the one it was read from).
+    pub your_url: bool,
+    /// The link's words: `"acme.com"` for yours, `"read from acme.com"`, `"from Greenhouse"`, `"pasted"`.
+    pub source: String,
     /// The latest review's projected score, else the best master's score now; `None` before Extract.
     pub score: Option<f64>,
     pub status: Option<AppStatus>,
@@ -803,9 +808,6 @@ pub struct JobHead {
     pub company_key: String,
     pub location: String,
     pub seniority: String,
-    pub url: Option<String>,
-    /// `"read from acme.com"`, `"from Greenhouse"`, `"pasted"`.
-    pub source: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]

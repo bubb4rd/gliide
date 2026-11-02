@@ -3,7 +3,9 @@
   Fit's applications.csv) shows its scores, file, posting link, status and next round; the status menu saves at once
   and rewrites applications.csv (a move to Interviewing with no round yet offers to add the interview). A posting not
   sent yet shows "Not sent", its fit score and the day it was added; its trash (shown on hover or focus) deletes it,
-  with Undo in the toast. V (or ⌘V) reads the clipboard: a link or the posting's text becomes a posting, and its review
+  with Undo in the toast. A row without a link has Add a link; one with a link opens it, and its pencil (shown on hover
+  or focus) changes it: a posting's link is set on the posting (its application's follows), an application with no
+  posting has its own. V (or ⌘V) reads the clipboard: a link or the posting's text becomes a posting, and its review
   opens.
 
   Above the table: a filter on company or role (/ or ⌘F focuses it, Esc clears it) and a status filter. A column
@@ -34,6 +36,8 @@
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
+  import Link from "@lucide/svelte/icons/link";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import {
     appError,
@@ -56,7 +60,9 @@
     CompanyMark,
     Empty,
     Input,
+    LinkEdit,
     Menu,
+    Popover,
     ScoreBar,
     Segmented,
     Table,
@@ -107,7 +113,7 @@
       width: "16%",
       sortBy: (r) => (r.application?.resume ? fileName(r.application.resume) : null),
     },
-    { key: "link", label: "Link", align: "end", width: "68px" },
+    { key: "link", label: "Link", align: "end", width: "76px" },
     { key: "delete", label: "", align: "end", width: "64px" },
   ];
   /** The table's width (px) under which Resume gives its room to Job, which would otherwise shrink to its mark. */
@@ -313,6 +319,34 @@
       toast(`Couldn’t ${what}: ${appError(e).message}`, { tone: "danger" });
     }
   }
+
+  // ── A row's link: the panel opens over the button clicked ──
+  let linkOpen = $state(false);
+  let linkAnchor = $state<HTMLElement>();
+  let linkRow = $state<Row | null>(null);
+  /** Where a row's link is saved: its posting's (an application's through its posting), else the application's own. */
+  const linkTarget = (row: Row): { job: string } | { application: string } =>
+    row.application && !row.application.job
+      ? { application: row.application.id }
+      : { job: row.application?.job ?? row.posting?.id ?? "" };
+  /** Remove shows for a link you set: an application's own, or one set on its posting. */
+  function removable(row: Row) {
+    const target = linkTarget(row);
+    return "job" in target ? (jobsById.get(target.job)?.yourUrl ?? false) : row.url !== null;
+  }
+
+  function editLink(row: Row, e: MouseEvent) {
+    linkRow = row;
+    linkAnchor = e.currentTarget as HTMLElement;
+    linkOpen = true;
+  }
+
+  async function saveLink(url: string | null): Promise<boolean> {
+    if (!linkRow) return false;
+    const saved = await app.setLink(linkTarget(linkRow), url);
+    if (saved) linkOpen = false;
+    return saved;
+  }
 </script>
 
 <Toolbar>
@@ -436,20 +470,41 @@
               <span class="none">—</span>
             {/if}
           {:else if column.key === "link"}
-            {#if row.url}
-              {@const url = row.url}
-              <Button
-                variant="ghost"
-                size="sm"
-                square
-                icon={ExternalLink}
-                aria-label="Open the {row.company} posting"
-                {@attach tip(url)}
-                onclick={() => run("open the posting", () => openUrl(url))}
-              />
-            {:else}
-              <span class="none">—</span>
-            {/if}
+            <span class="links">
+              {#if row.url}
+                {@const url = row.url}
+                <span class="reveal">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    square
+                    icon={Pencil}
+                    aria-label="Change the {row.company} posting link"
+                    {@attach tip("Change the link")}
+                    onclick={(e) => editLink(row, e)}
+                  />
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  square
+                  icon={ExternalLink}
+                  aria-label="Open the {row.company} posting"
+                  {@attach tip(url)}
+                  onclick={() => run("open the posting", () => openUrl(url))}
+                />
+              {:else}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  square
+                  icon={Link}
+                  aria-label="Add a link to the {row.company} posting"
+                  {@attach tip("Add a link")}
+                  onclick={(e) => editLink(row, e)}
+                />
+              {/if}
+            </span>
           {:else if row.posting}
             {@const posting = row.posting}
             <span class="delete">
@@ -467,6 +522,11 @@
         {/snippet}
       </Table>
     </div>
+    <Popover bind:open={linkOpen} anchor={linkAnchor} placement="bottom-end" aria-label="Posting link">
+      {#if linkOpen && linkRow}
+        <LinkEdit url={linkRow.url} removable={removable(linkRow)} onsave={saveLink} />
+      {/if}
+    </Popover>
   {:else}
     <div class="center surface">
       <Empty title="No matches" body={noMatch}>
@@ -561,6 +621,10 @@
   .none {
     color: var(--ink-4);
   }
+  .links {
+    display: inline-flex;
+    gap: var(--space-1);
+  }
   .file {
     display: block;
     max-width: 100%;
@@ -589,13 +653,14 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
-    /* The trash shows on the row's hover or focus; touch screens always show it. */
-    .delete {
+    /* The trash and the link's pencil show on the row's hover or focus; touch screens always show them. */
+    .delete,
+    .reveal {
       opacity: 0;
       transition: opacity var(--dur-instant) var(--ease-out);
     }
-    :global(tr:hover) .delete,
-    :global(tr:focus-within) .delete {
+    :global(tr:hover) :is(.delete, .reveal),
+    :global(tr:focus-within) :is(.delete, .reveal) {
       opacity: 1;
     }
   }

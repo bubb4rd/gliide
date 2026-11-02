@@ -206,6 +206,11 @@ pub async fn set_salary(app: St<'_>, job: String, salary: Option<SalaryRange>) -
 }
 
 #[tauri::command]
+pub async fn set_url(app: St<'_>, job: String, url: Option<String>) -> Res<JobRow> {
+    blocking(&app, move |app| jobs::set_url(app, &job, url.as_deref())).await
+}
+
+#[tauri::command]
 pub async fn places(app: St<'_>, location: String) -> Res<Vec<Place>> {
     place::places(&app, &location).await
 }
@@ -374,6 +379,18 @@ pub async fn set_status(
 ) -> Res<StatusSet> {
     blocking(&app, move |app| {
         export::set_status(app, &applications, status)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_application_url(
+    app: St<'_>,
+    application: String,
+    url: Option<String>,
+) -> Res<ApplicationRow> {
+    blocking(&app, move |app| {
+        export::set_application_url(app, &application, url.as_deref())
     })
     .await
 }

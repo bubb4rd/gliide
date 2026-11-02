@@ -16,7 +16,9 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
+  import Link from "@lucide/svelte/icons/link";
   import NotebookPen from "@lucide/svelte/icons/notebook-pen";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import PenLine from "@lucide/svelte/icons/pen-line";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sparkles from "@lucide/svelte/icons/sparkles";
@@ -45,6 +47,7 @@
     GroupHead,
     Icon,
     type KeyCommand,
+    LinkEdit,
     LogoDrop,
     Menu,
     PlaceMap,
@@ -129,11 +132,14 @@
   const ready = $derived(s.phase === "ready" && review !== null);
   const head = $derived(review?.head ?? s.view?.head ?? null);
   const row = $derived(app.jobs.find((j) => j.id === job));
+  /** The posting's row: the list's (current once you set its link or salary), else the review's or the opened job's. */
+  const posting = $derived(row ?? review?.job ?? s.view?.job ?? null);
   const company = $derived(head?.company || row?.company || "Posting");
   /** Its application once exported (a posting has at most one): its status is set from the crumbs. */
   const application = $derived(app.applications.find((a) => a.job === job));
+  const link = $derived(posting?.url ?? null);
   /** Where and from where: the company has its own line, above the title. */
-  const metaLine = $derived(head ? [head.location, head.url ? null : head.source].filter(Boolean).join(" · ") : "");
+  const metaLine = $derived(head ? [head.location, link ? null : posting?.source].filter(Boolean).join(" · ") : "");
   const masters = $derived(
     (review?.masters ?? s.view?.masters ?? []).map((m) => ({
       value: m.id,
@@ -333,6 +339,22 @@
     }
   }
 
+  // ── Posting link ──
+  let linkOpen = $state(false);
+  let linkAnchor = $state<HTMLButtonElement>();
+
+  function openLink() {
+    if (!row) return false;
+    linkOpen = true;
+  }
+
+  /** Saves it as yours (`null`: back to the one it was read from). A failure leaves the panel open. */
+  async function saveLink(url: string | null): Promise<boolean> {
+    const saved = await app.setLink({ job }, url);
+    if (saved) linkOpen = false;
+    return saved;
+  }
+
   // ── Where it is: the map over the desk ──
   const where = $derived(head?.location ?? "");
   let places = $state<Place[]>([]);
@@ -368,6 +390,7 @@
     { keys: ["⌘Z"], label: "Undo", run: () => void s.undo(), disabled: !review?.canUndo },
     { keys: ["⇧⌘Z"], label: "Redo", run: () => void s.redo(), disabled: !review?.canRedo },
     { keys: [], label: "Salary range", run: openSalary, disabled: !row },
+    { keys: [], label: "Posting link", run: openLink, disabled: !row },
     { keys: [], label: "Open in Maps", run: openMap, disabled: !places.length },
     { keys: ["⌘⌫"], label: "Delete posting", run: () => void removeJob(), disabled: !row },
     { keys: ["Tab"], label: nextTab, run: switchTab, disabled: tabs.length < 2 },
@@ -392,6 +415,7 @@
       disabled: !ready || !letter?.letter || s.drafting !== null,
     },
     { keys: ["$"], label: "Salary range", run: openSalary, disabled: !row },
+    { keys: ["L"], label: "Posting link", run: openLink, disabled: !row },
     { keys: [], label: "Mark applied", run: markApplied, disabled: application?.status !== "saved" },
     { keys: ["M"], label: "Open in Maps", run: openMap, disabled: !places.length },
     { keys: ["Tab"], label: nextTab, run: switchTab, disabled: tabs.length < 2 },
@@ -412,6 +436,7 @@
       e: () => (onCover ? void exportLetter() : false),
       w: () => (onCover ? writeLetter() : false),
       $: () => (onCover ? openSalary() : false),
+      l: () => (onCover ? openLink() : false),
       m: () => (onCover ? openMap() : false),
       "mod+z": (e) => {
         if (interactive(e.target) || onCover || onInterview) return false;
@@ -567,16 +592,17 @@
                 {@attach tip("Change the salary range ($)")}
                 bind:this={salaryAnchor}
                 onclick={openSalary}>{salaryText(salary)}</button
-              >{/if}{#if head.url}{metaLine || salary ? " · " : ""}<a
+              >{/if}{#if link}{metaLine || salary ? " · " : ""}<a
                 class="source"
-                href={head.url}
+                href={link}
+                {@attach tip(link)}
                 onclick={(e) => {
                   e.preventDefault();
-                  if (head.url) void openUrl(head.url);
-                }}>{head.source}</a
+                  openUrl(link).catch((err) => toast(appError(err).message, { tone: "danger" }));
+                }}>{posting?.source}</a
               >{/if}
           </span>
-          {#if (row && !salary) || (head.companyKey && !logoSrc)}
+          {#if row || (head.companyKey && !logoSrc)}
             <span class="tools">
               {#if row && !salary}
                 <Button
@@ -587,6 +613,22 @@
                   kbd="$"
                   onclick={openSalary}>Add salary</Button
                 >
+              {/if}
+              {#if row && !link}
+                <Button bind:element={linkAnchor} variant="ghost" size="sm" icon={Link} kbd="L" onclick={openLink}
+                  >Add link</Button
+                >
+              {:else if row}
+                <Button
+                  bind:element={linkAnchor}
+                  variant="ghost"
+                  size="sm"
+                  square
+                  icon={Pencil}
+                  aria-label="Change the posting link"
+                  {@attach tip("Change the posting link (L)")}
+                  onclick={openLink}
+                />
               {/if}
               {#if head.companyKey && !logoSrc}
                 <Button variant="ghost" size="sm" icon={ImagePlus} popovertarget="logo-panel">Upload company photo</Button>
@@ -624,6 +666,9 @@
     {#if head}
       <Popover bind:open={salaryOpen} anchor={salaryAnchor} aria-label="Salary range">
         {#if salaryOpen}<SalaryEdit {salary} onsave={saveSalary} />{/if}
+      </Popover>
+      <Popover bind:open={linkOpen} anchor={linkAnchor} aria-label="Posting link">
+        {#if linkOpen}<LinkEdit url={link} removable={posting?.yourUrl ?? false} onsave={saveLink} />{/if}
       </Popover>
       {#if head.companyKey}
         {@const company = head.company}
@@ -684,11 +729,15 @@
         {company}
         {logoSrc}
         {salary}
+        {link}
+        source={posting?.source ?? ""}
         keys={CHAT_KEYS}
         bind:salaryAnchor
+        bind:linkAnchor
         bind:logoMark
         onsalary={openSalary}
-        canSalary={row !== undefined}
+        onlink={openLink}
+        editable={row !== undefined}
       />
     {:else if s.phase === "opening" || s.phase === "suggesting" || s.phase === "stopped"}
       {#if skills.length}

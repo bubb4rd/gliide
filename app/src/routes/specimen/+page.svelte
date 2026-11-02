@@ -15,6 +15,7 @@
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Link from "@lucide/svelte/icons/link";
   import FileUp from "@lucide/svelte/icons/file-up";
   import FileText from "@lucide/svelte/icons/file-text";
   import ListChecks from "@lucide/svelte/icons/list-checks";
@@ -53,6 +54,7 @@
     Kbd,
     KeyFooter,
     type KeyCommand,
+    LinkEdit,
     LogoDrop,
     Marked,
     Menu,
@@ -90,6 +92,17 @@
   let logoOpen = $state(false);
   let logoMark = $state<HTMLElement>();
   let demoLogo = $state<string | null>(null);
+
+  // ── Posting link: Add link opens the panel; once set, the link opens it and the pencil changes it ──
+  let linkOpen = $state(false);
+  let linkAnchor = $state<HTMLButtonElement>();
+  let demoLink = $state<string | null>(null);
+  async function saveDemoLink(url: string | null) {
+    await new Promise((r) => setTimeout(r, 600));
+    demoLink = url && (url.includes("://") ? url : `https://${url}`);
+    linkOpen = false;
+    return true;
+  }
 
   // ── Theme preview ──
   const THEMES: { value: Theme; label: string }[] = [
@@ -1310,6 +1323,54 @@
         </Card>
         <Card pad>
           <div class="tile">
+            <p class="label">Posting link · none (Add link) · yours (the pencil changes it)</p>
+            <div class="row">
+              {#if demoLink}
+                <span class="meta"
+                  >Plano, TX · <a class="specimen-source" href={demoLink} onclick={(e) => e.preventDefault()}
+                    >{new URL(demoLink).host}</a
+                  ></span
+                >
+                <Button
+                  bind:element={linkAnchor}
+                  variant="ghost"
+                  size="sm"
+                  square
+                  icon={Pencil}
+                  aria-label="Change the posting link"
+                  {@attach tip("Change the posting link")}
+                  onclick={() => (linkOpen = true)}
+                />
+              {:else}
+                <span class="meta">Plano, TX · pasted</span>
+                <Button bind:element={linkAnchor} variant="ghost" size="sm" icon={Link} onclick={() => (linkOpen = true)}
+                  >Add link</Button
+                >
+              {/if}
+            </div>
+            <Popover bind:open={linkOpen} anchor={linkAnchor} aria-label="Posting link">
+              {#if linkOpen}<LinkEdit url={demoLink} removable={demoLink !== null} onsave={saveDemoLink} />{/if}
+            </Popover>
+            <p class="meta">Saving takes 600ms here, so the panel shows it busy.</p>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Link panel · empty · yours (Remove) · read from the posting · not a link</p>
+            <div class="drops">
+              <div class="drop-panel"><LinkEdit url={null} autofocus={false} onsave={async () => true} /></div>
+              <div class="drop-panel">
+                <LinkEdit url="https://acme.com/jobs/123" removable autofocus={false} onsave={async () => true} />
+              </div>
+              <div class="drop-panel">
+                <LinkEdit url="https://boards.greenhouse.io/acme/jobs/1" autofocus={false} onsave={async () => true} />
+              </div>
+              <div class="drop-panel"><LinkEdit url="mailto:jobs@acme.com" autofocus={false} onsave={async () => true} /></div>
+            </div>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
             <p class="label">File drop (md, the setup's Experience step) · ready · files over it · taking the file</p>
             <FileDrop icon={FileUp} text="Drop your resume here" hint={`${RESUME_FORMATS}. You check every line before it’s added.`}>
               <Button variant="primary" kbd="I">Choose a file…</Button>
@@ -1949,12 +2010,21 @@
     flex-wrap: wrap;
     gap: var(--space-4);
   }
-  /* LogoDrop as its popover holds it. */
+  /* LogoDrop and LinkEdit as their popovers hold them. */
   .drop-panel {
     border: 1px solid transparent;
     border-radius: var(--radius-lg);
     background: var(--surface);
     box-shadow: var(--shadow-popover);
+  }
+  .specimen-source {
+    color: var(--accent-text);
+    text-decoration: none;
+  }
+  @media (hover: hover) {
+    .specimen-source:hover {
+      text-decoration: underline;
+    }
   }
   .keys-wrap {
     position: sticky;

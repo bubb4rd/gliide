@@ -47,14 +47,20 @@
     company: string;
     logoSrc: string | null;
     salary: SalaryRange | null;
+    /** The posting's link (`null`: none yet) and its words ("from Greenhouse", "pasted"). */
+    link: string | null;
+    source: string;
     keys: KeyCommand[];
     /** The salary range's panel opens over this (Review owns the panel). */
     salaryAnchor?: HTMLButtonElement;
+    /** The posting link's panel opens over this (Review owns the panel). */
+    linkAnchor?: HTMLButtonElement;
     /** The company photo's panel opens over this (Review owns the panel). */
     logoMark?: HTMLElement;
     onsalary: () => unknown;
-    /** The posting has a row, so its salary range can be set. */
-    canSalary: boolean;
+    onlink: () => unknown;
+    /** The posting has a row, so its salary range and link can be set. */
+    editable: boolean;
   }
 
   let {
@@ -62,11 +68,15 @@
     company,
     logoSrc,
     salary,
+    link,
+    source,
     keys,
     salaryAnchor = $bindable(),
+    linkAnchor = $bindable(),
     logoMark = $bindable(),
     onsalary,
-    canSalary,
+    onlink,
+    editable,
   }: Props = $props();
 
   // Review renders the chat only once there's a review; it never goes back to none.
@@ -353,11 +363,15 @@
         {company}
         {logoSrc}
         {salary}
+        {link}
+        {source}
         root={scroller}
         bind:salaryAnchor
+        bind:linkAnchor
         bind:logoMark
         {onsalary}
-        {canSalary}
+        {onlink}
+        {editable}
       />
 
       <div class="turns">

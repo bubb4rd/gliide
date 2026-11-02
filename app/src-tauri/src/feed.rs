@@ -1110,12 +1110,13 @@ fn profile_now(app: &App, s: &FeedSettings) -> Result<Profile> {
     Ok(profile(&bank, &chosen, today()))
 }
 
-/// The employer links (`utm_*` removed) of every posting you have: the local check drops jobs among them.
+/// The employer links (`utm_*` removed) of every posting you have, yours among them: the local check drops jobs among
+/// them.
 fn known_urls(store: &Store) -> Result<HashSet<String>> {
     Ok(store
         .postings()?
         .iter()
-        .flat_map(|p| [p.posting.url.as_deref(), p.posting.source.as_deref()])
+        .flat_map(|p| [p.your_url.as_deref(), p.posting.url.as_deref(), p.posting.source.as_deref()])
         .flatten()
         .map(freehire::without_utm)
         .collect())

@@ -42,6 +42,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("practice.sql"),
     include_str!("stories.sql"),
     include_str!("debriefs.sql"),
+    include_str!("links.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -90,6 +91,8 @@ pub struct PostingRow {
     pub updated_at: String,
     /// The salary range you set: `None` when you haven't, `Some(None)` when you removed it.
     pub your_salary: Option<Option<Salary>>,
+    /// The link you set: `None` when you haven't.
+    pub your_url: Option<String>,
 }
 
 impl PostingRow {
@@ -104,6 +107,14 @@ impl PostingRow {
                 .clone()
                 .or_else(|| salary::find(&self.posting.text)),
         }
+    }
+
+    /// The posting's link: yours once you've set one, else the one it was read from, else the one you gave.
+    pub fn link(&self) -> Option<&str> {
+        self.your_url
+            .as_deref()
+            .or(self.posting.url.as_deref())
+            .or(self.posting.source.as_deref())
     }
 }
 
@@ -666,7 +677,7 @@ impl Store {
         let row = self
             .conn
             .query_row(
-                "SELECT id, json, created_at, updated_at, salary FROM postings WHERE id = ?1",
+                "SELECT id, json, created_at, updated_at, salary, url FROM postings WHERE id = ?1",
                 [id],
                 RawPosting::from_row,
             )
@@ -677,7 +688,7 @@ impl Store {
     /// Every posting, most recently read first.
     pub fn postings(&self) -> Result<Vec<PostingRow>, StoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, json, created_at, updated_at, salary FROM postings ORDER BY updated_at DESC, rowid DESC",
+            "SELECT id, json, created_at, updated_at, salary, url FROM postings ORDER BY updated_at DESC, rowid DESC",
         )?;
         let rows = stmt
             .query_map([], RawPosting::from_row)?
@@ -692,6 +703,20 @@ impl Store {
             "UPDATE postings SET salary = ?2 WHERE id = ?1",
             params![id, serde_json::to_string(&salary)?],
         )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound {
+                what: "posting",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Sets the posting's link as yours (`None`: back to the one it was read from). Its place in the lists stays.
+    pub fn set_posting_url(&self, id: &str, url: Option<&str>) -> Result<(), StoreError> {
+        let changed = self
+            .conn
+            .execute("UPDATE postings SET url = ?2 WHERE id = ?1", params![id, url])?;
         if changed == 0 {
             return Err(StoreError::NotFound {
                 what: "posting",
@@ -1978,6 +2003,7 @@ struct RawPosting {
     created_at: String,
     updated_at: String,
     salary: Option<String>,
+    url: Option<String>,
 }
 
 impl RawPosting {
@@ -1988,6 +2014,7 @@ impl RawPosting {
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
             salary: r.get(4)?,
+            url: r.get(5)?,
         })
     }
 
@@ -1998,6 +2025,7 @@ impl RawPosting {
             created_at: self.created_at,
             updated_at: self.updated_at,
             your_salary: self.salary.as_deref().map(from_json).transpose()?,
+            your_url: self.url,
         })
     }
 }

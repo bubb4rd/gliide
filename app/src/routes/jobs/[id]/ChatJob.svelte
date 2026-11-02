@@ -3,8 +3,8 @@
   title, the posting's facts, the score (now › projected, ceiling, its parts on hover) and the keywords covered (on
   hover, each list: yours, added by your edits, missing in amber). Once it scrolls out of view, or you fold it, a
   one-line strip holds the top of the thread instead: the mark, the company and role, the score with a small bar and
-  the keywords; its chevron brings the card back. The salary opens its panel (Add salary without one) and the mark the
-  company photo's, both owned by Review.
+  the keywords; its chevron brings the card back. The salary opens its panel (Add salary without one), the pencil the
+  link's (Add link without one) and the mark the company photo's, all owned by Review.
 -->
 <script lang="ts">
   import Banknote from "@lucide/svelte/icons/banknote";
@@ -14,6 +14,8 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
+  import Link from "@lucide/svelte/icons/link";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { appError, type ChangeView, type ReviewView, type SalaryRange } from "$lib/api";
   import { logo } from "$lib/logo.svelte";
@@ -27,12 +29,18 @@
     company: string;
     logoSrc: string | null;
     salary: SalaryRange | null;
+    /** The posting's link (`null`: none yet) and its words ("from Greenhouse", "pasted"). */
+    link: string | null;
+    source: string;
     /** The thread's scroller: the card is out of view when it's left it. */
     root: HTMLElement | undefined;
     salaryAnchor?: HTMLButtonElement;
+    linkAnchor?: HTMLButtonElement;
     logoMark?: HTMLElement;
     onsalary: () => unknown;
-    canSalary: boolean;
+    onlink: () => unknown;
+    /** The posting has a row, so its salary range and link can be set. */
+    editable: boolean;
   }
 
   let {
@@ -40,11 +48,15 @@
     company,
     logoSrc,
     salary,
+    link,
+    source,
     root,
     salaryAnchor = $bindable(),
+    linkAnchor = $bindable(),
     logoMark = $bindable(),
     onsalary,
-    canSalary,
+    onlink,
+    editable,
   }: Props = $props();
 
   const VERDICTS = {
@@ -115,7 +127,7 @@
 
   function openSource(e: MouseEvent) {
     e.preventDefault();
-    if (head.url) openUrl(head.url).catch((err) => toast(appError(err).message, { tone: "danger" }));
+    if (link) openUrl(link).catch((err) => toast(appError(err).message, { tone: "danger" }));
   }
 </script>
 
@@ -169,16 +181,31 @@
             {@attach tip("Change the salary range")}
             bind:this={salaryAnchor}
             onclick={onsalary}>{salaryText(salary)}</button
-          >{/if}{#if head.source}{where || salary ? " · " : ""}{#if head.url}<a
+          >{/if}{#if source}{where || salary ? " · " : ""}{#if link}<a
               class="source"
-              href={head.url}
-              onclick={openSource}>{head.source}</a
-            >{:else}{head.source}{/if}{/if}</span
+              href={link}
+              {@attach tip(link)}
+              onclick={openSource}>{source}</a
+            >{:else}{source}{/if}{/if}</span
       >
-      {#if canSalary && !salary}
+      {#if editable && !salary}
         <Button bind:element={salaryAnchor} variant="ghost" size="sm" icon={Banknote} onclick={onsalary}
           >Add salary</Button
         >
+      {/if}
+      {#if editable && !link}
+        <Button bind:element={linkAnchor} variant="ghost" size="sm" icon={Link} onclick={onlink}>Add link</Button>
+      {:else if editable}
+        <Button
+          bind:element={linkAnchor}
+          variant="ghost"
+          size="sm"
+          square
+          icon={Pencil}
+          aria-label="Change the posting link"
+          {@attach tip("Change the posting link")}
+          onclick={onlink}
+        />
       {/if}
       {#if head.companyKey && !logoSrc}
         <Button variant="ghost" size="sm" icon={ImagePlus} popovertarget="logo-panel">Upload company photo</Button>

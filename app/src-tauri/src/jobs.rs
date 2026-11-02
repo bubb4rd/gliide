@@ -123,6 +123,53 @@ pub fn set_salary(app: &App, job: &str, salary: Option<SalaryRange>) -> Result<J
     job_row(app, &posting(app, job)?, app.masters_now()?.as_ref())
 }
 
+/// Sets the posting's link as yours (`None`: back to the one it was read from); its application's link follows, in
+/// `applications.csv` too. Its row with the link it now shows.
+pub fn set_url(app: &App, job: &str, url: Option<&str>) -> Result<JobRow> {
+    let url = url.map(link).transpose()?;
+    posting(app, job)?;
+    lock(&app.store).set_posting_url(job, url.as_deref())?;
+    let row = posting(app, job)?;
+    if let Some(r) = lock(&app.review).as_mut().filter(|r| r.posting_id == job) {
+        r.posting = row.clone();
+    }
+    let follows = {
+        let store = lock(&app.store);
+        match store.application_for_posting(job)? {
+            Some(a) if a.url.as_deref() != row.link() => {
+                store.put_application(&resume_store::Application {
+                    url: row.link().map(str::to_owned),
+                    ..a
+                })?;
+                true
+            }
+            _ => false,
+        }
+    };
+    if follows {
+        crate::export::write_csv(app)?;
+    }
+    job_row(app, &row, app.masters_now()?.as_ref())
+}
+
+/// `input` as a link to open: trimmed, `https://` before a bare `acme.com/jobs/1`; only `http` or `https` to a named
+/// host, nothing before it (`mailto:you@acme.com` isn't one).
+pub fn link(input: &str) -> Result<String> {
+    let bad = || AppError::other("Use a web link, like https://acme.com/jobs/123");
+    let input = input.trim();
+    let url = if input.contains("://") {
+        url::Url::parse(input)
+    } else {
+        url::Url::parse(&format!("https://{input}"))
+    }
+    .map_err(|_| bad())?;
+    let named = url.host_str().is_some_and(|h| h.contains('.'));
+    if !matches!(url.scheme(), "http" | "https") || !named || !url.username().is_empty() || url.password().is_some() {
+        return Err(bad());
+    }
+    Ok(url.into())
+}
+
 pub fn posting(app: &App, job: &str) -> Result<PostingRow> {
     lock(&app.store)
         .posting(job)?
@@ -210,7 +257,9 @@ pub fn row_of(
         company: h.company,
         company_key: h.company_key,
         location: h.location,
-        url: h.url,
+        url: row.link().map(str::to_owned),
+        your_url: row.your_url.is_some(),
+        source: source(row),
         score,
         status,
         added_at: row.created_at.clone(),
@@ -251,8 +300,6 @@ pub fn head(p: &Posting, req: Option<&Requirements>) -> JobHead {
         company,
         location: pick(req.map(|r| r.location.as_str()), &p.location),
         seniority: req.map_or("", |r| seniority(r.seniority)).to_owned(),
-        url: p.url.clone().or_else(|| p.source.clone()),
-        source: source(p),
     }
 }
 
@@ -266,8 +313,12 @@ fn seniority(s: Seniority) -> &'static str {
     }
 }
 
-/// `pasted`, `from Greenhouse`, `from freehire`, `read from acme.com`.
-fn source(p: &Posting) -> String {
+/// `acme.com` for your link; else `pasted`, `from Greenhouse`, `from freehire`, `read from acme.com`.
+fn source(row: &PostingRow) -> String {
+    if let Some(yours) = &row.your_url {
+        return host(yours).unwrap_or(yours).to_owned();
+    }
+    let p = &row.posting;
     let board = match p.method {
         Method::Pasted => return "pasted".to_owned(),
         Method::Greenhouse => "Greenhouse",
@@ -351,6 +402,28 @@ impl From<SalaryPeriod> for Period {
         match p {
             SalaryPeriod::Year => Self::Year,
             SalaryPeriod::Hour => Self::Hour,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::link;
+
+    #[test]
+    fn a_link_is_a_web_page_to_open() {
+        assert_eq!(link(" acme.com/jobs/1 ").unwrap(), "https://acme.com/jobs/1");
+        assert_eq!(link("http://acme.com/jobs/1?gh_jid=2").unwrap(), "http://acme.com/jobs/1?gh_jid=2");
+        for bad in [
+            "",
+            "acme",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "mailto:you@acme.com",
+            "ftp://acme.com/jobs",
+            "https://user:pass@acme.com/",
+        ] {
+            assert!(link(bad).is_err(), "{bad:?} isn't a link to open");
         }
     }
 }

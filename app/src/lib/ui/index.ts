@@ -19,6 +19,7 @@ export { default as Icon } from "./Icon.svelte";
 export { default as Input } from "./Input.svelte";
 export { default as KeyFooter, type KeyCommand } from "./KeyFooter.svelte";
 export { default as Kbd } from "./Kbd.svelte";
+export { default as LinkEdit } from "./LinkEdit.svelte";
 export { default as LogoDrop } from "./LogoDrop.svelte";
 export { default as Marked } from "./Marked.svelte";
 export { default as Menu } from "./Menu.svelte";

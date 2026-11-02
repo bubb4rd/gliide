@@ -152,12 +152,7 @@ fn new_application(r: &Review, t: &Tailored) -> Application {
         date: chrono::Local::now().format("%Y-%m-%d").to_string(),
         company: non_empty(cover::company(r)).unwrap_or("company").to_owned(),
         role: cover::role(r).to_owned(),
-        url: r
-            .posting
-            .posting
-            .url
-            .clone()
-            .or_else(|| r.posting.posting.source.clone()),
+        url: r.posting.link().map(str::to_owned),
         status: AppStatus::Saved,
         now: Some(t.now.total),
         projected: Some(t.projected.total),
@@ -223,9 +218,29 @@ pub fn set_status(
     })
 }
 
+/// Sets the link of an application with no posting (imported from `applications.csv`, or its posting deleted; `None`:
+/// removed) and rewrites `applications.csv`. One with a posting takes the posting's: set it there
+/// ([`crate::jobs::set_url`]).
+pub fn set_application_url(app: &App, application: &str, url: Option<&str>) -> Result<ApplicationRow> {
+    let url = url.map(crate::jobs::link).transpose()?;
+    let store = lock(&app.store);
+    let a = crate::rounds::application_of(&store, application)?;
+    if a.posting_id.is_some() {
+        return Err(AppError::other(
+            "This application takes its posting's link; change it on the job",
+        ));
+    }
+    store.put_application(&Application { url, ..a })?;
+    let saved = crate::rounds::application_of(&store, application)?;
+    let row = row(&store, &saved)?;
+    drop(store);
+    write_csv(app)?;
+    Ok(row)
+}
+
 /// `applications.csv` in the export folder, from the store, after importing what the file holds that the store
 /// doesn't.
-fn write_csv(app: &App) -> Result<()> {
+pub(crate) fn write_csv(app: &App) -> Result<()> {
     let dir = PathBuf::from(app.settings().export_dir);
     std::fs::create_dir_all(&dir)?;
     import_applications_csv(app)?;

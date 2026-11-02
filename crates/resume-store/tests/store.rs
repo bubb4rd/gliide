@@ -215,6 +215,36 @@ fn your_salary_wins_over_the_postings_and_survives_a_reread() {
 }
 
 #[test]
+fn your_link_wins_over_the_postings_and_survives_a_reread() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.put_posting(&posting("Backend engineer.")).unwrap();
+    let link = |id: &str| store.posting(id).unwrap().unwrap().link().map(str::to_owned);
+    assert_eq!(link(&id), None, "pasted text has none");
+
+    store.set_posting_url(&id, Some("https://acme.com/jobs/1")).unwrap();
+    store.put_posting(&posting("Backend engineer.")).unwrap();
+    assert_eq!(link(&id).as_deref(), Some("https://acme.com/jobs/1"), "yours stays through a re-read");
+
+    let mut read = posting("Backend engineer.");
+    read.source = Some("https://lnkd.in/x".into());
+    read.url = Some("https://boards.greenhouse.io/acme/jobs/1".into());
+    store.put_posting(&read).unwrap();
+    assert_eq!(link(&id).as_deref(), Some("https://acme.com/jobs/1"), "yours beats the one it was read from");
+
+    store.set_posting_url(&id, None).unwrap();
+    assert_eq!(
+        link(&id).as_deref(),
+        Some("https://boards.greenhouse.io/acme/jobs/1"),
+        "removed, the one it was read from comes back"
+    );
+
+    assert!(matches!(
+        store.set_posting_url("missing", None),
+        Err(StoreError::NotFound { .. })
+    ));
+}
+
+#[test]
 fn requirements_by_key_and_model() {
     let f = Fixture::new();
     let req = requirements();
@@ -652,7 +682,7 @@ fn migrating_to_covers_keeps_the_data() {
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
-         ALTER TABLE postings DROP COLUMN salary; PRAGMA user_version = 1;",
+         ALTER TABLE postings DROP COLUMN salary; ALTER TABLE postings DROP COLUMN url; PRAGMA user_version = 1;",
     )
     .unwrap();
     drop(conn);
@@ -662,6 +692,7 @@ fn migrating_to_covers_keeps_the_data() {
     assert_eq!(store.master(&master.id).unwrap().unwrap().1, master);
     let row = store.posting(&posting_id).unwrap().unwrap();
     assert_eq!(row.your_salary, None, "no salary of yours before version 4");
+    assert_eq!(row.your_url, None, "no link of yours before version 13");
     assert_eq!(
         store.latest_analysis(&posting_id).unwrap().unwrap().id,
         analysis_id
@@ -699,7 +730,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -811,7 +842,8 @@ fn migrating_to_fetched_logos_keeps_yours() {
         "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
-         DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source; PRAGMA user_version = 5;",
+         DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source;
+         ALTER TABLE postings DROP COLUMN url; PRAGMA user_version = 5;",
     )
     .unwrap();
     drop(conn);
@@ -840,7 +872,7 @@ fn migrating_to_status_changes_keeps_the_applications() {
     conn.execute_batch(
         "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
-         ALTER TABLE applications DROP COLUMN sent; PRAGMA user_version = 7;",
+         ALTER TABLE applications DROP COLUMN sent; ALTER TABLE postings DROP COLUMN url; PRAGMA user_version = 7;",
     )
     .unwrap();
     drop(conn);
@@ -1054,7 +1086,8 @@ fn migrating_to_rounds_keeps_the_applications() {
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
         "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
-         DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; PRAGMA user_version = 8;",
+         DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; ALTER TABLE postings DROP COLUMN url;
+         PRAGMA user_version = 8;",
     )
     .unwrap();
     drop(conn);
@@ -1069,7 +1102,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1171,7 +1204,7 @@ fn migrating_to_practice_keeps_the_rounds() {
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
         "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
-         DROP TABLE practice; DROP TABLE preps; PRAGMA user_version = 9;",
+         DROP TABLE practice; DROP TABLE preps; ALTER TABLE postings DROP COLUMN url; PRAGMA user_version = 9;",
     )
     .unwrap();
     drop(conn);
@@ -1186,7 +1219,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1331,7 +1364,7 @@ fn migrating_to_stories_keeps_the_practice() {
          CREATE INDEX practice_round ON practice (round_id);
          INSERT INTO practice VALUES ('p1', 'r', 'q1', 'Why Acme?', 'I like widgets.', '{}', '2026-10-02T10:00:00Z');
          INSERT INTO practice VALUES ('p2', 'r', 'q2', 'Tests?', 'I wrote 14.', '{}', '2026-10-02T10:00:00Z');
-         PRAGMA user_version = 10;",
+         ALTER TABLE postings DROP COLUMN url; PRAGMA user_version = 10;",
     )
     .unwrap();
     drop(conn);
@@ -1360,7 +1393,7 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1572,8 +1605,10 @@ fn migrating_to_debriefs_keeps_the_rounds() {
             .unwrap();
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE notified; DROP TABLE debriefs; PRAGMA user_version = 11;")
-        .unwrap();
+    conn.execute_batch(
+        "DROP TABLE notified; DROP TABLE debriefs; ALTER TABLE postings DROP COLUMN url; PRAGMA user_version = 11;",
+    )
+    .unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
@@ -1588,7 +1623,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

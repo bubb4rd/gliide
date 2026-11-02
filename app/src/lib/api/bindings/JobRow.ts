@@ -17,7 +17,19 @@ role: string, company: string,
 /**
  * The company's logo key (`LogoRow.key`); empty without a company name.
  */
-companyKey: string, location: string, url: string | null, 
+companyKey: string, location: string, 
+/**
+ * Yours once you've set one, else the one it was read from, else the one you gave; `None` for pasted text.
+ */
+url: string | null, 
+/**
+ * `url` is the one you set (Remove takes it back to the one it was read from).
+ */
+yourUrl: boolean, 
+/**
+ * The link's words: `"acme.com"` for yours, `"read from acme.com"`, `"from Greenhouse"`, `"pasted"`.
+ */
+source: string, 
 /**
  * The latest review's projected score, else the best master's score now; `None` before Extract.
  */

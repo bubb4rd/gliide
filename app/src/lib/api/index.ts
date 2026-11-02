@@ -260,6 +260,8 @@ export const openJob = (job: string) => invoke<JobView>("open_job", { job });
 export const deleteJob = (job: string) => invoke<JobRow[]>("delete_job", { job });
 /** Sets the posting's salary range as yours (`null`: removed); its row with the range it now shows. */
 export const setSalary = (job: string, salary: SalaryRange | null) => invoke<JobRow>("set_salary", { job, salary });
+/** Sets the posting's link as yours (`null`: back to the one it was read from); its application's follows. */
+export const setUrl = (job: string, url: string | null) => invoke<JobRow>("set_url", { job, url });
 /** The places a job's location names, geocoded and cached (empty: remote, a country, or nothing found). */
 export const places = (location: string) => invoke<Place[]>("places", { location });
 /**
@@ -346,6 +348,9 @@ export const applications = () => invoke<ApplicationRow[]>("applications");
  *  their upcoming rounds (`cancelled`; `restoreRounds` takes them back). */
 export const setStatus = (applications: string[], status: AppStatus) =>
   invoke<StatusSet>("set_status", { applications, status });
+/** Sets the link of an application with no posting (`null`: removed), rewriting applications.csv. */
+export const setApplicationUrl = (application: string, url: string | null) =>
+  invoke<ApplicationRow>("set_application_url", { application, url });
 
 // ── Interviews ──
 /** An application's rounds: scheduled ones by when they start, then the unscheduled. */

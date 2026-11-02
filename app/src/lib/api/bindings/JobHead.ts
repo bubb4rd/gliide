@@ -7,8 +7,4 @@ export type JobHead = { role: string, company: string,
 /**
  * The company's logo key (`LogoRow.key`); empty without a company name.
  */
-companyKey: string, location: string, seniority: string, url: string | null, 
-/**
- * `"read from acme.com"`, `"from Greenhouse"`, `"pasted"`.
- */
-source: string, };
+companyKey: string, location: string, seniority: string, };
