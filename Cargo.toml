@@ -4,6 +4,7 @@ members = ["crates/*", "app/src-tauri"]
 
 [workspace.package]
 edition = "2024"
+rust-version = "1.92"
 license = "AGPL-3.0-only"
 publish = false
 
