@@ -45,7 +45,8 @@
     border: 1px solid transparent;
     font: var(--weight-medium) var(--text-xs) / 1 var(--font-ui);
     letter-spacing: 0.01em;
-    vertical-align: 1px;
+    /* Its baseline is the icon's foot: 1px under the text's centers it on a 14/22 line without growing the line. */
+    vertical-align: -1px;
     color: var(--accent-text);
     background: var(--accent-soft);
   }

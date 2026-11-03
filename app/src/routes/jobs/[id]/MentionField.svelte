@@ -171,12 +171,23 @@
       document.execCommand("insertText", false, content);
       return;
     }
-    // A holder with a character in it (an empty one may not survive the insert); the chip takes its place.
+    // A holder with a character in it (an empty one may not survive the insert); the chip takes its place. A line
+    // break after it still gets the space: the caret needs text after the chip to sit in.
     const key = `chip-${++seq}`;
     const holder = `<span data-chip="${key}">@</span>`;
-    document.execCommand("insertHTML", false, holder + (/^\s/.test(next()) ? "" : "&nbsp;"));
+    document.execCommand("insertHTML", false, holder + (/^[^\S\n]/.test(next()) ? "" : "&nbsp;"));
     const el = root.querySelector<HTMLElement>(`[data-chip="${key}"]`);
-    if (el) chip(el, content);
+    if (el) {
+      chip(el, content);
+      // The browser leaves the caret in the holder when no space went in after it; emptied, that puts it inside the
+      // chip, where WebKit draws it before the chip and drops what you type. It goes after the space instead.
+      const after = el.nextSibling;
+      const range = document.createRange();
+      if (after instanceof Text) range.setStart(after, 1);
+      else range.setStartAfter(el);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
     changed();
   }
 
