@@ -37,6 +37,8 @@
     AgentMark,
     Backdrop,
     Badge,
+    BarChart,
+    type ChartBar,
     Button,
     Card,
     ChangeRow,
@@ -58,6 +60,7 @@
     LogoDrop,
     Marked,
     Menu,
+    Meter,
     Nav,
     NavItem,
     PartRow,
@@ -69,6 +72,9 @@
     type NavSection,
     Segmented,
     Sources,
+    segmentStep,
+    StackedBar,
+    StepKey,
     Steps,
     Switch,
     Table,
@@ -471,6 +477,98 @@
     if (n > 0) heatBusy.set(dayKey(new Date(2026, 9, 13 - i)), n);
   }
   const heatNone = new Map<string, number>();
+  /** History began here (Heatmap `start`): the days before it are blank. */
+  const heatStart = new Date(2026, 8, 23);
+
+  // ── Bar chart: made-up cost a day, ending on the Heatmap's fixed day ──
+  const shortDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+  const longDay = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const usd = (n: number) => (n > 0 && n < 0.005 ? "<$0.01" : `$${n.toFixed(2)}`);
+  const gridUsd = (n: number) => (Number.isInteger(n) ? `$${n}` : usd(n));
+  function costBars(days: number, seed: number, tickOn: (date: Date) => boolean): ChartBar[] {
+    return Array.from({ length: days }, (_, i) => {
+      seed = (seed * 48271) % 2147483647;
+      const date = new Date(2026, 9, 13 - (days - 1 - i));
+      const cost = seed % 5 === 0 ? 0 : (seed % 400) / 100;
+      return {
+        key: dayKey(date),
+        value: cost,
+        tick: tickOn(date) && i < days - 3 ? shortDay.format(date) : undefined,
+        tip: {
+          title: longDay.format(date),
+          value: usd(cost),
+          rows: [
+            { label: "Tokens", value: `${(cost * 0.7).toFixed(1)}M` },
+            { label: "Model calls", value: Math.round(cost * 20) },
+          ],
+          note: "Reported by Claude Code",
+        },
+      };
+    });
+  }
+  const barsMonth = costBars(30, 11, (d) => d.getDay() === 1);
+  const barsQuarter = costBars(90, 3, (d) => d.getDate() === 1);
+  // A few cents a day, one of them a fraction of a cent (its 2px minimum), two days of nothing; plain-label tooltips.
+  const barsSmall: ChartBar[] = [0.31, 0.004, 0, 0.12, 0.27, 0, 0.19].map((cost, i) => {
+    const date = new Date(2026, 9, 7 + i);
+    return {
+      key: dayKey(date),
+      value: cost,
+      tick: i % 3 === 0 ? shortDay.format(date) : undefined,
+      tip: `${longDay.format(date)}: ${usd(cost)}`,
+    };
+  });
+  const barsZero: ChartBar[] = barsSmall.map((b, i) => ({
+    ...b,
+    value: 0,
+    tip: `${longDay.format(new Date(2026, 9, 7 + i))}: ${usd(0)}`,
+  }));
+
+  // ── Meter and stacked bar: shares of cost, tokens by kind ──
+  const meterStates = [
+    { name: "None", value: 0 },
+    { name: "Tiny", value: 0.004 },
+    { name: "Half", value: 0.5 },
+    { name: "Full", value: 1 },
+  ];
+  const mixStates: { name: string; segments: { label: string; value: number }[] }[] = [
+    {
+      name: "Four kinds",
+      segments: [
+        { label: "Input", value: 4.6 },
+        { label: "Output", value: 1.1 },
+        { label: "Cache write", value: 2.9 },
+        { label: "Cache read", value: 16.9 },
+      ],
+    },
+    {
+      name: "One kind at 0 (left out)",
+      segments: [
+        { label: "Input", value: 3.2 },
+        { label: "Output", value: 0.9 },
+        { label: "Cache write", value: 0 },
+        { label: "Cache read", value: 7.4 },
+      ],
+    },
+    {
+      name: "A sliver (its 2px minimum)",
+      segments: [
+        { label: "Input", value: 0.01 },
+        { label: "Output", value: 1.2 },
+        { label: "Cache write", value: 3.1 },
+        { label: "Cache read", value: 40 },
+      ],
+    },
+    {
+      name: "Nothing yet",
+      segments: [
+        { label: "Input", value: 0 },
+        { label: "Output", value: 0 },
+        { label: "Cache write", value: 0 },
+        { label: "Cache read", value: 0 },
+      ],
+    },
+  ];
 
   // ── Tooltips: every kind, from a label to a chart's legend ──
   const tipKinds: { name: string; content: TipContent }[] = [
@@ -1486,6 +1584,101 @@
             <Heatmap counts={heatBusy} end={heatEnd} weeks={12} label="Activity (specimen), last 12 weeks" />
           </div>
         </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Since history began (Sep 23)</p>
+            <Heatmap
+              counts={heatBusy}
+              end={heatEnd}
+              start={heatStart}
+              weeks={12}
+              label="Activity (specimen), since Sep 23"
+            />
+          </div>
+        </Card>
+      </div>
+    </section>
+
+    <!-- ═══════════ Bar chart ═══════════ -->
+    <section class="section">
+      <h2 class="title">Bar chart</h2>
+      <p class="meta lede">
+        Estimated cost by day. Gridlines at round steps of the busiest day, labeled at the trailing edge; sparse ticks
+        under their bars. Hover a bar, or Tab in and use ←/→, Home and End: its column washes and its tooltip opens.
+        Past 60 bars they sit 1px apart; a fraction of a cent still shows 2px; a day of nothing shows no bar.
+      </p>
+      <Card pad>
+        <div class="tile">
+          <p class="label">30 days, ticks on Mondays</p>
+          <BarChart bars={barsMonth} format={gridUsd} label="Estimated cost by day (specimen), last 30 days" />
+        </div>
+      </Card>
+      <div class="grid cols-2">
+        <Card pad>
+          <div class="tile">
+            <p class="label">90 days, dense, ticks on the 1st</p>
+            <BarChart bars={barsQuarter} format={gridUsd} label="Estimated cost by day (specimen), last 90 days" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Cents, a sliver, empty days, 96px, label tooltips</p>
+            <BarChart
+              bars={barsSmall}
+              format={gridUsd}
+              height={96}
+              label="Estimated cost by day (specimen), last 7 days"
+            />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">All 0: the baseline alone</p>
+            <BarChart bars={barsZero} format={gridUsd} label="Estimated cost by day (specimen), nothing yet" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">No bars</p>
+            <BarChart bars={[]} format={gridUsd} label="Estimated cost by day (specimen), no days" />
+          </div>
+        </Card>
+      </div>
+    </section>
+
+    <!-- ═══════════ Meter, stacked bar ═══════════ -->
+    <section class="section">
+      <h2 class="title">Meter, stacked bar</h2>
+      <p class="meta lede">
+        A share as a 48×4 meter (any share above 0 shows 2px). Parts of a whole as one 8px pill, the parts 2px apart in
+        the data steps, the first darkest; a part of 0 is left out, a sliver shows 2px. Legends key them with
+        <code>StepKey</code>.
+      </p>
+      <div class="grid cols-2">
+        <Card pad>
+          <div class="tile">
+            {#each meterStates as m (m.name)}
+              <div class="row">
+                <Meter value={m.value} label="Share of cost (specimen, {m.name.toLowerCase()})" />
+                <span class="num">{Math.round(m.value * 100)}%</span>
+                <span class="meta">{m.name}</span>
+              </div>
+            {/each}
+          </div>
+        </Card>
+        {#each mixStates as mix (mix.name)}
+          <Card pad>
+            <div class="tile">
+              <p class="label">{mix.name}</p>
+              <StackedBar segments={mix.segments} label="Tokens by kind (specimen)" />
+              <div class="row">
+                {#each mix.segments as s, i (s.label)}
+                  <span class="row nowrap meta"><StepKey step={segmentStep(i)} />{s.label}</span>
+                {/each}
+              </div>
+            </div>
+          </Card>
+        {/each}
       </div>
     </section>
 

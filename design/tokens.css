@@ -72,6 +72,12 @@
   --accent-text: oklch(0.43 0.207 263.8);  /* links and accent text  ≥7.9:1 on every surface */
   --accent-soft: oklch(0.95 0.03 263.8);
   --on-accent: oklch(1 0 0);
+  /* Data steps (Heatmap, StackedBar): the accent mixed into --sunken in oklab (oklch would swing the hue from the
+     near-gray well toward the accent through green); 4 is the accent itself. A data series, never "good". */
+  --accent-step-1: color-mix(in oklab, var(--accent) 25%, var(--sunken));
+  --accent-step-2: color-mix(in oklab, var(--accent) 50%, var(--sunken));
+  --accent-step-3: color-mix(in oklab, var(--accent) 75%, var(--sunken));
+  --accent-step-4: var(--accent);
 
   /* ── Meaning ── */
   --gain: oklch(0.52 0.13 150);            /* score gain, "you have it", applied */
@@ -234,4 +240,17 @@
 .theme-switching *::before,
 .theme-switching *::after {
   transition: none !important;
+}
+
+/*
+ * Forced colors: the data steps become Highlight at stepped opacity over Canvas. An element painted with them sets
+ * `forced-color-adjust: none`.
+ */
+@media (forced-colors: active) {
+  :root {
+    --accent-step-1: color-mix(in srgb, Highlight 40%, Canvas);
+    --accent-step-2: color-mix(in srgb, Highlight 60%, Canvas);
+    --accent-step-3: color-mix(in srgb, Highlight 80%, Canvas);
+    --accent-step-4: Highlight;
+  }
 }
