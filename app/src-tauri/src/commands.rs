@@ -13,12 +13,12 @@ use crate::dto::{
     ImportChoices, ImportView, Instructed, JobRow, JobView, KeyDecision, Library, LogoRow,
     LogoSource, Nudge, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
     RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
-    StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus,
+    StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus, UsageView,
 };
 use crate::state::{App, blocking};
 use crate::{
     cover, debrief, dig, entry, export, feed, folder as files, import, jobs, library as lib, logo,
-    place, prep, review, rounds, settings, stories, update,
+    place, prep, review, rounds, settings, stories, update, usage,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -655,4 +655,18 @@ pub async fn feed_settings(app: St<'_>) -> Res<FeedSettingsView> {
 #[tauri::command]
 pub async fn set_feed_settings(app: St<'_>, settings: FeedSettingsDto) -> Res<FeedSettingsView> {
     blocking(&app, move |app| feed::set_feed_settings(app, settings)).await
+}
+
+// ── Usage ──
+
+/// Every model call recorded, summed per day, feature, agent and model.
+#[tauri::command]
+pub async fn usage(app: St<'_>) -> Res<UsageView> {
+    blocking(&app, usage::usage).await
+}
+
+/// Every model call recorded, one CSV row each, written to `path`.
+#[tauri::command]
+pub async fn export_usage(app: St<'_>, path: String) -> Res<()> {
+    blocking(&app, move |app| usage::export_usage(app, std::path::Path::new(&path))).await
 }

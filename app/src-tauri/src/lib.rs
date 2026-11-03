@@ -27,6 +27,7 @@ pub mod settings;
 pub mod state;
 pub mod stories;
 pub mod update;
+pub mod usage;
 mod view;
 mod window;
 
@@ -176,6 +177,8 @@ pub fn run() {
             commands::open_feed_job,
             commands::feed_settings,
             commands::set_feed_settings,
+            commands::usage,
+            commands::export_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gliide");

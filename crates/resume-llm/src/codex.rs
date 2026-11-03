@@ -198,7 +198,8 @@ impl Events {
         events
     }
 
-    /// The turn's token counts; `model` served it (Codex fails a call rather than switch models).
+    /// The turn's token counts; `model` served it (Codex fails a call rather than switch models). Codex counts cached
+    /// input inside `input_tokens` (as OpenAI's API does), so the cached part is taken out of it.
     fn usage(&self, model: &str) -> Usage {
         let n = |key: &str| {
             self.usage
@@ -206,11 +207,15 @@ impl Events {
                 .and_then(|u| u.get(key))
                 .and_then(Value::as_u64)
         };
+        let (written, read) = (n("cache_write_input_tokens"), n("cached_input_tokens"));
         Usage {
-            input_tokens: n("input_tokens"),
+            input_tokens: n("input_tokens").map(|i| {
+                i.saturating_sub(written.unwrap_or(0))
+                    .saturating_sub(read.unwrap_or(0))
+            }),
             output_tokens: n("output_tokens"),
-            cache_creation_input_tokens: n("cache_write_input_tokens"),
-            cache_read_input_tokens: n("cached_input_tokens"),
+            cache_creation_input_tokens: written,
+            cache_read_input_tokens: read,
             cost_usd: None,
             api_ms: None,
             turns: self.usage.is_some().then_some(1),

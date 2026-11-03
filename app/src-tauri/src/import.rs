@@ -14,8 +14,8 @@ use resume_llm::import::{self, Link};
 use resume_pipeline::{ResumeSource, read_resume};
 
 use crate::dto::{
-    ImportChoices, ImportContact, ImportEntry, ImportGroup, ImportSection, ImportView, Library,
-    SameEntry, Stage,
+    Feature, ImportChoices, ImportContact, ImportEntry, ImportGroup, ImportSection, ImportView,
+    Library, SameEntry, Stage,
 };
 use crate::error::{AppError, Result};
 use crate::library::library;
@@ -46,7 +46,7 @@ pub async fn read_import(app: &Arc<App>, path: String) -> Result<ImportView> {
     let (resume, pages) = match source {
         ResumeSource::AtsFit(r) => (r, None),
         ResumeSource::File(f) => {
-            let llm = app.agent().await?;
+            let llm = app.agent(Feature::Import).await?;
             let model = app.settings().current().extract_model.clone();
             let pages = f.pages;
             let m = model.clone();

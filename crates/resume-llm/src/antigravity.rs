@@ -167,15 +167,17 @@ fn prompt(system: &str, input: &str) -> String {
 }
 
 /// The usage fields of an `agy -p --output-format json` envelope; `model` served it (`agy` fails a pinned model
-/// it doesn't know rather than fall back).
+/// it doesn't know rather than fall back). Its `output_tokens` include the thinking tokens; its `input_tokens` are
+/// taken to include the cache reads, as Gemini's prompt count does, so those are taken out.
 fn usage_of(envelope: &Value, model: &str) -> Usage {
     let u = envelope.get("usage");
     let n = |key: &str| u.and_then(|u| u.get(key)).and_then(Value::as_u64);
+    let read = n("cache_read_tokens");
     Usage {
-        input_tokens: n("input_tokens"),
+        input_tokens: n("input_tokens").map(|i| i.saturating_sub(read.unwrap_or(0))),
         output_tokens: n("output_tokens"),
         cache_creation_input_tokens: None,
-        cache_read_input_tokens: n("cache_read_tokens"),
+        cache_read_input_tokens: read,
         cost_usd: None,
         api_ms: None,
         turns: envelope.get("num_turns").and_then(Value::as_u64),

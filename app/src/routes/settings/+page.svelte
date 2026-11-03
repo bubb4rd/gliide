@@ -9,7 +9,8 @@
   experience and masters, shown as it stands) or Custom;
   then its sources besides freehire: LinkedIn's search, a watchlist of careers boards and Fantastic.jobs through an
   Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
-  while Interviews is off or macOS doesn't allow gliide's banners, read again whenever the window gains focus.
+  while Interviews is off or macOS doesn't allow gliide's banners, read again whenever the window gains focus. Usage
+  (`Usage.svelte`) shows the model calls' tokens and cost.
 -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
@@ -64,6 +65,7 @@
     tip,
     toast,
   } from "$lib/ui";
+  import Usage from "./Usage.svelte";
 
   const CUSTOM = "custom";
   const MODEL_ROWS: { key: ModelKey; label: string }[] = [
@@ -140,6 +142,7 @@
   /** The cards in their order; Feed and its Sources once the feed's settings are in. */
   const sections = $derived<NavSection[]>([
     { id: "agents", label: "Agents" },
+    { id: "usage", label: "Usage" },
     ...(feedView
       ? [
           { id: "feed", label: "Feed" },
@@ -836,6 +839,8 @@
               </ul>
             </div>
           </Card>
+
+          <Usage />
 
           {#if fs && feedView}
             {#key feedResets}

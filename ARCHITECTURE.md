@@ -99,7 +99,8 @@ your own subscription, and your own agreement with each lab applies to it. One a
 Agents (or the first-run setup) chooses which, and each agent keeps its own path and models while another runs. Each
 can be switched off there (`agents.<agent>.enabled`): off, it never runs a call and isn't offered, but is still checked,
 so it can come back on once found and signed in; the agent in use is always on, and when it can't run, Settings
-offers another rather than switching by itself.
+offers another rather than switching by itself. Each call's tokens, and what it would cost at API prices, are kept on
+this Mac and shown in Settings → Usage (§8): on a subscription a measure of use, not a bill.
 
 ### Per lab
 
@@ -825,6 +826,14 @@ The review's preview pane opens with a map of the job's place (DESIGN.md `PlaceM
 | The agents' own config | Their sign-ins; the app stores none |
 
 Rows use UUIDs and `updated_at` so sync can be added later without a migration. No sync until decided.
+
+`gliide.sqlite` also holds `usage` (store schema 14): a row per model call, its repair turn included, recorded as it
+ends (`usage::Metered`, the `Llm` every call runs through): when, the local day, what it was for (`Feature`), the agent
+and the model that served it, its tokens (input read fresh, cache writes and reads apart; Codex's and Antigravity's
+counts are split so in `resume-llm`) and the cost the agent reported (Claude Code's `total_cost_usd`; NULL for the
+others). Settings → Usage sums it per day, feature, agent and model, estimating unreported costs from the list prices
+bundled in `resume_llm::pricing` at read time, so a corrected price applies to past calls; Export CSV writes it per
+call. A call that never got an answer (not found, timed out, stopped) reported nothing and isn't recorded.
 
 The app data folder (`~/Library/Application Support/dev.bubb4rd.gliide/` on macOS) is named by the bundle identifier
 `dev.bubb4rd.gliide`. The identifier is permanent: changing it would strand every install's data in the old folder.

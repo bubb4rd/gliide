@@ -11,7 +11,8 @@ use resume_pipeline::{extract_key, today};
 use resume_store::{PostingRow, Store};
 
 use crate::dto::{
-    ChipState, JobHead, JobRow, JobView, MasterChoice, SalaryPeriod, SalaryRange, SkillChip, Stage,
+    ChipState, Feature, JobHead, JobRow, JobView, MasterChoice, SalaryPeriod, SalaryRange,
+    SkillChip, Stage,
 };
 use crate::error::{AppError, Result};
 use crate::state::{App, Library, blocking, lock, model_call, single_flight};
@@ -46,7 +47,7 @@ pub async fn add_job(app: &Arc<App>, input: &str) -> Result<JobRow> {
 /// The posting with its requirements and every master scored, best first. A feed job is marked opened (and checked).
 pub async fn open_job(app: &Arc<App>, job: &str) -> Result<JobView> {
     let row = posting(app, job)?;
-    let req = requirements(app, &row).await?;
+    let req = requirements(app, &row, Feature::Requirements).await?;
     blocking(app, move |app| {
         let now = app.masters_now()?;
         let masters = ranked(now.as_ref(), &req);
@@ -177,15 +178,16 @@ pub fn posting(app: &App, job: &str) -> Result<PostingRow> {
 }
 
 /// The posting's requirements: from the store when this text, prompt and model were extracted before, else one
-/// Extract call (cancellable under the posting's id), joined by any asking for the same while it runs.
-pub async fn requirements(app: &Arc<App>, row: &PostingRow) -> Result<Requirements> {
+/// Extract call (cancellable under the posting's id, its usage recorded under `feature`), joined by any asking for the
+/// same while it runs.
+pub async fn requirements(app: &Arc<App>, row: &PostingRow, feature: Feature) -> Result<Requirements> {
     let model = app.settings().current().extract_model.clone();
     let key = extract_key(&row.posting);
     single_flight(app, &format!("extract {model} {key}"), async |_| {
         if let Some(req) = lock(&app.store).requirements(&key, &model)? {
             return Ok(req);
         }
-        let llm = app.agent().await?;
+        let llm = app.agent(feature).await?;
         let posting = row.posting.clone();
         let m = model.clone();
         let (req, out) = model_call(app, &row.id, Stage::Extracting, async move {

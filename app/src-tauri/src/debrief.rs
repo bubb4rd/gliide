@@ -13,7 +13,7 @@ use resume_store::{self as store, DebriefRow, Store};
 use serde::{Deserialize, Serialize};
 
 use crate::dig::question;
-use crate::dto::{Asked, Debrief, DebriefDig, DebriefRead, DebriefView, Stage};
+use crate::dto::{Asked, Debrief, DebriefDig, DebriefRead, DebriefView, Feature, Stage};
 use crate::error::{AppError, Result};
 use crate::prep::sent_of;
 use crate::rounds::application_of;
@@ -137,7 +137,7 @@ pub async fn read_debrief(app: &Arc<App>, round: &str) -> Result<DebriefView> {
         Ok((r, a, row, d, requirements, bank, sent))
     })
     .await?;
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Debrief).await?;
     let model = app.settings().current().suggest_model.clone();
     let job = a.posting_id.clone().unwrap_or_else(|| a.id.clone());
     let asked: Vec<String> = d.asked.iter().map(|q| q.text.clone()).collect();

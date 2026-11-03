@@ -17,7 +17,7 @@ use resume_llm::dig::{self, Answered, Checked};
 use resume_store as store;
 
 use crate::dto::{
-    DigAnswer, DigCapture, DigOp, DigQuestion, DigQuestions, DigSkip, Stage, StorySource,
+    DigAnswer, DigCapture, DigOp, DigQuestion, DigQuestions, DigSkip, Feature, Stage, StorySource,
 };
 use crate::entry::{entry_view, fact_line};
 use crate::error::{AppError, Result};
@@ -62,7 +62,7 @@ pub async fn dig_questions(app: &Arc<App>, entry: &str, again: bool) -> Result<D
     if let Some(d) = kept {
         return view(&d);
     }
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Dig).await?;
     let model = app.settings().current().suggest_model.clone();
     let today = Local::now().format("%Y-%m-%d").to_string();
     let job = format!("entry:{}", e.id);
@@ -133,7 +133,7 @@ pub async fn dig_capture(
         Ok(find(&bank, &id)?.clone())
     })
     .await?;
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Dig).await?;
     let model = app.settings().current().suggest_model.clone();
     let today = Local::now().format("%Y-%m-%d").to_string();
     let job = format!("entry:{}", e.id);

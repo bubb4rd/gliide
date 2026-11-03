@@ -24,8 +24,8 @@ use resume_store::{DraftLog, NewAnalysis, PostingRow};
 use resume_tailor::{Tailored, tailor};
 
 use crate::dto::{
-    Accepted, ChipState, CustomEdit, Decision, Displaced, EditTargets, Instructed, KeyDecision,
-    MasterChoice, Proposal, ReviewView, Rewritten, Skipped, Stage, Target,
+    Accepted, ChipState, CustomEdit, Decision, Displaced, EditTargets, Feature, Instructed,
+    KeyDecision, MasterChoice, Proposal, ReviewView, Rewritten, Skipped, Stage, Target,
 };
 use crate::entry::variant_error;
 use crate::error::{AppError, Result};
@@ -98,7 +98,7 @@ async fn make_review(
     fresh: bool,
 ) -> Result<(Review, ReviewView)> {
     let row = jobs::posting(app, job)?;
-    let req = jobs::requirements(app, &row).await?;
+    let req = jobs::requirements(app, &row, Feature::Requirements).await?;
     let settings = app.settings();
     let latest = lock(&app.store).latest_analysis(job)?;
     // Every review follows the setting, so entries you add to the bank reach the jobs you already have.
@@ -148,7 +148,7 @@ async fn make_review(
             lock(&app.store).touch_analysis(&a.id)?;
             return Ok(a);
         }
-        let llm = app.agent().await?;
+        let llm = app.agent(Feature::Suggestions).await?;
         let (p, rq, rs, bk, cs, m) = (
             row.posting.clone(),
             req.clone(),
@@ -652,7 +652,7 @@ pub async fn rewrite_line(
 
 /// The Rewrite model call for `job`: the new line, per `note`.
 async fn rewritten(app: &Arc<App>, job: RewriteJob, note: String) -> Result<String> {
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Rewrite).await?;
     let model = app.settings().current().suggest_model.clone();
     let (line, facts, terms, budget) = (job.line, job.facts, job.terms, job.budget);
     let m = model.clone();
@@ -792,7 +792,7 @@ pub async fn instruct(
         })
     })
     .await?;
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Chat).await?;
     let model = app.settings().current().suggest_model.clone();
     let s = scope.clone();
     let c = confirmed.clone();

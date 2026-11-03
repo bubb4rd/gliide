@@ -26,8 +26,9 @@ use resume_pipeline::today;
 use resume_store::{FeedRow, FeedState, NewFeedJob, PostingRow, Store};
 
 use crate::dto::{
-    ErrorKind, FeedAuto, FeedItem, FeedItemState, FeedSettingsDto, FeedSettingsView, FeedStatus,
-    FeedView, JobRow, MasterChoice, MasterRef, SearchCursor, SearchResults, WatchBoard,
+    ErrorKind, Feature, FeedAuto, FeedItem, FeedItemState, FeedSettingsDto, FeedSettingsView,
+    FeedStatus, FeedView, JobRow, MasterChoice, MasterRef, SearchCursor, SearchResults,
+    WatchBoard,
 };
 use crate::error::{AppError, Result};
 use crate::jobs;
@@ -617,7 +618,7 @@ async fn check_job(app: &Arc<App>, slug: &str) -> Result<()> {
             return Ok(());
         }
     };
-    let req = jobs::requirements(app, &posting).await?;
+    let req = jobs::requirements(app, &posting, Feature::FeedCheck).await?;
     let slug = slug.to_owned();
     let was = row.state;
     blocking(app, move |app| {

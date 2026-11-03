@@ -18,7 +18,7 @@ use resume_llm::prep::{self as written, PrepInput, SentResume};
 use resume_store::{self as store, Application, PracticeRow};
 
 use crate::dto::{
-    Feedback, Mismatch, NewClaim, Nudge, PracticeTurn, PrepGap, PrepQuestion, PrepView,
+    Feature, Feedback, Mismatch, NewClaim, Nudge, PracticeTurn, PrepGap, PrepQuestion, PrepView,
     QuestionGroup, Stage, StarPart, StorySource,
 };
 use crate::error::{AppError, Result};
@@ -133,7 +133,7 @@ pub async fn prep(app: &Arc<App>, round: &str, again: bool) -> Result<PrepView> 
     if let Some(p) = kept {
         return view(&p, &cx.stories);
     }
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Prep).await?;
     let model = app.settings().current().suggest_model.clone();
     let today = Local::now().format("%Y-%m-%d").to_string();
     let Context {
@@ -265,7 +265,7 @@ pub async fn practice(
         .as_ref()
         .map(|r| r.skills.iter().map(|k| k.term.clone()).collect())
         .unwrap_or_default();
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Practice).await?;
     let model = app.settings().current().suggest_model.clone();
     let (m, s, a, qt, st) = (
         model.clone(),
@@ -352,7 +352,7 @@ pub async fn nudge(
         Some(p) => Some((p.answer, serde_json::from_str::<practice::Feedback>(&p.feedback)?)),
         None => None,
     };
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Nudges).await?;
     let model = app.settings().current().suggest_model.clone();
     let (m, s, d, qt, st, la) = (
         model.clone(),

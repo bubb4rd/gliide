@@ -55,7 +55,8 @@ async fn the_last_message_is_the_reply() {
             usage.output_tokens,
             usage.cache_read_input_tokens
         ),
-        (Some(10), Some(20), Some(4))
+        // Codex counts the 4 cached tokens inside its 10: 6 were read fresh.
+        (Some(6), Some(20), Some(4))
     );
     assert_eq!(usage.models, ["gpt-test"]);
 }

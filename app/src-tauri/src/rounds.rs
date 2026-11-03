@@ -13,8 +13,8 @@ use resume_llm::prep;
 use resume_store::{self as store, Application, RoundState as StoreState};
 
 use crate::dto::{
-    AppStatus, ApplicationRow, Round, RoundDraft, RoundKind, RoundState, RoundsView, SentFrom,
-    SentLine, SentView, Stage,
+    AppStatus, ApplicationRow, Feature, Round, RoundDraft, RoundKind, RoundState, RoundsView,
+    SentFrom, SentLine, SentView, Stage,
 };
 use crate::error::{AppError, Result};
 use crate::export;
@@ -127,7 +127,7 @@ pub async fn read_invite(app: &Arc<App>, application: &str, text: String) -> Res
     let id = application.to_owned();
     let a = blocking(app, move |app| application_of(&lock(&app.store), &id)).await?;
     let job = a.posting_id.clone().unwrap_or_else(|| a.id.clone());
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Invite).await?;
     let model = app.settings().current().suggest_model.clone();
     let now = Local::now();
     let (today, weekday, offset) = (

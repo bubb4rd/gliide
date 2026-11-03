@@ -2110,6 +2110,84 @@ pub enum Stage {
     Debriefing,
 }
 
+/// What a model call was for, as Settings → Usage groups them (`usage.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum Feature {
+    /// Extract, for a posting you opened.
+    Requirements,
+    /// Extract, for a posting the feed checks.
+    FeedCheck,
+    Suggestions,
+    /// A line rewritten per your note.
+    Rewrite,
+    /// An ask in the review's chat (Instruct).
+    Chat,
+    /// The whole letter, or a paragraph of it.
+    CoverLetter,
+    Import,
+    Invite,
+    Prep,
+    /// A practiced answer read, for a round or a story told alone.
+    Practice,
+    Nudges,
+    Dig,
+    Debrief,
+}
+
+/// Settings → Usage: the model calls recorded, a row per day, feature, agent and model.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UsageView {
+    /// The first day a call was recorded; `None` before any.
+    pub since: Option<String>,
+    /// Today, on this Mac's clock (`YYYY-MM-DD`).
+    pub today: String,
+    /// When the list prices the estimates use were read (`YYYY-MM-DD`).
+    pub prices_as_of: String,
+    /// Oldest day first.
+    pub rows: Vec<UsageDay>,
+}
+
+/// One day's calls for one feature on one agent and model.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UsageDay {
+    pub day: String,
+    pub feature: Feature,
+    pub agent: Agent,
+    /// The model id that served the calls, as the agent names it.
+    pub model: String,
+    #[ts(type = "number")]
+    pub calls: u64,
+    /// Input read fresh; the cache's writes and reads are apart from it.
+    #[ts(type = "number")]
+    pub input_tokens: u64,
+    #[ts(type = "number")]
+    pub output_tokens: u64,
+    #[ts(type = "number")]
+    pub cache_write_tokens: u64,
+    #[ts(type = "number")]
+    pub cache_read_tokens: u64,
+    /// What the agent said `reported_calls` of them cost at API prices (Claude Code says).
+    pub reported_cost: f64,
+    #[ts(type = "number")]
+    pub reported_calls: u64,
+    /// What `estimated_calls` of them would cost at the model's list price (the agent said nothing).
+    pub estimated_cost: f64,
+    #[ts(type = "number")]
+    pub estimated_calls: u64,
+    /// Calls with neither: the agent said nothing and the model isn't on the price list.
+    #[ts(type = "number")]
+    pub unpriced_calls: u64,
+    /// The priced cost split by token kind (input, output, cache write, cache read) at list prices, scaled to what
+    /// the agent reported when it did; all zero when the model isn't on the price list.
+    pub cost_by_kind: [f64; 4],
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Agent, Backdrop, Mode, Settings};

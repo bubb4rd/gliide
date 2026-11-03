@@ -55,7 +55,8 @@ async fn structured_output_is_the_reply() {
             usage.output_tokens,
             usage.cache_read_input_tokens
         ),
-        (Some(10), Some(20), Some(4))
+        // The 4 cache reads are inside its 10 input tokens: 6 were read fresh.
+        (Some(6), Some(20), Some(4))
     );
     assert_eq!(usage.models, ["gemini-test-low"]);
 }

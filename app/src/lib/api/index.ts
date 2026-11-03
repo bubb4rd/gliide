@@ -60,6 +60,7 @@ import type { StoriesView } from "./bindings/StoriesView";
 import type { StoryDraft } from "./bindings/StoryDraft";
 import type { StoryView } from "./bindings/StoryView";
 import type { UpdateStatus } from "./bindings/UpdateStatus";
+import type { UsageView } from "./bindings/UsageView";
 
 export type * from "./bindings/Accepted";
 export type * from "./bindings/Agent";
@@ -102,6 +103,7 @@ export type * from "./bindings/ErrorKind";
 export type * from "./bindings/Exported";
 export type * from "./bindings/FactKind";
 export type * from "./bindings/FactLine";
+export type * from "./bindings/Feature";
 export type * from "./bindings/Feedback";
 export type * from "./bindings/FeedAuto";
 export type * from "./bindings/FeedItem";
@@ -187,6 +189,8 @@ export type * from "./bindings/TemplateRow";
 export type * from "./bindings/Theme";
 export type * from "./bindings/UpdateState";
 export type * from "./bindings/UpdateStatus";
+export type * from "./bindings/UsageDay";
+export type * from "./bindings/UsageView";
 export type * from "./bindings/Verdict";
 export type * from "./bindings/WatchBoard";
 export type * from "./bindings/WordingView";
@@ -204,6 +208,10 @@ export const getSettings = () => invoke<Settings>("get_settings");
 export const setSettings = (settings: Settings) => invoke<Settings>("set_settings", { settings });
 /** Each asked `--model` alias or name → the model id that last served it (what names a chat's model). */
 export const models = () => invoke<Record<string, string>>("models");
+/** Every model call recorded, summed per day, feature, agent and model (Settings → Usage). */
+export const usage = () => invoke<UsageView>("usage");
+/** Every model call recorded, one CSV row each, written to `path`. */
+export const exportUsage = (path: string) => invoke<void>("export_usage", { path });
 
 // ── Startup ──
 /** Why the data couldn't be opened at launch (the window then shows only Startup); `null` when it opened. */

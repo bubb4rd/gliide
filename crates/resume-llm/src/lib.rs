@@ -20,6 +20,7 @@ pub mod invite;
 pub mod nudge;
 pub mod practice;
 pub mod prep;
+pub mod pricing;
 pub mod rewrite;
 pub mod suggest;
 
@@ -162,14 +163,19 @@ impl Structured {
     /// The model id that served the last turn for `asked` (a `--model` alias or full name): the one naming it, else
     /// the first; `None` when the agent reported none.
     pub fn served(&self, asked: &str) -> Option<&str> {
-        let models = &self.attempts.last()?.usage.models;
-        let asked = asked.to_lowercase();
-        models
-            .iter()
-            .find(|m| m.to_lowercase().contains(&asked))
-            .or_else(|| models.first())
-            .map(String::as_str)
+        served(&self.attempts, asked)
     }
+}
+
+/// [`Structured::served`] over the turns of any call, also one that failed after them.
+pub fn served<'a>(attempts: &'a [Attempt], asked: &str) -> Option<&'a str> {
+    let models = &attempts.last()?.usage.models;
+    let asked = asked.to_lowercase();
+    models
+        .iter()
+        .find(|m| m.to_lowercase().contains(&asked))
+        .or_else(|| models.first())
+        .map(String::as_str)
 }
 
 /// One turn with the agent.
@@ -182,7 +188,9 @@ pub struct Attempt {
     pub raw: String,
 }
 
-/// Whatever usage the agent reports; `None` when it reports nothing.
+/// Whatever usage the agent reports; `None` when it reports nothing. The token kinds don't overlap: `input_tokens`
+/// is the input read fresh, the cache writes and reads are apart from it (as Claude Code reports them; the other
+/// agents' counts are split so).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Usage {
     pub input_tokens: Option<u64>,

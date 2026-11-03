@@ -10,7 +10,7 @@ use resume_render::cover::{LetterContact, LetterData};
 use resume_render::{FontOptions, Renderer};
 use resume_store::Cover;
 
-use crate::dto::{CoverPart, CoverView, Letter, Stage};
+use crate::dto::{CoverPart, CoverView, Feature, Letter, Stage};
 use crate::error::{AppError, Result};
 use crate::review::Review;
 use crate::state::{App, blocking, lock, model_call};
@@ -173,7 +173,7 @@ fn save_and_view(
 pub async fn write_cover(app: &Arc<App>, review: &str) -> Result<CoverView> {
     let id = review.to_owned();
     let job = blocking(app, move |app| job(app, &id)).await?;
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::CoverLetter).await?;
     let model = app.settings().current().suggest_model.clone();
     let posting_id = job.posting_id.clone();
     let m = model.clone();
@@ -243,7 +243,7 @@ pub async fn rewrite_cover_paragraph(
             "This paragraph is gone; reopen the letter",
         ));
     }
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::CoverLetter).await?;
     let model = app.settings().current().suggest_model.clone();
     let posting_id = job.posting_id.clone();
     let m = model.clone();

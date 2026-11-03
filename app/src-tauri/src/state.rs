@@ -20,7 +20,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
 
 use crate::dto::{
-    AgentsSettings, Backdrop, FeedStatus, Mode, Notifications, Progress, Settings, Stage, StartupKind,
+    AgentsSettings, Backdrop, Feature, FeedStatus, Mode, Notifications, Progress, Settings, Stage, StartupKind,
     StartupProblem, Theme,
 };
 use crate::error::{AppError, Result};
@@ -28,6 +28,7 @@ use crate::export;
 use crate::feed::FeedRun;
 use crate::import::Pending;
 use crate::review::Review;
+use crate::usage::Metered;
 
 /// The store file inside the app's data folder.
 pub const STORE_FILE: &str = "gliide.sqlite";
@@ -258,14 +259,16 @@ impl App {
         Ok(Some(Library { bank, masters }))
     }
 
-    /// The agent the settings run: at the path they name, else the one found.
-    pub async fn agent(&self) -> Result<Agent> {
+    /// The agent the settings run (at the path they name, else the one found), recording each call's usage under
+    /// `feature`.
+    pub async fn agent(self: &Arc<Self>, feature: Feature) -> Result<Metered> {
         let s = self.settings();
         let kind = AgentKind::from(s.agent);
-        match s.current().path.clone().filter(|p| !p.trim().is_empty()) {
-            Some(p) => Ok(Agent::new(kind, p)),
-            None => Ok(Agent::discover(kind).await?),
-        }
+        let agent = match s.current().path.clone().filter(|p| !p.trim().is_empty()) {
+            Some(p) => Agent::new(kind, p),
+            None => Agent::discover(kind).await?,
+        };
+        Ok(Metered::new(agent, Arc::clone(self), feature))
     }
 
     /// Stops the model call running for `job`, if any.

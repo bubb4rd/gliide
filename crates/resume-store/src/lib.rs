@@ -1,6 +1,7 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
 //! cover letters, applications and their interview rounds, preps, practice and debriefs, the notifications sent,
-//! stories, Dig's questions and answers, company logos, the job feed and settings (ARCHITECTURE.md §8).
+//! stories, Dig's questions and answers, company logos, the job feed, each model call's usage and settings
+//! (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -43,6 +44,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("stories.sql"),
     include_str!("debriefs.sql"),
     include_str!("links.sql"),
+    include_str!("usage.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -116,6 +118,24 @@ impl PostingRow {
             .or(self.posting.url.as_deref())
             .or(self.posting.source.as_deref())
     }
+}
+
+/// One model call's usage as recorded (see `usage.sql`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsageRow {
+    /// When it was recorded (RFC 3339 UTC); set by the store.
+    pub at: String,
+    /// The local day it ran on, `YYYY-MM-DD`.
+    pub day: String,
+    pub feature: String,
+    pub agent: String,
+    pub model: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub cache_read_tokens: u64,
+    /// What the agent said it cost at API prices; `None` when it didn't say.
+    pub cost_usd: Option<f64>,
 }
 
 /// A Suggest result to store as an analysis.
@@ -1591,6 +1611,55 @@ impl Store {
             params![round_id, kind.as_str(), now()],
         )?;
         Ok(())
+    }
+
+    // Usage.
+
+    /// Records a model call's usage, now (`u.at` is ignored).
+    pub fn record_usage(&self, u: &UsageRow) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO usage (at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens, \
+             cache_read_tokens, cost_usd) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                now(),
+                u.day,
+                u.feature,
+                u.agent,
+                u.model,
+                to_i64(u.input_tokens),
+                to_i64(u.output_tokens),
+                to_i64(u.cache_write_tokens),
+                to_i64(u.cache_read_tokens),
+                u.cost_usd,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Every model call's usage, oldest first.
+    pub fn usage(&self) -> Result<Vec<UsageRow>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens, \
+             cache_read_tokens, cost_usd FROM usage ORDER BY at, id",
+        )?;
+        let tokens = |r: &Row, i| r.get::<_, i64>(i).map(|n| u64::try_from(n).unwrap_or(0));
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(UsageRow {
+                    at: r.get(0)?,
+                    day: r.get(1)?,
+                    feature: r.get(2)?,
+                    agent: r.get(3)?,
+                    model: r.get(4)?,
+                    input_tokens: tokens(r, 5)?,
+                    output_tokens: tokens(r, 6)?,
+                    cache_write_tokens: tokens(r, 7)?,
+                    cache_read_tokens: tokens(r, 8)?,
+                    cost_usd: r.get(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     // Preps and practice.

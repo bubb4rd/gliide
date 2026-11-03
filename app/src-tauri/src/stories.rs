@@ -16,8 +16,8 @@ use resume_llm::prep::SentResume;
 use resume_store::PracticeRow;
 
 use crate::dto::{
-    PracticeTurn, Stage, StoriesView, StoryDraft, StoryLink, StorySource, StoryTheme, StoryUse,
-    StoryView,
+    Feature, PracticeTurn, Stage, StoriesView, StoryDraft, StoryLink, StorySource, StoryTheme,
+    StoryUse, StoryView,
 };
 use crate::error::{AppError, Result};
 use crate::prep::turn;
@@ -170,7 +170,7 @@ pub async fn tell_story(
         .filter(|b| sent.line(b).is_some())
         .cloned()
         .collect();
-    let llm = app.agent().await?;
+    let llm = app.agent(Feature::Practice).await?;
     let model = app.settings().current().suggest_model.clone();
     let job = format!("story:{}", s.id);
     let (m, st, se, a, q, l) = (
