@@ -201,7 +201,15 @@
               >
                 {#snippet lead()}<CompanyMark size={28} src={app.logos[job.companyKey]} />{/snippet}
                 {#snippet trailing()}
-                  {#if fit}<ScoreBar bar={false} now={fit.now} projected={fit.projected} onFile={fit.onFile} />{/if}
+                  {#if fit}
+                    <ScoreBar
+                      bar={false}
+                      now={fit.now}
+                      projected={fit.projected}
+                      onFile={fit.onFile}
+                      rescoring={call?.stage === "extracting" || call?.stage === "suggesting"}
+                    />
+                  {/if}
                 {/snippet}
                 {job.company}
               </NavItem>

@@ -467,6 +467,12 @@
     { key: "fit", label: "Fit", numeric: true, width: "176px", sortBy: (r) => r.onFile ?? r.projected },
   ];
   let barSort = $state<TableSort>({ key: "fit", dir: "desc" });
+  /** The sidebar's rolling fit, replayed: a Suggest running for the posting, then landing on a higher fit. */
+  let rolling = $state({ projected: 64, rescoring: false });
+  function replayCount() {
+    rolling = { projected: 64, rescoring: true };
+    setTimeout(() => (rolling = { projected: 81, rescoring: false }), 600);
+  }
 
   // ── Heatmap: nine weeks of made-up activity ending on a fixed day, so the specimen never shifts ──
   const heatEnd = new Date(2026, 9, 13);
@@ -1211,6 +1217,25 @@
             <p class="meta">{b.state}</p>
             <ScoreBar bar={false} now={b.now} projected={b.projected} onFile={b.onFile} ceiling={b.ceiling} />
           {/each}
+        </div>
+      </Card>
+      <Card pad>
+        <div class="bars bars--alone">
+          <p class="meta">Rescoring (sidebar’s Recent): a Suggest lands, 64 → 81 rolls up in gain, then ink</p>
+          <div class="row">
+            <div class="rolling-nav">
+              <Nav label="Rolling fit (specimen)">
+                <NavItem href="#review" quiet sub="Software Engineer I" busy={rolling.rescoring ? "Suggesting…" : null}>
+                  {#snippet lead()}<CompanyMark size={28} />{/snippet}
+                  {#snippet trailing()}
+                    <ScoreBar bar={false} projected={rolling.projected} rescoring={rolling.rescoring} />
+                  {/snippet}
+                  Rocket
+                </NavItem>
+              </Nav>
+            </div>
+            <Button size="sm" icon={RotateCcw} onclick={replayCount}>Replay</Button>
+          </div>
         </div>
       </Card>
       <Card>
@@ -2385,6 +2410,10 @@
   }
   .nav-sample {
     padding: var(--space-3);
+  }
+  /* The rolling fit's demo, as wide as a Recent entry in the sidebar. */
+  .rolling-nav {
+    width: calc(var(--sidebar-width) - 2 * var(--space-3));
   }
   .keys-bare {
     display: flex;

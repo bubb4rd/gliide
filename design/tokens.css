@@ -171,6 +171,7 @@
   --dur-base: 300ms;      /* entrances, icon cross-fades */
   --dur-loop: 1600ms;     /* one breath of the model-call status (Thinking) */
   --dur-ring: 6400ms;     /* one lap of the working ring's band (4 × --dur-loop) */
+  --dur-roll: 900ms;     /* a fit's digits rolling up to the score a Suggest brings (the sidebar's Recent) */
   --stagger: 100ms;
   --ease-out: ease-out;
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
