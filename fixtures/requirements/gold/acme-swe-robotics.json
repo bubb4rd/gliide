@@ -1,0 +1,32 @@
+{
+  "role": "Software Engineer, ROS",
+  "company": "Acme Robotics",
+  "short_role": "swe",
+  "location": "Pittsburgh, PA",
+  "seniority": "entry",
+  "skills": [
+    { "term": "TypeScript", "aliases": ["TS"], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "Python", "aliases": [], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "React", "aliases": ["React.js", "ReactJS"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "frontend framework", "aliases": ["front-end framework"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "computer science fundamentals", "aliases": ["CS fundamentals"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "data structures", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "algorithms", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "debugging", "aliases": ["debug"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "frontend", "aliases": ["front-end", "front end"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "backend", "aliases": ["back-end", "back end"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "data pipelines", "aliases": ["data pipeline"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "infrastructure", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "AI tools", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "Problem-Solving Skills", "aliases": ["problem-solving", "problem solving"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "Communication", "aliases": ["communication skills"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["Software Engineer"],
+  "years_min": 1,
+  "degree": { "level": "bachelor", "fields": ["Computer Science", "related engineering field"], "equivalent": true },
+  "certifications": [],
+  "knockouts": [
+    { "kind": "authorization", "text": "support future F-1 or H-1B sponsorship" },
+    { "kind": "onsite", "text": "onsite Tuesday, Wednesday, and Thursday" }
+  ]
+}

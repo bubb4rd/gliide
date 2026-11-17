@@ -1,5 +1,6 @@
 //! One module per subcommand.
 
+pub mod eval;
 pub mod import;
 pub mod job;
 pub mod migrate;

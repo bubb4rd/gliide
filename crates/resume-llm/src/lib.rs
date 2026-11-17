@@ -30,7 +30,7 @@ use std::time::Duration;
 use serde::Serialize;
 use serde_json::Value;
 
-pub use agent::{Agent, AgentKind};
+pub use agent::{Agent, AgentKind, Route};
 pub use antigravity::AntigravityCli;
 pub use claude::ClaudeCli;
 pub use codex::CodexCli;

@@ -4,19 +4,20 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use resume_core::{Posting, Requirements};
-use resume_llm::{Agent, AgentKind, extract};
+use resume_llm::{Agent, Route, extract};
 use resume_pipeline::{extract_key, posting_file};
 
-/// Where the posting comes from, the bank, the agent, and the model-output cache.
+/// Where the posting comes from, the bank, the Read route, and the model-output cache.
 #[derive(clap::Args)]
 pub struct Source {
     /// A job link, a posting file (`.md` fixtures keep their front matter as hints), `-` for stdin, or the text.
     pub posting: String,
     #[arg(long)]
     pub bank: PathBuf,
-    /// The agent CLI the model calls run on.
-    #[arg(long, value_enum, default_value = "claude")]
-    pub agent: AgentArg,
+    /// Where Extract runs: `agent:model` (`claude:sonnet`, `codex:gpt-6-luna`), or `agent` alone for its default
+    /// model.
+    #[arg(long, default_value = "claude")]
+    pub read: Route,
     /// Cache folder: requirements keyed by posting text, prompt and model (and suggestions, for `tailor`).
     #[arg(long, default_value = "local/cache")]
     pub cache: PathBuf,
@@ -25,43 +26,17 @@ pub struct Source {
     pub fresh: bool,
 }
 
-impl Source {
-    /// `model`, else the agent's default.
-    pub fn model<'a>(&self, model: &'a Option<String>) -> &'a str {
-        model
-            .as_deref()
-            .unwrap_or(AgentKind::from(self.agent).default_model())
-    }
-}
-
-/// An agent CLI gliide runs.
-#[derive(Clone, Copy, clap::ValueEnum)]
-pub enum AgentArg {
-    Claude,
-    Codex,
-    Antigravity,
-}
-
-impl From<AgentArg> for AgentKind {
-    fn from(a: AgentArg) -> Self {
-        match a {
-            AgentArg::Claude => Self::Claude,
-            AgentArg::Codex => Self::Codex,
-            AgentArg::Antigravity => Self::Antigravity,
-        }
-    }
-}
-
 pub fn runtime() -> anyhow::Result<tokio::runtime::Runtime> {
     Ok(tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?)
 }
 
-/// The posting and its requirements, extracted with `model`: from the cache when this text, prompt and model were
-/// extracted before.
-pub async fn requirements(src: &Source, model: &str) -> anyhow::Result<(Posting, Requirements)> {
+/// The posting and its requirements, extracted on the `--read` route: from the cache when this text, prompt and
+/// model were extracted before. The cache keys by the model alone, as the app's does.
+pub async fn requirements(src: &Source) -> anyhow::Result<(Posting, Requirements)> {
     let posting = read_posting(&src.posting).await?;
+    let model = src.read.model.as_str();
     let cached = src
         .cache
         .join("requirements")
@@ -71,7 +46,7 @@ pub async fn requirements(src: &Source, model: &str) -> anyhow::Result<(Posting,
         eprintln!("requirements: cached ({})", cached.display());
         return Ok((posting, super::read_json(&cached)?));
     }
-    let llm = Agent::discover(src.agent.into()).await?;
+    let llm = Agent::discover(src.read.agent).await?;
     eprintln!(
         "requirements: extracting with {} --model {model} …",
         llm.kind().bin()

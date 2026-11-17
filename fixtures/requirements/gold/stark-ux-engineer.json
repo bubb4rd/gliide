@@ -1,0 +1,37 @@
+{
+  "role": "UX Engineer",
+  "company": "Stark Medical Society",
+  "short_role": "ux_eng",
+  "location": "Hybrid - Oak Brook, IL",
+  "seniority": "mid",
+  "skills": [
+    { "term": "HTML5", "aliases": ["HTML"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "CSS3", "aliases": ["CSS"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "JavaScript", "aliases": ["JS", "modern JavaScript"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "CMS", "aliases": ["content management system", "CMS development"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "accessibility", "aliases": ["a11y", "accessibility principles"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "responsive development", "aliases": ["responsive design", "responsive web development"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "UX", "aliases": ["user experience"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "information architecture", "aliases": ["IA"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "usability", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "wireframes", "aliases": ["wireframing", "wireframe"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "TypeScript", "aliases": ["TS"], "kind": "hard", "priority": 2, "required": true, "group": "frontend_stack" },
+    { "term": "React", "aliases": ["React.js", "ReactJS"], "kind": "hard", "priority": 2, "required": true, "group": "frontend_stack" },
+    { "term": "Angular", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": "frontend_stack" },
+    { "term": "WCAG 2.2 AA", "aliases": ["WCAG 2.2", "WCAG"], "kind": "hard", "priority": 2, "required": true, "group": "site_improvement" },
+    { "term": "Section 508", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": "site_improvement" },
+    { "term": "healthcare", "aliases": [], "kind": "domain", "priority": 2, "required": true, "group": "sector" },
+    { "term": "education", "aliases": [], "kind": "domain", "priority": 2, "required": true, "group": "sector" },
+    { "term": "Optimizely", "aliases": ["Episerver", "Optimizely/Episerver"], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "communication", "aliases": ["communication skills"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "problem-solving", "aliases": ["problem solving", "problem-solving skills"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["UX Engineer"],
+  "years_min": 3,
+  "degree": { "level": "bachelor", "fields": ["computer science", "web development", "human-computer interaction", "graphic design", "digital media"], "equivalent": true },
+  "certifications": [],
+  "knockouts": [
+    { "kind": "onsite", "text": "commute to the office at least twice per week" },
+    { "kind": "authorization", "text": "without the need for current or future employer sponsorship" }
+  ]
+}

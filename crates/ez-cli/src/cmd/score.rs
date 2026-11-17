@@ -14,9 +14,6 @@ use super::job::{self, Source, runtime};
 pub struct ScoreArgs {
     #[command(flatten)]
     source: Source,
-    /// Model for Extract; the agent's default unless given.
-    #[arg(long)]
-    model: Option<String>,
     #[arg(long)]
     master: PathBuf,
     /// Also write posting, requirements and score as JSON here.
@@ -28,17 +25,13 @@ pub struct ScoreArgs {
 pub struct RankArgs {
     #[command(flatten)]
     source: Source,
-    /// Model for Extract; the agent's default unless given.
-    #[arg(long)]
-    model: Option<String>,
     /// Folder of master JSON files.
     #[arg(long)]
     masters: PathBuf,
 }
 
 pub fn score_cmd(args: ScoreArgs) -> anyhow::Result<()> {
-    let model = args.source.model(&args.model);
-    let (posting, req) = runtime()?.block_on(job::requirements(&args.source, model))?;
+    let (posting, req) = runtime()?.block_on(job::requirements(&args.source))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let master: Master = super::read_json(&args.master)?;
     let (resume, facts) = page(&bank, &master).with_context(|| format!("master {}", master.id))?;
@@ -68,8 +61,7 @@ pub fn score_cmd(args: ScoreArgs) -> anyhow::Result<()> {
 }
 
 pub fn rank_cmd(args: RankArgs) -> anyhow::Result<()> {
-    let model = args.source.model(&args.model);
-    let (posting, req) = runtime()?.block_on(job::requirements(&args.source, model))?;
+    let (posting, req) = runtime()?.block_on(job::requirements(&args.source))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let mut candidates = Vec::new();
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&args.masters)

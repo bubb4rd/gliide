@@ -1,0 +1,37 @@
+{
+  "role": "Software Engineer (Full-Stack)",
+  "company": "Hooli Cloud",
+  "short_role": "fullstack",
+  "location": "Remote (US)",
+  "seniority": "entry",
+  "skills": [
+    { "term": "Go Lang", "aliases": ["Go", "Golang"], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "Typescript", "aliases": ["TS"], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "React", "aliases": ["React.js", "ReactJS"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "HTML", "aliases": ["HTML5"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "CSS", "aliases": ["CSS3"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "JavaScript", "aliases": ["JS"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "Express", "aliases": ["Express.js", "ExpressJS"], "kind": "hard", "priority": 2, "required": true, "group": "backend_framework" },
+    { "term": "FastAPI", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": "backend_framework" },
+    { "term": "Pydantic", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "Python", "aliases": [], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "full-stack", "aliases": ["full stack", "fullstack"], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "Open-source contributions", "aliases": ["open source", "open-source"], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "continuous integration", "aliases": ["CI"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "cloud platforms", "aliases": ["cloud platform"], "kind": "hard", "priority": 3, "required": false, "group": "infrastructure" },
+    { "term": "distributed computing", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": "infrastructure" },
+    { "term": "Docker", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": "infrastructure" },
+    { "term": "Git", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "version control", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "Problem-Solving Skills", "aliases": ["problem-solving", "problem solving"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "Communication Skills", "aliases": ["communication"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["Full-Stack Software Engineer", "Full-Stack Engineer", "Software Engineer"],
+  "years_min": null,
+  "degree": null,
+  "certifications": [],
+  "knockouts": [
+    { "kind": "other", "text": "Successful completion of a background check" },
+    { "kind": "authorization", "text": "unable to sponsor employment visas" }
+  ]
+}

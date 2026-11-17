@@ -1,0 +1,33 @@
+{
+  "role": "2027 Software Engineer Program",
+  "company": "Globex Bank",
+  "short_role": "swe",
+  "location": "Chicago, IL and 5 more",
+  "seniority": "entry",
+  "skills": [
+    { "term": "AI development tools", "aliases": ["AI-assisted development tools", "AI-enabled tools"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "testing", "aliases": ["software testing"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "troubleshooting", "aliases": ["troubleshoot"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "software development life cycle", "aliases": ["SDLC", "software development lifecycle"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "automation", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "secure coding practices", "aliases": ["secure coding", "secure code"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "responsible AI practices", "aliases": ["responsible AI"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "refactoring", "aliases": ["refactor"], "kind": "hard", "priority": 3, "required": true, "group": null },
+    { "term": "peer review", "aliases": ["code review"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "automated tests", "aliases": ["automated testing", "test automation"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "software engineering", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "banking", "aliases": ["banking systems"], "kind": "domain", "priority": 3, "required": false, "group": null },
+    { "term": "written and verbal communication skills", "aliases": ["written communication", "verbal communication", "communication skills"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "collaborate", "aliases": ["collaboration"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["Software Engineer"],
+  "years_min": null,
+  "degree": { "level": "bachelor", "fields": ["Computer Science", "Information Science", "Information Technology", "Data Science", "Artificial Intelligence", "Big Data"], "equivalent": false },
+  "certifications": [],
+  "knockouts": [
+    { "kind": "enrollment", "text": "expected graduation between July 2026 and December 2026" },
+    { "kind": "other", "text": "available to start full-time employment in February 2027" },
+    { "kind": "authorization", "text": "We do not offer any type of employment-based immigration sponsorship" },
+    { "kind": "other", "text": "review of criminal conviction history" }
+  ]
+}

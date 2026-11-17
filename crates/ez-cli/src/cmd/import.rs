@@ -5,10 +5,10 @@ use std::time::Instant;
 use resume_core::import::{Choices, master_id, merge, plan};
 use resume_core::{Bank, Master, Resume};
 use resume_llm::import::{self, Link};
-use resume_llm::{Agent, AgentKind};
+use resume_llm::{Agent, Route};
 use resume_pipeline::{ResumeSource, read_resume};
 
-use super::job::{AgentArg, runtime};
+use super::job::runtime;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -28,12 +28,9 @@ pub struct Args {
     /// Add the file's contact items the bank lacks.
     #[arg(long)]
     contact: bool,
-    /// The agent CLI the model call runs on.
-    #[arg(long, value_enum, default_value = "claude")]
-    agent: AgentArg,
-    /// Model for Import; the agent's default unless given.
-    #[arg(long)]
-    model: Option<String>,
+    /// Where Import runs: `agent:model` (`claude:sonnet`), or `agent` alone for its default model.
+    #[arg(long, default_value = "claude")]
+    route: Route,
     /// Folder for imported.json (the model's copy of the file), bank.json and masters/<id>.json.
     #[arg(long)]
     out: PathBuf,
@@ -52,8 +49,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
                 })
                 .collect();
             let start = Instant::now();
-            let agent = AgentKind::from(args.agent);
-            let model = args.model.as_deref().unwrap_or(agent.default_model());
+            let (agent, model) = (args.route.agent, args.route.model.as_str());
             let r: Resume = runtime()?.block_on(async {
                 let llm = Agent::discover(agent).await?;
                 eprintln!(

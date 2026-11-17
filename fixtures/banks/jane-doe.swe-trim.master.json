@@ -1,0 +1,79 @@
+{
+  "id": "swe",
+  "title": "Software Engineering",
+  "template": "classic-serif",
+  "pageLimit": 1,
+  "sections": [
+    {
+      "id": "work",
+      "entries": [
+        {
+          "id": "acme",
+          "bullets": [
+            {
+              "id": "acme.1"
+            },
+            {
+              "id": "acme.2"
+            },
+            {
+              "id": "acme.3"
+            }
+          ]
+        },
+        {
+          "id": "library",
+          "bullets": [
+            {
+              "id": "library.1"
+            },
+            {
+              "id": "library.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "education",
+      "entries": [
+        {
+          "id": "state-u",
+          "bullets": [
+            {
+              "id": "state-u.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "groups": [
+        {
+          "id": "languages",
+          "items": [
+            "Rust",
+            "TypeScript",
+            "Python",
+            "SQL",
+            "Java"
+          ]
+        },
+        {
+          "id": "tools",
+          "items": [
+            "Git",
+            "GitHub Actions",
+            "Docker",
+            "PostgreSQL",
+            "SQLite",
+            "React",
+            "Linux",
+            "AWS"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "role": "Developer - Integrations & AI",
+  "company": "Contoso Learning",
+  "short_role": "integration_dev",
+  "location": "Remote",
+  "seniority": "entry",
+  "skills": [
+    { "term": "JavaScript", "aliases": ["JS"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "Python", "aliases": [], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "REST APIs", "aliases": ["REST", "RESTful APIs"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "third-party services", "aliases": ["third-party APIs"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "HTML", "aliases": ["HTML5"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "CSS", "aliases": ["CSS3"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "JSON", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "client/server architecture", "aliases": ["client-server architecture"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "AI or LLM-enabled development", "aliases": ["AI development", "LLM-enabled development"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "version control", "aliases": [], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "Git", "aliases": [], "kind": "tool", "priority": 2, "required": true, "group": null },
+    { "term": "PHP", "aliases": [], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "Oracle NetSuite", "aliases": ["NetSuite"], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "SQL", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "problem-solving skills", "aliases": ["problem-solving", "problem solving"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "attention to detail", "aliases": ["detail-oriented"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "communicate", "aliases": ["communication", "communication skills"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["Developer"],
+  "years_min": null,
+  "degree": { "level": "bachelor", "fields": ["Computer Science", "Information Systems"], "equivalent": true },
+  "certifications": [],
+  "knockouts": []
+}

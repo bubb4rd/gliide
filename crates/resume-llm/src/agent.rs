@@ -61,8 +61,63 @@ impl std::str::FromStr for AgentKind {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::ALL
             .into_iter()
-            .find(|a| serde_json::to_value(a).is_ok_and(|v| v == s))
+            .find(|a| a.to_string() == s)
             .ok_or_else(|| format!("unknown agent {s:?}; one of claude, codex, antigravity"))
+    }
+}
+
+impl std::fmt::Display for AgentKind {
+    /// `claude`, `codex` or `antigravity`, as [`FromStr`](std::str::FromStr) reads it.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+            Self::Antigravity => "antigravity",
+        })
+    }
+}
+
+/// Where a call runs: an agent and the `--model` alias, slug or name it's asked for.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Route {
+    pub agent: AgentKind,
+    pub model: String,
+}
+
+impl Route {
+    /// `agent` with its default model.
+    pub fn default_for(agent: AgentKind) -> Self {
+        Self {
+            agent,
+            model: agent.default_model().to_owned(),
+        }
+    }
+}
+
+impl std::fmt::Display for Route {
+    /// `claude:sonnet`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.agent, self.model)
+    }
+}
+
+impl std::str::FromStr for Route {
+    type Err = String;
+
+    /// `agent:model` (`codex:gpt-6-luna`), or `agent` alone for its default model. The model is everything after the
+    /// first colon, so a model name may hold colons of its own.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (agent, model) = s.split_once(':').unwrap_or((s, ""));
+        let agent: AgentKind = agent.trim().parse()?;
+        let model = model.trim();
+        Ok(if model.is_empty() {
+            Self::default_for(agent)
+        } else {
+            Self {
+                agent,
+                model: model.to_owned(),
+            }
+        })
     }
 }
 

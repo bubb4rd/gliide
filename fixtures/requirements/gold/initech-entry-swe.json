@@ -1,0 +1,37 @@
+{
+  "role": "Entry-Level Software Engineer",
+  "company": "Initech Consulting",
+  "short_role": "swe",
+  "location": "Hybrid - Austin",
+  "seniority": "entry",
+  "skills": [
+    { "term": "software development", "aliases": ["software engineering"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "Python", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "Java", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "SQL", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "JavaScript", "aliases": ["JS"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": ".NET", "aliases": ["dotnet"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "React", "aliases": ["React.js", "ReactJS"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "Angular", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "AWS", "aliases": ["Amazon Web Services"], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "Azure", "aliases": ["Microsoft Azure"], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "Google Cloud", "aliases": ["GCP", "Google Cloud Platform"], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "Databricks", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "PySpark", "aliases": [], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "CI/CD", "aliases": ["continuous integration", "continuous delivery"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "Docker", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "Terraform", "aliases": [], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "Generative AI", "aliases": ["GenAI"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "LLMs", "aliases": ["LLM", "large language models"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "communication skills", "aliases": ["communication"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["Software Engineer"],
+  "years_min": null,
+  "degree": { "level": "bachelor", "fields": ["Management Information Systems", "Computer Science", "Computer Engineering"], "equivalent": false },
+  "certifications": [],
+  "knockouts": [
+    { "kind": "enrollment", "text": "graduation date between December 2026 and August 2027" },
+    { "kind": "authorization", "text": "without current or future sponsorship" },
+    { "kind": "onsite", "text": "Work within a hybrid model" }
+  ]
+}

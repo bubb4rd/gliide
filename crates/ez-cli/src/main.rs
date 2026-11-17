@@ -27,6 +27,8 @@ enum Command {
     Rank(cmd::score::RankArgs),
     /// Suggest changes for a posting, fit them on the page, and write the tailored resume with its scores.
     Tailor(cmd::tailor::Args),
+    /// Compare routes (`agent:model`) per role on the fixture postings, and report how each does.
+    Eval(cmd::eval::Args),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -38,5 +40,6 @@ fn main() -> anyhow::Result<()> {
         Command::Score(args) => cmd::score::score_cmd(args),
         Command::Rank(args) => cmd::score::rank_cmd(args),
         Command::Tailor(args) => cmd::tailor::run(args),
+        Command::Eval(args) => cmd::eval::run(args),
     }
 }

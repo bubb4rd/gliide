@@ -9,8 +9,8 @@ use resume_core::change::{Change, Draft, Mode, Op, State};
 use resume_core::changes::{changes_of, draft_changes};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, resolve};
-use resume_llm::Agent;
 use resume_llm::suggest::{self, SuggestInput};
+use resume_llm::{Agent, Route};
 use resume_pipeline::{heading, mode_name, suggest_key, today};
 use resume_render::{FontOptions, Renderer};
 use resume_tailor::{Tailored, tailor};
@@ -30,12 +30,9 @@ pub struct Args {
     /// Your decisions, wording and own changes (a `Draft` JSON).
     #[arg(long)]
     draft: Option<PathBuf>,
-    /// Model for Suggest; the agent's default unless given.
-    #[arg(long)]
-    model: Option<String>,
-    /// Model for Extract; the agent's default unless given.
-    #[arg(long)]
-    extract_model: Option<String>,
+    /// Where Suggest runs: `agent:model` (`codex:gpt-6-luna`), or `agent` alone for its default model.
+    #[arg(long, default_value = "claude")]
+    tailor: Route,
     /// Folder for tailored.json, resume.pdf, page-N.png (highlighted) and changes.json.
     #[arg(long)]
     out: PathBuf,
@@ -61,8 +58,7 @@ impl From<ModeArg> for Mode {
 
 pub fn run(args: Args) -> anyhow::Result<()> {
     let rt = runtime()?;
-    let extract_model = args.source.model(&args.extract_model);
-    let (posting, req) = rt.block_on(job::requirements(&args.source, extract_model))?;
+    let (posting, req) = rt.block_on(job::requirements(&args.source))?;
     let bank: Bank = super::read_json(&args.source.bank)?;
     let master: Master = super::read_json(&args.master)?;
     let draft: Draft = match &args.draft {
@@ -119,7 +115,7 @@ async fn suggestions(
     mode: Mode,
 ) -> anyhow::Result<Suggestions> {
     let mode_name = mode_name(mode);
-    let model = args.source.model(&args.model);
+    let model = args.tailor.model.as_str();
     let cached = args
         .source
         .cache
@@ -130,7 +126,7 @@ async fn suggestions(
         eprintln!("suggestions: cached ({})", cached.display());
         return super::read_json(&cached);
     }
-    let llm = Agent::discover(args.source.agent.into()).await?;
+    let llm = Agent::discover(args.tailor.agent).await?;
     eprintln!(
         "suggestions: {} --model {model} ({mode_name}, {} bank candidate(s)) …",
         llm.kind().bin(),
@@ -278,7 +274,7 @@ fn print(
 }
 
 /// `before → after` for a line edit, else what the op does.
-fn summary(c: &Change, after: Option<&str>) -> String {
+pub(crate) fn summary(c: &Change, after: Option<&str>) -> String {
     match &c.op {
         Op::Rewrite { bullet: line, .. }
         | Op::UseVariant { bullet: line, .. }

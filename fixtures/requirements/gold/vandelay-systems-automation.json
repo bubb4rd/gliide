@@ -1,0 +1,37 @@
+{
+  "role": "Systems & Automation Engineer",
+  "company": "Vandelay Realty & Development, LLC",
+  "short_role": "automation_eng",
+  "location": "Elmhurst, IL",
+  "seniority": "mid",
+  "skills": [
+    { "term": "Python", "aliases": [], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "JavaScript", "aliases": ["JS"], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "REST APIs", "aliases": ["REST", "RESTful APIs"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "SQL", "aliases": [], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "webhooks", "aliases": ["webhook"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "MySQL", "aliases": [], "kind": "tool", "priority": 2, "required": true, "group": null },
+    { "term": "Postgres", "aliases": ["PostgreSQL"], "kind": "tool", "priority": 2, "required": true, "group": null },
+    { "term": "Web Development", "aliases": ["web applications", "web development"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "Podio", "aliases": [], "kind": "tool", "priority": 2, "required": true, "group": "low_code" },
+    { "term": "n8n", "aliases": [], "kind": "tool", "priority": 2, "required": true, "group": "low_code" },
+    { "term": "Zapier", "aliases": [], "kind": "tool", "priority": 2, "required": true, "group": "low_code" },
+    { "term": "SSO", "aliases": ["single sign-on"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "MFA", "aliases": ["multi-factor authentication"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "user access", "aliases": ["access management"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "AI tools", "aliases": ["AI coding tools"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "React", "aliases": ["React.js", "ReactJS"], "kind": "hard", "priority": 2, "required": false, "group": "web_framework" },
+    { "term": "Next.js", "aliases": ["NextJS"], "kind": "hard", "priority": 2, "required": false, "group": "web_framework" },
+    { "term": "Google Workspace", "aliases": ["G Suite"], "kind": "tool", "priority": 3, "required": false, "group": null },
+    { "term": "Clear Communication", "aliases": ["communication", "communication skills"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["Systems & Automation Engineer", "Systems Engineer", "Automation Engineer"],
+  "years_min": 2,
+  "degree": { "level": "bachelor", "fields": ["Computer Science", "Information Systems"], "equivalent": true },
+  "certifications": [],
+  "knockouts": [
+    { "kind": "onsite", "text": "Fully onsite in Elmhurst, IL, five days a week" },
+    { "kind": "other", "text": "able to pass a background check" },
+    { "kind": "other", "text": "Able to lift up to 50 lbs" }
+  ]
+}

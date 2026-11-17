@@ -1,0 +1,31 @@
+{
+  "role": "UI Developer - Options Market Making",
+  "company": "Wayne Markets",
+  "short_role": "ui_dev",
+  "location": "Chicago, IL",
+  "seniority": "entry",
+  "skills": [
+    { "term": "UI development", "aliases": ["user interface development"], "kind": "hard", "priority": 1, "required": true, "group": null },
+    { "term": "JavaScript", "aliases": ["JS"], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "TypeScript", "aliases": ["TS"], "kind": "hard", "priority": 1, "required": true, "group": "language" },
+    { "term": "component and library development", "aliases": ["component development", "library development"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "UX and UI design principles", "aliases": ["UX design", "UI design", "design principles"], "kind": "hard", "priority": 2, "required": true, "group": null },
+    { "term": "React", "aliases": ["React.js", "ReactJS"], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "component libraries", "aliases": ["component library"], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "design systems", "aliases": ["design system"], "kind": "hard", "priority": 2, "required": false, "group": null },
+    { "term": "data rich user interfaces", "aliases": ["data-rich UIs", "data-rich user interfaces"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "financial sector", "aliases": ["finance"], "kind": "domain", "priority": 3, "required": false, "group": null },
+    { "term": "trading applications", "aliases": ["trading apps"], "kind": "domain", "priority": 3, "required": false, "group": null },
+    { "term": "AI-powered tools", "aliases": ["AI tools"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "code review", "aliases": ["code reviews"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "debugging", "aliases": ["debug"], "kind": "hard", "priority": 3, "required": false, "group": null },
+    { "term": "problem-solving skills", "aliases": ["problem-solving", "problem solving"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "attention to detail", "aliases": ["detail-oriented"], "kind": "soft", "priority": 2, "required": true, "group": null },
+    { "term": "manage multiple tasks", "aliases": ["managing multiple tasks", "multitasking"], "kind": "soft", "priority": 2, "required": true, "group": null }
+  ],
+  "title_terms": ["UI Developer"],
+  "years_min": null,
+  "degree": null,
+  "certifications": [],
+  "knockouts": []
+}

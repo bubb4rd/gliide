@@ -25,3 +25,6 @@ it.
 A LinkedIn search link (`https://www.linkedin.com/jobs/search-results/?currentJobId=…`) is not a posting fixture:
 its recorded response is the ingest test `fixtures/ingest/linkedin-search/`, a synthetic "Analyst, Business Systems"
 posting at Oscorp Biosciences.
+
+Hand-labeled requirements for these postings, the answer key `ez eval read` grades routes against, are in
+`fixtures/requirements/gold/`.
