@@ -19,12 +19,13 @@ use resume_core::{Master, Requirements, Resume, resolve};
 use resume_llm::instruct::{self, EditKind, InstructInput};
 use resume_llm::rewrite::{self, RewriteInput};
 use resume_llm::suggest::{self, SuggestInput};
+use resume_pipeline::shorten::{self, Shorten};
 use resume_pipeline::{suggest_key, today};
 use resume_store::{DraftLog, NewAnalysis, PostingRow};
 use resume_tailor::{Tailored, tailor};
 
 use crate::dto::{
-    Accepted, ChipState, CustomEdit, Decision, Displaced, EditTargets, Feature, Instructed,
+    Accepted, ChipState, CustomEdit, Decision, Displaced, EditTargets, ErrorKind, Feature, Instructed,
     KeyDecision, MasterChoice, Proposal, ReviewView, Rewritten, Skipped, Stage, Target,
 };
 use crate::entry::variant_error;
@@ -171,6 +172,7 @@ async fn make_review(
         })
         .await?;
         app.note_served(model, &out);
+        let s = fit_rewrites(app, job, &route, s, &resume, &bank, &master, &req).await?;
         let store = lock(&app.store);
         // Your draft carries over from this input's last answer, else from the review of this master you last opened,
         // whichever mode it drew on: a changed setting or bank keeps your decisions and edits.
@@ -225,6 +227,75 @@ async fn make_review(
         Ok((review, view))
     })
     .await
+}
+
+/// Suggest's rewrites that wrap to more lines than the bullets they replace, each asked once more to fit
+/// ([`shorten`]) on Suggest's route, one after another (most reviews have none). A line whose call fails keeps the
+/// rewrite Suggest wrote, which the fit check then leaves off the page; only a Stop ends the review.
+#[allow(clippy::too_many_arguments)]
+async fn fit_rewrites(
+    app: &Arc<App>,
+    job: &str,
+    route: &resume_llm::Route,
+    mut s: Suggestions,
+    resume: &Resume,
+    bank: &Bank,
+    master: &Master,
+    req: &Requirements,
+) -> Result<Suggestions> {
+    let long = {
+        let (sg, r, b, m, q) = (
+            s.clone(),
+            resume.clone(),
+            bank.clone(),
+            master.clone(),
+            req.clone(),
+        );
+        blocking(app, move |app| {
+            app.with_renderer(&m, |renderer| {
+                Ok(shorten::long_rewrites(&sg, &r, &b, &q, renderer)?)
+            })
+        })
+        .await?
+    };
+    for long in long {
+        match shortened(app, job, route, &long).await {
+            Ok(text) => {
+                let (sg, m) = (s, master.clone());
+                s = blocking(app, move |app| {
+                    let mut sg = sg;
+                    app.with_renderer(&m, |renderer| {
+                        Ok(shorten::apply(&mut sg, &long, &text, renderer)?)
+                    })?;
+                    Ok(sg)
+                })
+                .await?;
+            }
+            Err(e) if e.kind == ErrorKind::Cancelled => return Err(e),
+            Err(e) => eprintln!(
+                "gliide: a long rewrite stays as Suggest wrote it: {}",
+                e.message
+            ),
+        }
+    }
+    Ok(s)
+}
+
+/// One Rewrite call: `long`'s rewrite, shorter, on `route`; usage counts it with Suggest's.
+async fn shortened(
+    app: &Arc<App>,
+    job: &str,
+    route: &resume_llm::Route,
+    long: &Shorten,
+) -> Result<String> {
+    let llm = app.llm(route, Feature::Suggestions).await?;
+    let (long, model) = (long.clone(), route.model.clone());
+    let (text, out) = model_call(app, job, Stage::Suggesting, async move {
+        rewrite::rewrite(&llm, &rewrite::schema(), &long.input(), &model).await
+    })
+    .await?;
+    app.note_served(&route.model, &out);
+    Ok(text)
 }
 
 /// The fit check over the draft as it stands: the tailored resume, its scores, every change's state, and the

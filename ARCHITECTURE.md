@@ -510,6 +510,14 @@ unchanged (`local/eval/2026-11-17-read`).
 Rules in `prompts/suggest.md`: never invent; the posting's exact words; line budget; in-place swaps keep the part of
 speech; tags are never text.
 
+The line budget is 100 characters a line in the prompt; classic-serif wraps a bullet at about 114, which absorbs
+small overruns. Models still run past it (a rewrite that wraps to 2 lines where the bullet takes 1; telling them the
+bullet's length made it worse), so after Suggest answers, `resume_pipeline::shorten` measures every rewrite on the
+template and asks each that wraps longer once more, through Rewrite on Tailoring's route ("shorter: it wraps to 2
+lines and must fit in 1"); a reply that fits replaces it (its `hits` cut to the terms it still states), one that
+doesn't leaves Suggest's for the fit check to leave out. Reviews with none pay nothing; the calls count as
+Suggestions in Usage.
+
 ### Grounding validator
 
 Runs on every model-written line before it becomes a change, so the model's wording is checked against the resume

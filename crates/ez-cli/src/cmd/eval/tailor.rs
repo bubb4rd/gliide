@@ -1,18 +1,23 @@
 //! The Tailor role: Suggest on every posting (§3.3). Its requirements input is fixed (gold, else sonnet's recorded
-//! ones), so only the route varies. Each valid run goes through `changes_of` and `resume_tailor::tailor` as the app's
-//! review does: grounding findings, lift, fit-loop drops. The Suggest example's code checks are kept.
+//! ones), so only the route varies. Each run takes the app's step after Suggest too (`resume_pipeline::shorten`: a
+//! rewrite that wraps long is asked once to fit), its turns and time counted with the run's. Each valid run goes
+//! through `changes_of` and `resume_tailor::tailor` as the app's review does: grounding findings, lift, fit-loop drops.
+//! The Suggest example's code checks are kept.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use resume_core::change::{Draft, Mode, State};
 use resume_core::changes::{changes_of, draft_changes};
 use resume_core::suggestions::{BankOp, BulletOp, Have, KeywordOp, SkillOp, Suggestions};
 use resume_core::{Bank, Master, Posting, Requirements, Resume, resolve};
+use resume_llm::rewrite;
 use resume_llm::suggest::{self, SuggestInput};
+use resume_llm::{Agent, Route};
+use resume_pipeline::shorten;
 use resume_pipeline::{candidates, mode_name, template, today};
 use resume_render::{FontOptions, Renderer};
 use resume_tailor::tailor;
@@ -22,7 +27,7 @@ use serde_json::json;
 use super::report::{
     Bar, PerPosting, Section, by_route, common, common_metrics, errors, m, rates, write_blind,
 };
-use super::{Fixtures, ModeArg, Run, TRIM_MASTER, TailorArgs, call, each, mean};
+use super::{Called, Fixtures, ModeArg, Run, TRIM_MASTER, TailorArgs, call, each, mean};
 
 const TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -62,6 +67,7 @@ pub async fn run(fx: &Fixtures, args: &TailorArgs, out: &Path) -> anyhow::Result
     let master = master_of(fx, mode)?;
     let resume = resolve(&fx.bank, master)?;
     let schema = suggest::schema();
+    let mut renderer = Renderer::new(&template(master)?, FontOptions::default());
     let mut items = Vec::new();
     for f in fx.chosen(&args.run.only) {
         let Some((req, source)) = fx.requirements(&f.id) else {
@@ -91,18 +97,62 @@ pub async fn run(fx: &Fixtures, args: &TailorArgs, out: &Path) -> anyhow::Result
                 bank: &fx.bank,
                 candidates: &it.candidates,
             };
-            let c = call(suggest::suggest(llm, &schema, &input, &route.model)).await;
+            let mut c = call(suggest::suggest(llm, &schema, &input, &route.model)).await;
+            let shortened = fit(&mut c, llm, route, &resume, &fx.bank, it.req, &mut renderer).await;
             let meta = json!({
                 "mode": mode_name(mode),
                 "master": master.id,
                 "candidates": it.candidates,
                 "requirements": it.source,
                 "input_chars": suggest::input(&input).chars().count(),
+                "shortened": shortened,
             });
             (c, meta)
         },
     )
     .await
+}
+
+/// The app's step after Suggest (`resume_pipeline::shorten`) on a valid run: each rewrite that wraps long, asked once
+/// to fit; the turns and time join the run's, a rewrite that now fits replaces the one in its output. How many it
+/// replaced.
+async fn fit(
+    c: &mut Called,
+    llm: &Agent,
+    route: &Route,
+    resume: &Resume,
+    bank: &Bank,
+    req: &Requirements,
+    renderer: &mut Renderer,
+) -> usize {
+    let Some(Ok(mut s)) = c.output.as_ref().map(Suggestions::deserialize) else {
+        return 0;
+    };
+    let started = Instant::now();
+    let long = match shorten::long_rewrites(&s, resume, bank, req, renderer) {
+        Ok(long) => long,
+        Err(e) => {
+            eprint!("(measure failed: {e}) ");
+            return 0;
+        }
+    };
+    let mut replaced = 0;
+    for job in &long {
+        match rewrite::rewrite(llm, &rewrite::schema(), &job.input(), &route.model).await {
+            Ok((text, out)) => {
+                c.attempts.extend(out.attempts);
+                if shorten::apply(&mut s, job, &text, renderer).unwrap_or(false) {
+                    replaced += 1;
+                }
+            }
+            Err(e) => eprint!("(shorten failed: {e}) "),
+        }
+    }
+    c.latency += started.elapsed();
+    if replaced > 0 {
+        c.output = Some(serde_json::to_value(&s).expect("Suggestions serialize"));
+    }
+    replaced
 }
 
 /// What one valid run's suggestions come to.

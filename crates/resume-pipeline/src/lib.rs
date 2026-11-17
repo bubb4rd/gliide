@@ -1,12 +1,13 @@
 //! The per-posting steps the `ez` CLI and the app share: reading a posting, the cache keys of Extract and Suggest
-//! output, the bank candidates Suggest sees, a master's template and page facts, and today's month; and, for the
-//! import, reading a resume file ([`read_resume`]).
+//! output, the bank candidates Suggest sees, a master's template and page facts, today's month, and asking Suggest's
+//! rewrites that run long to fit ([`shorten`]); and, for the import, reading a resume file ([`read_resume`]).
 //!
 //! Callers own the caching: the CLI keeps model output in files under `local/cache/`, the app in its store. Both key
 //! it with [`extract_key`] and [`suggest_key`], so a change to a prompt, a model or the master invalidates it.
 
 pub mod feed;
 pub mod resume_file;
+pub mod shorten;
 
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
