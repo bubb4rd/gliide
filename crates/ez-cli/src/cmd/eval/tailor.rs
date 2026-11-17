@@ -25,8 +25,6 @@ use super::report::{
 use super::{Fixtures, ModeArg, Run, TRIM_MASTER, TailorArgs, call, each, mean};
 
 const TIMEOUT: Duration = Duration::from_secs(300);
-/// Characters per printed line, as the prompt's line budget assumes.
-const LINE: usize = suggest::LINE_CHARS;
 
 /// The master a mode's runs tailor: the trimmed one for bank-aware (so a bank entry is left to suggest), the full
 /// `swe` master for master-only.
@@ -113,7 +111,10 @@ struct Tally {
     changes: usize,
     flagged: usize,
     left_validator: usize,
-    left_fit: usize,
+    /// Left out by the fit check for taking more lines than the line it replaces (as the template wraps it).
+    left_lines: usize,
+    /// Left out by the fit check for the page running over.
+    left_page: usize,
     left_apply: usize,
     now: f64,
     projected: f64,
@@ -150,10 +151,11 @@ pub fn section(
         format!(
             "Requirements in: gold{}. Each valid run goes through `changes_of` and `tailor` with an empty draft. \
              Flagged: changes the grounding validator flagged. Left out: by the validator (the change has flags, so \
-             it starts left out), by the fit check (no flags, left out by the page or line budget loop), or because \
-             it doesn't apply to the master (`doesn't apply: …`). Lift: projected − now; ceiling lift: ceiling − now. \
-             Code checks: the Suggest example's (ids exist, `before` exact, line budget, hits are terms, evidence \
-             covers every skill in order), total problems. Keep rate: the share of changes marked `[x]` in \
+             it starts left out), by the fit check (no flags: it takes more lines than the line it replaces, as the \
+             template wraps it, or the page runs over), or because it doesn't apply to the master (`doesn't apply: \
+             …`). Lift: projected − now; ceiling lift: ceiling − now. Code checks: the Suggest example's (ids exist, \
+             `before` exact, hits are terms, evidence covers every skill in order), total problems. Keep rate: the \
+             share of changes marked `[x]` in \
              `{role}/blind.md`, once you've marked it.\n",
             if fallback.is_empty() {
                 String::new()
@@ -179,7 +181,13 @@ pub fn section(
             0,
             None,
         ),
-        m("left_fit", "Left out by the fit check, mean", 1, None),
+        m(
+            "left_lines",
+            "Left out: takes more lines, total",
+            0,
+            None,
+        ),
+        m("left_page", "Left out: page runs over, total", 0, None),
         m("left_apply", "Left out, doesn't apply, total", 0, None),
         m("now", "Now, mean", 1, None),
         m("projected", "Projected, mean", 1, None),
@@ -257,8 +265,10 @@ pub fn section(
                                 t.left_validator += 1;
                             } else if reason.starts_with("doesn't apply") {
                                 t.left_apply += 1;
+                            } else if reason.starts_with("takes ") {
+                                t.left_lines += 1;
                             } else {
-                                t.left_fit += 1;
+                                t.left_page += 1;
                             }
                         }
                         let line = super::super::tailor::summary(
@@ -287,10 +297,11 @@ pub fn section(
         n.insert("flagged", sum(|t| t.flagged));
         n.insert("left_validator", sum(|t| t.left_validator));
         n.insert("left_apply", sum(|t| t.left_apply));
+        n.insert("left_lines", sum(|t| t.left_lines));
+        n.insert("left_page", sum(|t| t.left_page));
         n.insert("problems", sum(|t| t.problems.len()));
         for (k, v) in [
             ("changes", avg(|t| t.changes as f64)),
-            ("left_fit", avg(|t| t.left_fit as f64)),
             ("now", avg(|t| t.now)),
             ("projected", avg(|t| t.projected)),
             ("ceiling", avg(|t| t.ceiling)),
@@ -530,18 +541,8 @@ fn problems(s: &Suggestions, lines: &Lines, req: &Requirements, posting: &str) -
             }
             BulletOp::Add => {}
         }
-        if b.op == BulletOp::Rewrite {
-            let (before, after) = (b.before.chars().count(), b.after.chars().count());
-            if after.div_ceil(LINE) > before.div_ceil(LINE) {
-                p.push(format!(
-                    "bullet `{}`: {after} chars wraps past {before} ({} lines)",
-                    b.id,
-                    before.div_ceil(LINE)
-                ));
-            }
-            if b.sources.first() != Some(&b.id) {
-                p.push(format!("bullet `{}`: sources don't start with it", b.id));
-            }
+        if b.op == BulletOp::Rewrite && b.sources.first() != Some(&b.id) {
+            p.push(format!("bullet `{}`: sources don't start with it", b.id));
         }
         if b.op != BulletOp::Cut && b.sources.is_empty() {
             p.push(format!("bullet `{}`: no sources", b.id));

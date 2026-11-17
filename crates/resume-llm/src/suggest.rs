@@ -18,7 +18,8 @@ use crate::{Call, Llm, LlmError, Schema, Structured};
 pub const PROMPT: &str = include_str!("../../../prompts/suggest.md");
 /// The `Suggestions` schema (`prompts/suggest.schema.json`).
 pub const SCHEMA: &str = include_str!("../../../prompts/suggest.schema.json");
-/// Characters per printed line the line budget assumes (the one-page layout).
+/// Characters per printed line the line budget assumes. classic-serif wraps a bullet at about 114 characters of real
+/// rewrites (measured 2026-11-17); 100 leaves room for the ones that run a little past their budget.
 pub const LINE_CHARS: usize = 100;
 /// The longest a bullet rewrite may be, whatever the line it replaces.
 pub const MAX_BULLET_CHARS: usize = 220;
