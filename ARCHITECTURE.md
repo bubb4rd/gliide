@@ -475,6 +475,12 @@ are never knockouts, title/company/location passed in from ingest, `degree.equiv
 under the same rules: the answer key `ez eval read` grades every route against (its README lists the judgment calls).
 `requirements_fixtures.rs` validates it with the recorded outputs.
 
+Extract asks for the industry or problem area a posting wants experience in as a `domain` skill (2026-11-17): every
+model had left them out. On the 12 postings × 3 runs per model (sonnet, haiku, luna, Flash Low): healthcare found in
+11 of 12 runs (was 1), banking 7 (0), trading applications 3 (0), education 1 (0); term recall against the trimmed
+gold rose 0.00 to 0.02 per model (sonnet 0.87 → 0.88), precision held (luna 0.87 → 0.85; the others ±0.02), latency
+unchanged (`local/eval/2026-11-17-read`).
+
 ### Extract: what the posting asks for (master-independent)
 
 | Field | Content |
