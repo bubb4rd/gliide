@@ -17,6 +17,8 @@ export interface TipRow {
   label: string;
   value?: string | number;
   key?: TipKey;
+  /** A data step's swatch (`StepKey`), keying a row to a stacked chart's part. */
+  step?: 1 | 2 | 3 | 4;
   tone?: TipTone;
 }
 
@@ -47,6 +49,12 @@ export interface TipData {
 export type TipContent = string | TipData;
 /** What `tip()` takes: the content, or a function read when it opens (and again while open, as it changes). */
 export type TipSource = TipContent | null | undefined | (() => TipContent | null | undefined);
+/**
+ * Where it opens: centered above its element (below when there's no room), or beside it (after it, before it when
+ * there's no room, centered on it), for an element as tall as a chart's column, where above would cover what's over
+ * the chart.
+ */
+export type TipPlacement = "above" | "beside";
 
 /** Rest before the first tooltip opens. */
 const OPEN_DELAY_MS = 300;
@@ -56,6 +64,7 @@ const WARM_MS = 400;
 class TipState {
   anchor = $state<HTMLElement | null>(null);
   source = $state.raw<TipSource>(null);
+  placement = $state<TipPlacement>("above");
   /** Opened straight from another (or by focus): no fade. */
   warm = $state(false);
 }
@@ -67,20 +76,21 @@ let timer: number | undefined;
 let pending: HTMLElement | null = null;
 let closedAt = -Infinity;
 
-function open(anchor: HTMLElement, source: TipSource, warm: boolean) {
+function open(anchor: HTMLElement, source: TipSource, placement: TipPlacement, warm: boolean) {
   clearTimeout(timer);
   pending = null;
   tipState.anchor = anchor;
   tipState.source = source;
+  tipState.placement = placement;
   tipState.warm = warm;
 }
 
-function request(anchor: HTMLElement, source: TipSource) {
+function request(anchor: HTMLElement, source: TipSource, placement: TipPlacement) {
   if (tipState.anchor === anchor) return;
-  if (tipState.anchor || performance.now() - closedAt < WARM_MS) return open(anchor, source, true);
+  if (tipState.anchor || performance.now() - closedAt < WARM_MS) return open(anchor, source, placement, true);
   clearTimeout(timer);
   pending = anchor;
-  timer = window.setTimeout(() => open(anchor, source, false), OPEN_DELAY_MS);
+  timer = window.setTimeout(() => open(anchor, source, placement, false), OPEN_DELAY_MS);
 }
 
 /** Closes the tooltip, or only `anchor`'s (open or about to open). */
@@ -107,14 +117,14 @@ export function readTip(source: TipSource): TipContent | null {
  * "") shows no tooltip. The element keeps its own accessible name; the tooltip is the sighted reading of it, linked by
  * `aria-describedby` while open. On a component, the component must spread its rest props onto its element.
  */
-export function tip(source: TipSource): Attachment<HTMLElement> {
+export function tip(source: TipSource, placement: TipPlacement = "above"): Attachment<HTMLElement> {
   return (node) => {
     if (source == null || source === "") return;
     // A click dismisses it until the pointer leaves, as native tooltips do.
     let clicked = false;
 
     const enter = (e: PointerEvent) => {
-      if (e.pointerType === "mouse" && !clicked && readTip(source) !== null) request(node, source);
+      if (e.pointerType === "mouse" && !clicked && readTip(source) !== null) request(node, source, placement);
     };
     const leave = () => {
       clicked = false;
@@ -125,7 +135,7 @@ export function tip(source: TipSource): Attachment<HTMLElement> {
       closeTip(node);
     };
     const focus = () => {
-      if (node.matches(":focus-visible") && readTip(source) !== null) open(node, source, true);
+      if (node.matches(":focus-visible") && readTip(source) !== null) open(node, source, placement, true);
     };
     const blur = () => closeTip(node);
     const key = (e: KeyboardEvent) => {

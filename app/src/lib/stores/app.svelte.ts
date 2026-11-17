@@ -1,7 +1,7 @@
 // What the shell and every screen share: jobs (the sidebar's counts and Recent), applications, company logos, the
-// library (bank and masters counts), settings, the agents' statuses (and the active one's), the models their aliases
-// last ran, the model calls running and updates. Each refresh keeps the last good value when a command fails (lists
-// start empty, the agents unknown), so the window always draws; the failure goes to the console.
+// library (bank and masters counts), settings, the agents' statuses (and each role's route over them), the models
+// their aliases last ran, the model calls running and updates. Each refresh keeps the last good value when a command
+// fails (lists start empty, the agents unknown), so the window always draws; the failure goes to the console.
 
 import {
   agentStatuses,
@@ -25,17 +25,19 @@ import {
   setStatus as saveStatus,
   setUrl,
   updateStatus,
+  type Agent,
   type AgentStatus,
   type AppStatus,
   type ApplicationRow,
   type JobRow,
   type Progress,
   type Library,
+  type Role,
   type LogoRow,
   type Settings,
   type UpdateStatus,
 } from "$lib/api";
-import { AGENTS } from "$lib/agents";
+import { AGENT_LIST, AGENTS, type AgentInfo } from "$lib/agents";
 import { modelName } from "$lib/models";
 import { LIFETIME_WITH_ACTION_MS, toast } from "$lib/ui/toast.svelte";
 import { theme } from "./theme.svelte";
@@ -47,6 +49,17 @@ async function attempt<T>(what: string, call: () => Promise<T>): Promise<T | und
     console.error(`${what}: ${appError(e).message}`);
     return undefined;
   }
+}
+
+/** A role's route as screens show it. */
+export interface RouteView {
+  role: Role;
+  /** The agent it runs on. */
+  info: AgentInfo;
+  /** That agent's status; null while unknown. */
+  status: AgentStatus | null;
+  /** The `--model` alias or name it asks for; empty until settings load. */
+  model: string;
 }
 
 class AppStore {
@@ -64,10 +77,23 @@ class AppStore {
   settings = $state<Settings | null>(null);
   /** Every agent's status, in the order claude, codex, antigravity; null while unknown (not checked, or it failed). */
   agents = $state<AgentStatus[] | null>(null);
-  /** The agent model calls run on, as screens name it: Claude Code until settings say otherwise. */
-  agentInfo = $derived(AGENTS[this.settings?.agent ?? "claude"]);
-  /** Its status (`agents`); null while either is unknown. */
-  agent = $derived(this.agents?.find((a) => a.agent === this.settings?.agent) ?? null);
+  /** Each role's route: the agent it runs on (as screens name it, and its status) and the model it asks for. Claude
+   *  Code with no model named until settings load. */
+  routes = $derived.by(() => {
+    const s = this.settings;
+    const of = (role: Role): RouteView => {
+      const agent = s?.routes[role] ?? "claude";
+      return { role, info: AGENTS[agent], status: this.status(agent), model: s?.agents[agent].models[role] ?? "" };
+    };
+    return { read: of("read"), tailor: of("tailor"), write: of("write"), coach: of("coach") };
+  });
+  /** The agents the roles run on, each once, Tailoring's first, then in the list's order. */
+  routed = $derived.by(() => {
+    const s = this.settings;
+    const used = new Set<Agent>(s ? Object.values(s.routes) : ["claude"]);
+    const first = s?.routes.tailor ?? "claude";
+    return [AGENTS[first], ...AGENT_LIST.filter((a) => a.id !== first && used.has(a.id))];
+  });
   /** Each `--model` alias or name asked for → the model id that last answered it; empty until one has. */
   models = $state<Record<string, string>>({});
   /** The model calls running, oldest first (`listen` keeps it current). */
@@ -209,6 +235,11 @@ class AppStore {
   async refreshLibrary() {
     const lib = await attempt("library", library);
     if (lib) this.library = lib;
+  }
+
+  /** `agent`'s status; null while unknown. */
+  status(agent: Agent): AgentStatus | null {
+    return this.agents?.find((a) => a.agent === agent) ?? null;
   }
 
   /** Checks every agent again (all three at once). */

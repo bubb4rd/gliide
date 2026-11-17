@@ -1,5 +1,6 @@
 // Toasts: short confirmations and errors, said once ("Saved acme_swe_doe_resume.pdf"). The layout renders
-// them with <Toaster />; anything can call `toast()`.
+// them with <Toaster />; anything can call `toast()`. While a modal `Sheet` is open, the window's Toaster steps aside
+// for the sheet's own (a modal dialog makes everything outside it inert, a toast's buttons too).
 
 export type ToastTone = "neutral" | "gain" | "warn" | "danger";
 
@@ -21,6 +22,8 @@ export const LIFETIME_WITH_ACTION_MS = 8000;
 
 let next = 0;
 export const toasts: Toast[] = $state([]);
+/** Modal sheets open now: while any is, toasts show in the sheet, not over the main area. */
+export const toastHost = $state({ sheets: 0 });
 
 export function dismiss(id: number) {
   const i = toasts.findIndex((t) => t.id === id);

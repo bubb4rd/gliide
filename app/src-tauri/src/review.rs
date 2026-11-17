@@ -136,19 +136,21 @@ async fn make_review(
         },
         mode,
     );
-    let model = settings.current().suggest_model.clone();
+    // The same settings as the mode above, so the analysis is keyed by the model that writes it.
+    let route = settings.route(Feature::Suggestions.role());
+    let model = &route.model;
     let analysis = single_flight(app, &format!("suggest {model} {key}"), async |joined| {
         // Joined: the call waited for made the answer, fresh or not.
         let cached = if fresh && !joined {
             None
         } else {
-            lock(&app.store).analysis(&key, &model)?
+            lock(&app.store).analysis(&key, model)?
         };
         if let Some(a) = cached {
             lock(&app.store).touch_analysis(&a.id)?;
             return Ok(a);
         }
-        let llm = app.agent(Feature::Suggestions).await?;
+        let llm = app.llm(&route, Feature::Suggestions).await?;
         let (p, rq, rs, bk, cs, m) = (
             row.posting.clone(),
             req.clone(),
@@ -168,11 +170,11 @@ async fn make_review(
             suggest::suggest(&llm, &suggest::schema(), &input, &m).await
         })
         .await?;
-        app.note_served(&model, &out);
+        app.note_served(model, &out);
         let store = lock(&app.store);
         // Your draft carries over from this input's last answer, else from the review of this master you last opened,
         // whichever mode it drew on: a changed setting or bank keeps your decisions and edits.
-        let previous = match store.analysis(&key, &model)? {
+        let previous = match store.analysis(&key, model)? {
             Some(a) => Some(a),
             None => store
                 .analyses(job)?
@@ -186,7 +188,7 @@ async fn make_review(
             master_rev: &master_rev,
             mode,
             key: &key,
-            model: &model,
+            model,
             suggestions: &s,
             latency_ms: out.latency().as_millis() as u64,
         })?;
@@ -652,8 +654,9 @@ pub async fn rewrite_line(
 
 /// The Rewrite model call for `job`: the new line, per `note`.
 async fn rewritten(app: &Arc<App>, job: RewriteJob, note: String) -> Result<String> {
-    let llm = app.agent(Feature::Rewrite).await?;
-    let model = app.settings().current().suggest_model.clone();
+    let route = app.route(Feature::Rewrite);
+    let llm = app.llm(&route, Feature::Rewrite).await?;
+    let model = route.model;
     let (line, facts, terms, budget) = (job.line, job.facts, job.terms, job.budget);
     let m = model.clone();
     let (text, out) = model_call(app, &job.posting_id, Stage::Rewriting, async move {
@@ -792,8 +795,9 @@ pub async fn instruct(
         })
     })
     .await?;
-    let llm = app.agent(Feature::Chat).await?;
-    let model = app.settings().current().suggest_model.clone();
+    let route = app.route(Feature::Chat);
+    let llm = app.llm(&route, Feature::Chat).await?;
+    let model = route.model;
     let s = scope.clone();
     let c = confirmed.clone();
     let m = model.clone();

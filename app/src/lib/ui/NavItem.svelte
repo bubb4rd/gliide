@@ -4,7 +4,8 @@
   optional `status` (a dot in its tone, then its word), or `busy` in its place while a model call runs for it (its
   stage word, swept as `Thinking`'s); the lead centers on both lines and each line truncates on its own, the status
   never. An empty `sub` leaves the second line to the status alone, from its start. `trailing` draws a mark at the
-  first line's end instead of `meta` (a job's fit `ScoreBar`).
+  first line's end instead of `meta` (a job's fit `ScoreBar`). Without `href` it's a button (`onclick`): it opens
+  something rather than going somewhere (the sidebar's Settings, a Settings pane in its rail).
   States: hover wash, current (pressed wash, ink icon).
 -->
 <script lang="ts">
@@ -14,8 +15,9 @@
   import Icon from "./Icon.svelte";
   import { tip } from "./tip.svelte";
 
-  interface Props extends HTMLAnchorAttributes {
-    href: string;
+  interface Props extends Omit<HTMLAnchorAttributes, "href"> {
+    /** Where it goes; without one it's a button. */
+    href?: string;
     icon?: Component<LucideProps>;
     /** Drawn where the icon goes, for anything that isn't a Lucide icon. */
     lead?: Snippet;
@@ -54,10 +56,12 @@
   }: Props = $props();
 </script>
 
-<a
+<svelte:element
+  this={href ? "a" : "button"}
   {href}
+  type={href ? undefined : "button"}
   class={["nav-item", quiet && "nav-item--quiet", sub != null && "nav-item--two", className]}
-  aria-current={current ? "page" : undefined}
+  aria-current={current ? (href ? "page" : "true") : undefined}
   {...rest}
 >
   {#if lead || icon}<span class="lead"
@@ -78,7 +82,7 @@
       {/if}
     </span>
   {/if}
-</a>
+</svelte:element>
 
 <style>
   .nav-item {
@@ -95,17 +99,27 @@
     -webkit-user-drag: none;
     transition: background-color var(--dur-instant) var(--ease-out);
   }
+  button.nav-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    text-align: start;
+  }
   .nav-item--quiet {
     font-weight: var(--weight-regular);
   }
   .nav-item :global(.icon) {
     color: var(--ink-3);
   }
-  .nav-item[aria-current="page"] {
+  .nav-item[aria-current] {
     color: var(--ink);
     background: var(--pressed);
   }
-  .nav-item[aria-current="page"] :global(.icon) {
+  .nav-item[aria-current] :global(.icon) {
     color: var(--ink);
   }
   .lead {
@@ -177,7 +191,7 @@
     .nav-item:hover {
       background: var(--hover);
     }
-    .nav-item[aria-current="page"]:hover {
+    .nav-item[aria-current]:hover {
       background: var(--pressed);
     }
   }

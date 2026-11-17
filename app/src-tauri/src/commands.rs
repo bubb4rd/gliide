@@ -12,8 +12,8 @@ use crate::dto::{
     EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView,
     ImportChoices, ImportView, Instructed, JobRow, JobView, KeyDecision, Library, LogoRow,
     LogoSource, Nudge, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
-    RoundDraft, RoundsView, SalaryRange, SearchCursor, SearchResults, SentView, Settings,
-    StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus, UsageView,
+    RoundDraft, RoundsView, RouteLatency, SalaryRange, SearchCursor, SearchResults, SentView,
+    Settings, StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus, UsageView,
 };
 use crate::state::{App, blocking};
 use crate::{
@@ -669,4 +669,10 @@ pub async fn usage(app: St<'_>) -> Res<UsageView> {
 #[tauri::command]
 pub async fn export_usage(app: St<'_>, path: String) -> Res<()> {
     blocking(&app, move |app| usage::export_usage(app, std::path::Path::new(&path))).await
+}
+
+/// Each role's route and its median wall time on this Mac (`null` below five timed calls), for Settings → Agents.
+#[tauri::command]
+pub async fn route_latencies(app: St<'_>) -> Res<Vec<RouteLatency>> {
+    blocking(&app, usage::route_latencies).await
 }

@@ -95,12 +95,32 @@ flowchart TD
 
 The app never calls a model API itself, and never ships, reads or stores a credential. It launches an agent CLI you
 installed and signed in to yourself, in the headless mode each lab ships for scripts, as a subprocess. Usage bills to
-your own subscription, and your own agreement with each lab applies to it. One agent runs every call: Settings →
-Agents (or the first-run setup) chooses which, and each agent keeps its own path and models while another runs. Each
-can be switched off there (`agents.<agent>.enabled`): off, it never runs a call and isn't offered, but is still checked,
-so it can come back on once found and signed in; the agent in use is always on, and when it can't run, Settings
-offers another rather than switching by itself. Each call's tokens, and what it would cost at API prices, are kept on
-this Mac and shown in Settings → Usage (§8): on a subscription a measure of use, not a bill.
+your own subscription, and your own agreement with each lab applies to it. Each kind of work runs on an agent of its
+own (Settings → Agents, "Who does what"; the first-run setup puts every role on the one agent you choose), and each
+agent keeps its own path and a model per role, so moving a role away and back restores its model. Each can be
+switched off there (`agents.<agent>.enabled`): off, it never runs a call and isn't offered, but is still checked, so
+it can come back on once found and signed in; an agent a role runs on is always on, and when it can't run, Settings
+offers to move its roles to another rather than switching by itself. Each call's tokens, time, and what it would cost
+at API prices, are kept on this Mac and shown in Settings → Usage (§8): on a subscription a measure of use, not a
+bill.
+
+### Roles
+
+| Role | Calls (`Feature`) |
+|---|---|
+| Reading | Requirements, FeedCheck, Import, Invite |
+| Tailoring | Suggestions, Rewrite, Chat |
+| Writing | CoverLetter |
+| Coaching | Prep, Practice, Nudges, Dig, Debrief |
+
+`Feature::role()` is an exhaustive match, so a new call can't ship without a role. A role's route
+(`resume_llm::Route { agent, model }`) is `settings.routes.<role>` and that agent's `models.<role>`; `App::route`
+reads it, `App::llm` starts its agent (its path, else the one found), so the agent and the model always come from one
+route. An agent that isn't found fails the call naming the role ("Tailoring runs on Codex, which gliide can't find on
+this Mac. …"), with Open Settings. Feed checks are Reading's, so a posting's score in the feed and on its page come
+from the same extraction. Caches stay keyed by the model string alone: model names don't overlap between agents, and
+keying by agent would orphan every cached requirement and analysis. Settings saved before roles load with every role
+on the agent then in use, Reading on its extract model and the rest on its suggest model.
 
 ### Per lab
 
@@ -151,14 +171,14 @@ trait Llm {
 
 | Provider | Platforms |
 |---|---|
-| `ClaudeCli`, `CodexCli`, `AntigravityCli`, and `Agent` over whichever is chosen | macOS, Windows |
+| `ClaudeCli`, `CodexCli`, `AntigravityCli`, and `Agent` over whichever a role's route names | macOS, Windows |
 | iOS: decided at M6 | `MacRelay` (the desktop app runs the call for the phone) or `ApiKey` (your own key) |
 
 Settings shows every agent, found or not: its version, whether it's signed in (`claude auth status`'s `loggedIn`,
 `codex login status`, `agy models` answering; never an email or a token), and the models it offers (Claude Code's
 aliases, `codex debug models`' listed ones, `agy models`). Setup links install a missing agent; the app never bundles
-one. A new install's first-run setup (`/welcome`) has you choose the agent and checks it too, linking to its install
-guide; whether that setup is done is the `onboarded` setting. The setup puts
+one. A new install's first-run setup (`/welcome`) has you choose one agent, which every role runs on, and checks it
+too, linking to its install guide; whether that setup is done is the `onboarded` setting. The setup puts
 you before your tools: the resume is imported before the Agents step, so when the agent is known not to be ready the
 Experience step says so and links ahead to it (import runs the model). Its What it says step writes the feed's
 settings as Settings → Feed does: a filter you never touch stays Auto (`None`, following the bank); the first change
@@ -450,6 +470,10 @@ the synthetic fixtures in `fixtures/postings/` later replaced) sonnet was the fa
 no person-describing phrases as skills, `term` word for word with normal forms in `aliases`, priority 1 for at most a
 third, no single item required from a one-of list, students applying full-time are `entry`, application instructions
 are never knockouts, title/company/location passed in from ingest, `degree.equivalent`.
+
+`fixtures/requirements/gold/` holds hand-labeled requirements for the 12 fixture postings, read from the posting text
+under the same rules: the answer key `ez eval read` grades every route against (its README lists the judgment calls).
+`requirements_fixtures.rs` validates it with the recorded outputs.
 
 ### Extract: what the posting asks for (master-independent)
 
@@ -827,13 +851,16 @@ The review's preview pane opens with a map of the job's place (DESIGN.md `PlaceM
 
 Rows use UUIDs and `updated_at` so sync can be added later without a migration. No sync until decided.
 
-`gliide.sqlite` also holds `usage` (store schema 14): a row per model call, its repair turn included, recorded as it
-ends (`usage::Metered`, the `Llm` every call runs through): when, the local day, what it was for (`Feature`), the agent
-and the model that served it, its tokens (input read fresh, cache writes and reads apart; Codex's and Antigravity's
-counts are split so in `resume-llm`) and the cost the agent reported (Claude Code's `total_cost_usd`; NULL for the
-others). Settings → Usage sums it per day, feature, agent and model, estimating unreported costs from the list prices
-bundled in `resume_llm::pricing` at read time, so a corrected price applies to past calls; Export CSV writes it per
-call. A call that never got an answer (not found, timed out, stopped) reported nothing and isn't recorded.
+`gliide.sqlite` also holds `usage` (store schema 14; `latency_ms` since 15): a row per model call, its repair turn
+included, recorded as it ends (`usage::Metered`, the `Llm` every call runs through): when, the local day, what it was
+for (`Feature`), the agent and the model that served it, its tokens (input read fresh, cache writes and reads apart;
+Codex's and Antigravity's counts are split so in `resume-llm`), its wall time over every turn (NULL before 15), and
+the cost the agent reported (Claude Code's `total_cost_usd`; NULL for the others). Settings → Usage sums it per day,
+feature, agent and model, estimating unreported costs from the list prices bundled in `resume_llm::pricing` at read
+time, so a corrected price applies to past calls; Export CSV writes it per call, `latency_ms` last. Settings → Agents
+shows each role's median time on this Mac from it (`route_latencies`: the role's agent, its asked model or the id that
+last served it, over the role's features; none below 5 timed calls). A call that never got an answer (not found, timed
+out, stopped) reported nothing and isn't recorded.
 
 The app data folder (`~/Library/Application Support/dev.bubb4rd.gliide/` on macOS) is named by the bundle identifier
 `dev.bubb4rd.gliide`. The identifier is permanent: changing it would strand every install's data in the old folder.
@@ -852,7 +879,7 @@ composed Review screen.
 | Job | Posting input; requirements as chips; master picker with each master's score; score header |
 | Review | Score header; changes grouped by section, then **From your bank**; then **Other lines**: every master line no change touches, each with Edit and Rewrite with a note (either makes it your edit); live preview beside them |
 | Applications | Table with status, scores, files, posting link; CSV export. Statuses set many at once (checked rows, one `set_status` call: all or none, one CSV rewrite, Undo); an export starts as Saved, and the job's **Mark applied** moves it to Applied |
-| Settings | Agents found, signed in or not, model per call; suggestions from (master only / bank-aware, the default); export folder; default template |
+| Settings | A modal sheet over any screen (⌘,), a pane at a time from a searchable rail: Agents (found, signed in or not, model per call, suggestions from), Usage, Feed, Sources, Notifications, Export folder, Appearance, About |
 
 **Score header:** `Now 53%` → `Projected 78%` (large, live) with `Ceiling 85%` beside it; a bar showing now, the gain
 from your selections, and the headroom left; components on hover.
@@ -884,7 +911,7 @@ gliide/
   app/
     src-tauri/               Tauri commands over the crates (dto.rs → TypeScript bindings via ts-rs)
     scripts/                 release-macos.sh: Developer ID signing, notarization, Gatekeeper checks
-    src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen)
+    src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen; Settings is a sheet the layout mounts, routes/settings/Settings.svelte)
   templates/                 *.typ + manifests (classic-serif, cover-letter); fonts/
   design/                    DESIGN.md, tokens.css, lint.mjs, UI fonts
   prompts/                   extract, suggest, rewrite, instruct, import, cover (.md + .schema.json)
@@ -900,7 +927,7 @@ gliide/
 | Golden | `fixtures/postings` × the fixture bank's masters (`fixtures/banks/`) with recorded model outputs → score components, tailored JSON, page count; deterministic, in CI |
 | Templates | Every template × every fixture resume compiles, emits the contract's metadata, and round-trips its PDF text |
 | Providers | Each CLI provider against a fake binary (a shell script): its flags, output parsing, errors and exit codes, one repair turn, timeouts; Antigravity's schema translation |
-| Prompt evals (`ez eval`, not CI) | Live runs per agent over fixtures: schema failures, repairs, validator and line-budget violations, latency; both modes |
+| Prompt evals (`ez eval`, not CI) | Live runs per role and route over the fixtures (`ez eval read\|tailor\|write\|coach --routes claude:sonnet,codex:gpt-6-luna`), one call at a time, each run kept so a rerun resumes: validity and repairs, latency, tokens and cost; Reading against the hand-labeled `fixtures/requirements/gold/` (term recall and precision, priority-1 share, fields, the `swe` master's score drift); Tailoring from gold requirements (validator findings, lift, fit-check drops, the suggest checks), bank-aware on `jane-doe.swe-trim`; blind keep / preference sheets for Tailoring, Writing and Coaching; `report.md` and `routes.json` |
 
 ## 12. Speed targets
 
@@ -915,6 +942,20 @@ gliide/
 M0 measured Extract through `claude -p` with sonnet at p50 6.3 s / p90 6.9 s. M1 measured a warm re-render after a
 one-bullet edit at about 8 ms compile, about 40 ms with PDF and PNG export (a `typst` CLI compile: about 0.36 s).
 
+`ez eval` on 2026-11-16 (`local/eval/2026-11-16/report.md`; the 12 fixture postings, one call at a time, p50 / p90 in
+seconds, 3 runs a posting for Reading and Tailoring, Hydrogen on 4 postings):
+
+| Route | Reading | Tailoring (bank-aware) | Writing | Coaching: prep | Coaching: Dig |
+|---|---|---|---|---|---|
+| `claude:sonnet` | 6.8 / 7.6 | 18.2 / 27.2 | 6.2 / 6.7 | 12.2 / 15.9 | 5.1 / 5.4 |
+| `claude:opus` | – | 34.5 / 45.5 | 15.7 / 18.7 | 20.9 / 28.4 | 5.8 / 6.4 |
+| `claude:haiku` | 19.8 / 25.3 | – | – | – | – |
+| `codex:gpt-6-luna` | 17.8 / 21.3 | 20.2 / 27.7 | 11.4 / 13.8 | 23.0 / 25.0 | 6.9 / 11.1 |
+| `antigravity:gemini-3.8-flash-low` | 7.9 / 8.9 | 10.5 / 18.3 | – | – | – |
+| `antigravity:gemini-4-hydrogen-high` | 48.6 / 58.5 | 86.3 / 110.6 | 37.0 / 45.4 | 38.8 / 68.4 | 27.6 / 29.7 |
+
+Only sonnet and Flash Low meet Reading's 8 s; opus and Hydrogen miss Tailoring's 30 s.
+
 ## 13. Roadmap
 
 Measurements below (latencies, scores) were taken on the original postings and resume that the synthetic fixtures
@@ -922,24 +963,26 @@ later replaced; re-running them on today's fixtures may give different numbers.
 
 | Milestone | Delivers | Done when |
 |---|---|---|
-| M0 Spike: providers ✓ | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over 11 postings; then `CodexCli` and `AntigravityCli` (the spike's `--agent`) | Done for Claude: 33/33 valid first try (sonnet, haiku, haiku `--effort low`); sonnet default; sonnet's outputs for today's fixture postings in `fixtures/requirements/sonnet/`. Codex and Antigravity: §1, How each agent runs a call |
+| M0 Spike: providers ✓ | `resume-llm` (`Llm` trait, `ClaudeCli`), extract prompt and schema, spike over 11 postings; then `CodexCli` and `AntigravityCli` (now `ez eval read --routes`) | Done for Claude: 33/33 valid first try (sonnet, haiku, haiku `--effort low`); sonnet default; sonnet's outputs for today's fixture postings in `fixtures/requirements/sonnet/`. Codex and Antigravity: §1, How each agent runs a call |
 | M1 Core + render ✓ | Bank and master types, resolve, v1 migrator, Typst world, `classic-serif`, metrics, `ez migrate` / `ez render` / `ez schema` | Done: pixel-identical to the `typst` CLI's output with system fonts; identical line and page metrics with bundled Liberation Serif |
 | M2 Requirements + score ✓ | `resume-ingest` (Greenhouse, Lever, Ashby, LinkedIn, JSON-LD, page text), Extract v2 (8 prompt fixes, one-of groups, hints), matcher, composite score, `rank`, `ez score` / `ez rank` with a requirements cache | Done: all 11 fixture postings scored with every component; live link to score in about 6 s, cached re-score in milliseconds |
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (a junior SWE posting, now `northwind-jr-swe`: 74.2 → 84.2); a bank with roles outside the master is needed to settle the mode experiment |
 | M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv`, agent settings; `resume-store` (SQLite), `resume-pipeline` | Done. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` gave identical scores, states and points on the recorded outputs of the time |
+| M4.5 Settings as a sheet ✓ | Settings leaves its page for a modal `Sheet` over whatever screen is open (⌘, or the sidebar): a rail of panes with a search over their settings and the version at its foot, one pane at a time (Agents, Usage, Feed, Sources, Notifications, Export folder, Appearance, About); the `/settings` route is gone | Done: every way in (⌘,, the sidebar's Settings, agent and update rows, Open Settings) opens it on the right pane; Esc, Close or the scrim closes it and focus returns; menus and toasts work inside it |
 | M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; new entries and bullets in Experience, in no master ✓; the default mode ✓ (bank-aware, bank suggestions in); second template (design track) | Decision on the default mode ✓ |
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (`prompts/cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Cover letters and application tracking |
 | M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search (opt-in), the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: a live pull checks jobs within the daily cap, per-place copies folded; a five-board watchlist pull kept 84 of 693 jobs, every board's first job read from its API |
 | M6.7 Interviews | The interviewer: you prepare for and practice a job's interviews, and gliide asks about your experience to deepen the bank. Data ✓ (facts per bank entry as sources for every model call and the validator; each application's status changes with their time; the resume as exported); the review's "Do you have Bash experience?" kept as a fact (**Yes, at…**) and the entry editor's Facts ✓; rounds ✓ (saving one moves a Saved or Applied application to Interviewing, Offer or Rejected cancels the upcoming ones, a pasted invite read by one call or an `.ics` parsed, the resume as sent rendered again) and the job's Interview tab ✓ (its rounds over the resume you sent; the next round in Up next, Recent and Applications' Next column); prep and typed practice ✓ (a round's prep by one call, kept until what it was written from changes; an answer read back without a grade, its new claims kept as facts); nudges while you answer ✓ (one call, not kept: where to start, what to add, what you could say with `…` for your words); Dig and stories ✓ (an entry's questions by one call, kept until the entry changes; your answers' facts kept at once and additions proposed by another; stories as their own record, linked from prep's questions, offered from practice and Dig, told alone); debriefs ✓ (what they asked, what you got stuck on and notes saved with no call; one call reads it for Dig questions on the entries it touches and notes for the next prep, which reads the earlier rounds' debriefs; a debrief due for 14 days after a round ends, and each application's latest activity); opt-in notifications ✓ (UserNotifications banners the day before a round, an hour before and an hour after it ends without a debrief, each once, fired by the app while it runs; a click opens the job); spoken practice, then a live interviewer | A practiced round's prep, practice and debrief, grounded in the bank like a tailored resume |
 | M7 Windows + iOS | Windows build and installer (agents run there too); iOS share extension, compact layout, iOS model access decided | Same fixture outputs on all three |
 | M8 Distribution | Signing and notarization ✓ (`pnpm release:mac`); updates ✓ (§1 Updates: signed bundle and `latest.json` on each GitHub release, checked daily, installed on Restart to update) | Installable by someone else |
+| M8.5 Routing | An agent and model per role (§1 Roles): routes in settings, `App::route`/`App::llm` at every call, `usage.latency_ms`, Settings → Agents' Who does what (Set all to… with the Fastest and Best edits presets, a median per role, a prompt per agent that can't run), the sidebar's agents, `ez eval` over gold labels | Every call runs on its role's route; the eval matrix compares routes per role (§12) |
 
 ## 14. Open decisions
 
 | Decision | Status |
 |---|---|
 | UI stack | **Decided:** Tauri 2 + Svelte over a Rust core |
-| Model access on desktop | **Decided:** your own agents in their headless modes (`claude -p`, `codex exec`, `agy -p`), one chosen at a time; no API keys. ACP (once planned for Codex and Gemini CLI) is not used: each lab's headless mode now enforces a schema, ACP doesn't |
+| Model access on desktop | **Decided:** your own agents in their headless modes (`claude -p`, `codex exec`, `agy -p`), an agent and model per role (§1 Roles); no API keys. ACP (once planned for Codex and Gemini CLI) is not used: each lab's headless mode now enforces a schema, ACP doesn't |
 | Bank-aware vs master-only suggestions | **Decided:** bank-aware by default, bank suggestions in like the rest; master only a setting |
 | Sync | **Not yet** |
 | Company logo source | **Decided:** first party (posting pages, the company's own site); logo.dev if coverage needs a third party |
@@ -952,7 +995,8 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | Risk | Mitigation |
 |---|---|
 | A lab changes its terms or blocks subscription use from other apps | Several labs behind one trait; the app never handles credentials; re-check terms each release |
-| Agent CLIs change flags, auth or output | Each provider's flags and parsing pinned by fake-binary tests; the spike (`--agent`) becomes `ez eval` run before each release |
+| Agent CLIs change flags, auth or output | Each provider's flags and parsing pinned by fake-binary tests; `ez eval` over the routes in use before each release |
+| Roles on several plans draw on several plans' limits, and the eval on them all | Usage per agent in Settings; `ez eval` resumes, `--only` and `--runs` trim it |
 | An agent returns prose or broken JSON | Every headless mode enforces the schema; gliide validates anyway, with one repair turn; per-agent failure rates tracked |
 | An agent tries to use tools | Its tools turned off or every action denied (§1, How each agent runs a call), no MCP servers, empty temp `cwd` |
 | Users must install and sign in to a CLI | Settings and the setup detect every agent and link the install and sign-in steps |

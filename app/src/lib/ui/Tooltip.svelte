@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
+  import StepKey from "./StepKey.svelte";
   import type { TipContent } from "./tip.svelte";
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -33,6 +34,7 @@
           <div class="row">
             <dt>
               {#if row.key}<span class="key key--{row.key}" aria-hidden="true"></span>{/if}
+              {#if row.step}<StepKey step={row.step} />{/if}
               {row.label}
             </dt>
             <dd class={["num", row.tone && `tone--${row.tone}`]}>{row.value ?? ""}</dd>

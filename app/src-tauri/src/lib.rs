@@ -179,6 +179,7 @@ pub fn run() {
             commands::set_feed_settings,
             commands::usage,
             commands::export_usage,
+            commands::route_latencies,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gliide");

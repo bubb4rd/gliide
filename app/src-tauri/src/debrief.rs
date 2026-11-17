@@ -137,8 +137,9 @@ pub async fn read_debrief(app: &Arc<App>, round: &str) -> Result<DebriefView> {
         Ok((r, a, row, d, requirements, bank, sent))
     })
     .await?;
-    let llm = app.agent(Feature::Debrief).await?;
-    let model = app.settings().current().suggest_model.clone();
+    let route = app.route(Feature::Debrief);
+    let llm = app.llm(&route, Feature::Debrief).await?;
+    let model = route.model;
     let job = a.posting_id.clone().unwrap_or_else(|| a.id.clone());
     let asked: Vec<String> = d.asked.iter().map(|q| q.text.clone()).collect();
     let (m, kind, role, company) = (

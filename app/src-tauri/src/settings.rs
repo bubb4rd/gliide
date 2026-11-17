@@ -10,7 +10,7 @@ use resume_llm::AgentKind;
 use serde_json::Value;
 use tokio::process::Command;
 
-use crate::dto::{AgentStatus, ModelOption, Settings};
+use crate::dto::{AgentStatus, ModelOption, Role, Settings};
 use crate::error::{AppError, Result};
 use crate::export;
 use crate::state::App;
@@ -26,13 +26,14 @@ pub fn get_settings(app: &App) -> Settings {
     app.settings()
 }
 
-/// Saves `s` (trimmed; an empty model falls back to its agent's default; the agent in use turned on, since choosing
-/// one, in Settings or the setup, is using it). A new export folder holding an existing `applications.csv` has its
-/// rows imported (when it can be read: every write imports again first).
+/// Saves `s` (trimmed; an empty model falls back to its agent's default; every agent a role runs on turned on, since
+/// choosing one for a role, in Settings or the setup, is using it). A new export folder holding an existing
+/// `applications.csv` has its rows imported (when it can be read: every write imports again first).
 pub fn set_settings(app: &App, mut s: Settings) -> Result<Settings> {
     for agent in AgentKind::ALL {
         let a = s.agents.get_mut(agent.into());
-        for model in [&mut a.extract_model, &mut a.suggest_model] {
+        for role in Role::ALL {
+            let model = a.models.get_mut(role);
             *model = model.trim().to_owned();
             if model.is_empty() {
                 *model = agent.default_model().to_owned();
@@ -44,7 +45,9 @@ pub fn set_settings(app: &App, mut s: Settings) -> Result<Settings> {
             .map(|p| p.trim().to_owned())
             .filter(|p| !p.is_empty());
     }
-    s.agents.get_mut(s.agent).enabled = true;
+    for role in Role::ALL {
+        s.agents.get_mut(s.routes.get(role)).enabled = true;
+    }
     s.export_dir = s.export_dir.trim().to_owned();
     if !Path::new(&s.export_dir).is_absolute() {
         return Err(AppError::other("Choose a full folder path for exports"));

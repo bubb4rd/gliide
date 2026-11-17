@@ -4,13 +4,13 @@
   promises), Experience (drop or choose a resume; the import review comes back here; building one with your agent is
   coming), What it says (what the feed looks for, worked out from the resume and changed in place, what only you can
   say, and whether it pulls), Agents (Claude Code, Codex and Antigravity as a choice of one, saved as the agent every
-  model call runs on, each found and signed in or not, checked again as you arrive and on R; the chosen one's problem
-  and how to install it), Appearance (the theme, applied as you choose) and Ready (your experience, what you're looking
-  for and your agent, each a way back to its step). The step is in the URL (`?step=says`) so the import review can come
-  back to it. ⏎ goes on, ⌘[ goes back, a done step in the bar goes back to it; Skip setup and the last step's button
-  end the setup for good. The footer follows the step (held at the window's foot once a step is taller than it). A
-  step leaves sideways toward where you came from and the next enters from where you're going, its parts 100ms apart;
-  with reduced motion they only fade.
+  role runs on, which Settings can split later; each found and signed in or not, checked again as you arrive and on R;
+  the chosen one's problem and how to install it), Appearance (the theme, applied as you choose) and Ready (your
+  experience, what you're looking for and your agent, each a way back to its step). The step is in the URL
+  (`?step=says`) so the import review can come back to it. ⏎ goes on, ⌘[ goes back, a done step in the bar goes back
+  to it; Skip setup and the last step's button end the setup for good. The footer follows the step (held at the
+  window's foot once a step is taller than it). A step leaves sideways toward where you came from and the next enters
+  from where you're going, its parts 100ms apart; with reduced motion they only fade.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
@@ -169,10 +169,11 @@
     checking = false;
   }
 
-  /** The agent model calls run on (Claude Code until you choose another), and its status. */
-  const chosen = $derived(app.agentInfo);
-  const agent = $derived(app.agent);
-  const statusOf = (id: Agent) => app.agents?.find((a) => a.agent === id) ?? null;
+  /** The agent the setup chose for every role (Claude Code until you choose another; Reading's, should Settings have
+   *  split them), and its status. */
+  const chosen = $derived(app.routes.read.info);
+  const agent = $derived(app.routes.read.status);
+  const statusOf = (id: Agent) => app.status(id);
   function badgeOf(status: AgentStatus | null) {
     if (!status) return { tone: "neutral", text: checking ? "Checking…" : "Not checked" } as const;
     if (!status.found) return { tone: "danger", text: "Not found" } as const;
@@ -191,8 +192,11 @@
    *  before you try. */
   const agentMissing = $derived(agentBadge.tone === "danger" || agentBadge.tone === "warn");
 
+  /** Runs every role on `id`, with that agent's own model for each. */
   function chooseAgent(id: Agent) {
-    if (app.settings?.agent !== id) void save({ agent: id });
+    const routes = app.settings?.routes;
+    if (routes && Object.values(routes).some((a) => a !== id))
+      void save({ routes: { read: id, tailor: id, write: id, coach: id } });
   }
 
   function visit(url: string) {
@@ -544,7 +548,7 @@
           {:else if step === "agent"}
             {@render intro(
               "Choose your agent",
-              "gliide reads your resume and postings, and suggests edits, through the agent you choose, signed in on your own plan. It never sees a credential.",
+              "gliide reads your resume and postings, and suggests edits, through the agent you choose, signed in on your own plan. It never sees a credential. You can split the work between agents later in Settings.",
             )}
             <Card class="turn" style="--i: 2">
               <div class="rows">

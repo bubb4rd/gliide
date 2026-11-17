@@ -53,7 +53,6 @@
 </script>
 
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
@@ -72,6 +71,7 @@
   } from "$lib/feed";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
+  import { shell } from "$lib/stores/shell.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import {
     Badge,
@@ -331,7 +331,7 @@
       body="Turn it on in Settings to pull new postings from freehire and your other sources several times a day."
     >
       {#snippet action()}
-        <Button variant="primary" size="lg" kbd="⌘," onclick={() => goto("/settings")}>Open Settings</Button>
+        <Button variant="primary" size="lg" kbd="⌘," onclick={() => shell.openSettings("feed")}>Open Settings</Button>
       {/snippet}
     </Empty>
   </div>

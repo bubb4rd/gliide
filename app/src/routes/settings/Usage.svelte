@@ -1,9 +1,9 @@
 <!--
-  Settings → Usage: the tokens every model call used and what they'd cost at API prices, over the range you pick
-  (7, 30 or 90 days, or all time). Six stats, cost by day, the busiest days (a heatmap of the last 12 weeks, the three
-  busiest in the range and the weekday most of it lands on), then by feature, by model and the token mix. Claude Code
-  says what each call cost; Codex and Antigravity report tokens only, so theirs is estimated from list prices, and the
-  screen says which is which. Export CSV writes every call. Nothing is recorded before this shipped.
+  Settings → Usage (its pane's card; the pane says what it is): the tokens every model call used and what they'd cost at API prices, over the range you pick
+  (7, 30 or 90 days, or all time). The range's cost captions the ledger of cost by day, stacked by token kind, with a
+  sentence on where it went; then by feature, by model and the token mix. Claude Code says what each call cost; Codex
+  and Antigravity report tokens only, so theirs is estimated from list prices, and the screen says which is which.
+  Export CSV writes every call. Nothing is recorded before this shipped.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -22,7 +22,6 @@
     type ChartBar,
     CompanyMark,
     dayKey,
-    Heatmap,
     Meter,
     Segmented,
     StackedBar,
@@ -56,12 +55,18 @@
     dig: "Dig",
     debrief: "Reading debriefs",
   };
-  const KINDS = ["Input", "Output", "Cache write", "Cache read"] as const;
+  /** The token kinds, output first (the dearest per token), as the ledger stacks them from the baseline up and the
+   *  mix lays them out: each with its place in a day's four (input, output, cache write, cache read). */
+  const KINDS = [
+    { label: "Output", at: 1 },
+    { label: "Input", at: 0 },
+    { label: "Cache write", at: 2 },
+    { label: "Cache read", at: 3 },
+  ] as const;
   /** Rows By feature shows before "Show n more". */
   const FOLDED = 6;
   /** Past this many days, All time draws a bar a week. */
   const DAILY_MAX = 120;
-  const HEAT_WEEKS = 12;
 
   let view = $state<UsageView | null>(null);
   let failed = $state<string | null>(null);
@@ -85,7 +90,6 @@
   const shortDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
   const weekdayShort = new Intl.DateTimeFormat(undefined, { weekday: "short" });
   const weekdayLong = new Intl.DateTimeFormat(undefined, { weekday: "long" });
-  const monthShort = new Intl.DateTimeFormat(undefined, { month: "short" });
   const fullDate = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
 
   /** Dollars: two decimals ("<$0.01" for a sliver); `fine` (a call's cost) gives three under ten cents. */
@@ -94,8 +98,6 @@
     if (n > 0 && n < 0.01 && !fine) return "<$0.01";
     return (fine && n < 0.1 ? money3 : money2).format(n);
   }
-  /** A gridline's dollars: whole, else cents. */
-  const gridMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
   const tokens = (n: number) => compact.format(n);
   const calls = (n: number) => `${whole.format(n)} ${n === 1 ? "call" : "calls"}`;
   function percent(part: number, of: number): string {
@@ -173,20 +175,34 @@
   /** The cost split by token kind, over the calls with a price. */
   const priced = $derived(sum.byKind.reduce((a, b) => a + b, 0));
   const rangeWords = $derived(range === "all" ? "since usage began" : `in the last ${range} days`);
+  const rangeDates = $derived(spanDays === 1 ? "today" : `${shortDay.format(from)} – today`);
 
-  const busiest = $derived([...byDay].sort((a, b) => busier(a[1], b[1])).slice(0, 3));
-  /** What a day went on most. */
-  function mostly(day: string): string {
-    const top = [...sumBy(rows.filter((r) => r.day === day), (r) => r.feature)].sort((a, b) => busier(a[1], b[1]))[0];
-    return top ? FEATURES[top[0]] : "";
-  }
-  /** "Most of your usage lands on Tuesdays", once the range holds a few weeks of it. */
+  const busiest = $derived([...byDay].sort((a, b) => busier(a[1], b[1]))[0]);
+  /** "Most of your usage lands on Tuesdays.", once the range holds a few weeks of it. */
   const weekday = $derived.by(() => {
     if (spanDays < 14 || activeDays < 5) return null;
     const days = Array.from({ length: 7 }, empty);
     for (const r of rows) add(days[date(r.day).getDay()], r);
     const best = days.map((s, i) => ({ s, i })).sort((a, b) => busier(a.s, b.s))[0];
     return `Most of your usage lands on ${weekdayLong.format(addDays(today, best.i - today.getDay()))}s.`;
+  });
+  /** The range's averages and busiest day, behind its cost. */
+  const totalTip = $derived<TipData>({
+    rows: [
+      { label: "Per active day", value: money(activeDays ? sum.cost / activeDays : 0) },
+      { label: "Per call", value: money(sum.calls ? sum.cost / sum.calls : 0, true) },
+      ...(busiest ? [{ label: "Busiest day", value: `${shortDay.format(date(busiest[0]))} · ${money(busiest[1].cost)}` }] : []),
+    ],
+    note: "Per active day: averaged over the days with any model call",
+  });
+  /** Under the sentence: the calls, where the cost came from, the weekday it lands on. */
+  const facts = $derived.by(() => {
+    const parts = [`${calls(sum.calls)} on ${activeDays} of ${spanDays} ${spanDays === 1 ? "day" : "days"}`];
+    if (sum.estimated && sum.reported) parts.push(`${money(sum.estimated)} of it estimated`);
+    else if (sum.estimated) parts.push("estimated from list prices");
+    else if (sum.reported) parts.push("reported by the agent");
+    if (sum.unpriced) parts.push(`${calls(sum.unpriced)} without a price`);
+    return `${parts.join(" · ")}.${weekday ? ` ${weekday}` : ""}`;
   });
 
   const features = $derived([...sumBy(rows, (r) => r.feature)].sort((a, b) => busier(a[1], b[1])));
@@ -217,62 +233,63 @@
     return parts.join(" · ");
   }
 
-  // ── The chart: a bar a day, or a week once All time runs long ──
+  // ── The ledger: a bar a day (a week once All time runs long), its cost stacked by kind ──
   const weekly = $derived(range === "all" && spanDays > DAILY_MAX);
   function dayTip(title: string, s: Sum): TipData {
     if (!s.calls) return { title, value: money(0), note: "No model calls" };
+    // The bar is the cost by kind; a day with no price shows its tokens by kind instead.
+    const priced = s.byKind.some((c) => c > 0);
     return {
       title,
       value: money(s.cost),
       rows: [
-        ...KINDS.map((label, i) => ({ label, value: tokens(s.tokens[i]) })),
+        ...KINDS.map((k, n) => ({
+          label: k.label,
+          value: priced ? money(s.byKind[k.at]) : tokens(s.tokens[k.at]),
+          step: segmentStep(n),
+        })),
         { label: "Model calls", value: whole.format(s.calls) },
+        { label: "Tokens", value: tokens(total(s)) },
       ],
       note: costNote(s),
     };
   }
+  const bar = (key: string, s: Sum, title: string): ChartBar => ({
+    key,
+    value: s.cost,
+    parts: KINDS.map((k) => s.byKind[k.at]),
+    tip: dayTip(title, s),
+  });
   const bars = $derived.by<ChartBar[]>(() => {
     const out: ChartBar[] = [];
     if (weekly) {
-      // Weeks from the Sunday on or before the first day; each month's first week names it.
-      let lastMonth = -1;
+      // Weeks from the Sunday on or before the first day.
       for (let start = addDays(from, -from.getDay()); start <= today; start = addDays(start, 7)) {
         const s = empty();
         for (let i = 0; i < 7; i++) {
           const day = byDay.get(dayKey(addDays(start, i)));
           if (day) add(s, day);
         }
-        const tick = start.getMonth() !== lastMonth ? monthShort.format(start) : undefined;
-        lastMonth = start.getMonth();
-        out.push({ key: dayKey(start), value: s.cost, tick, tip: dayTip(`Week of ${shortDay.format(start)}`, s) });
+        out.push(bar(dayKey(start), s, `Week of ${shortDay.format(start)}`));
       }
-      return out;
+    } else {
+      for (let i = 0; i < spanDays; i++) {
+        const d = addDays(from, i);
+        const last = i === spanDays - 1;
+        out.push(bar(dayKey(d), byDay.get(dayKey(d)) ?? empty(), last ? "Today, so far" : longDay.format(d)));
+      }
     }
-    // A week names each day; a month each Monday; longer, every other Monday. Today always.
-    const every = spanDays <= 7 ? 1 : spanDays <= 31 ? 1 : 2;
-    let mondays = 0;
-    for (let i = 0; i < spanDays; i++) {
-      const d = addDays(from, i);
-      const s = byDay.get(dayKey(d)) ?? empty();
-      const last = i === spanDays - 1;
-      let tick: string | undefined;
-      if (last) tick = "Today";
-      else if (spanDays <= 7) tick = weekdayShort.format(d);
-      else if (d.getDay() === 1 && mondays++ % every === 0 && spanDays - i > 4) tick = shortDay.format(d);
-      out.push({ key: dayKey(d), value: s.cost, tick, tip: dayTip(last ? "Today, so far" : longDay.format(d), s) });
-    }
+    // A week names each day; longer, the first, the middle and the last ("Today", "This week").
+    const last = out.length - 1;
+    const name = (i: number) => {
+      const d = date(out[i].key);
+      if (i === last) return weekly ? "This week" : "Today";
+      return out.length <= 7 ? weekdayShort.format(d) : shortDay.format(d);
+    };
+    const ticked = out.length <= 7 ? out.map((_, i) => i) : out.length > 2 ? [0, Math.floor(last / 2), last] : [last];
+    for (const i of ticked) out[i].tick = name(i);
     return out;
   });
-
-  // ── The heatmap: the last 12 weeks by cost (by tokens while nothing has a price) ──
-  const heatSums = $derived(sumBy(view?.rows ?? [], (r) => r.day));
-  const anyPriced = $derived([...heatSums.values()].some((s) => s.cost > 0));
-  const heat = $derived(new Map([...heatSums].map(([d, s]) => [d, anyPriced ? s.cost : total(s)])));
-  function describeHeat(d: Date): TipData {
-    const s = heatSums.get(dayKey(d));
-    if (!s) return { title: longDay.format(d), value: money(0), note: "No model calls" };
-    return { title: longDay.format(d), value: money(s.cost), note: `${tokens(total(s))} tokens · ${calls(s.calls)}` };
-  }
 
   async function exportCsv() {
     const path = await save({
@@ -293,19 +310,21 @@
   }
 </script>
 
-<Card pad as="section" id="usage" tabindex={-1} aria-labelledby="usage-title">
+<Card pad>
   <div class="card">
-    <div class="head">
-      <h2 class="name" id="usage-title">Usage</h2>
-      {#if view?.rows.length}
-        <Segmented options={RANGES} bind:value={range} label="Usage over" />
-        <Button size="sm" variant="ghost" icon={Download} disabled={exporting} onclick={exportCsv}>Export CSV</Button>
-      {/if}
-    </div>
-    <p class="lede">
-      Tokens your model calls used, and what they’d cost at API prices. On a subscription that’s a measure of what you
-      used, not your bill.
-    </p>
+    {#if view?.rows.length}
+      <!-- The range's cost captions the ledger; the range and Export CSV at the trailing edge. -->
+      <div class="head">
+        <p class="total">
+          <span class="title num" {@attach tip(totalTip)}>{money(sum.cost)}</span>
+          <span class="meta num">{tokens(total(sum))} tokens · {rangeDates}</span>
+        </p>
+        <div class="controls">
+          <Segmented options={RANGES} bind:value={range} label="Usage over" />
+          <Button size="sm" variant="ghost" icon={Download} disabled={exporting} onclick={exportCsv}>Export CSV</Button>
+        </div>
+      </div>
+    {/if}
 
     {#if failed}
       <p class="problem" role="alert">Couldn’t read the usage: {failed}</p>
@@ -317,123 +336,47 @@
         </p>
       </div>
     {:else if view}
-      <dl class="stats">
-        <div class="stat">
-          <dt>Est. cost</dt>
-          <dd class="title num">{money(sum.cost)}</dd>
-          <dd class="sub num">
-            {#if sum.estimated && sum.reported}
-              {money(sum.estimated)} of it estimated
-            {:else if sum.estimated}
-              Estimated from list prices
-            {:else if sum.reported}
-              Reported by the agent
-            {:else}
-              No calls {rangeWords}
-            {/if}
-          </dd>
-        </div>
-        <div class="stat">
-          <dt>Tokens</dt>
-          <dd class="title num">{tokens(total(sum))}</dd>
-          <dd class="sub num">{percent(sum.tokens[3], total(sum))} cache reads</dd>
-        </div>
-        <div class="stat">
-          <dt>Model calls</dt>
-          <dd class="title num">{whole.format(sum.calls)}</dd>
-          <dd class="sub num">on {activeDays} of {spanDays} {spanDays === 1 ? "day" : "days"}</dd>
-        </div>
-        <div class="stat" {@attach tip("Averaged over the days with any model call")}>
-          <dt>Per active day</dt>
-          <dd class="title num">{money(activeDays ? sum.cost / activeDays : 0)}</dd>
-          <dd class="sub num">
-            {tokens(activeDays ? total(sum) / activeDays : 0)} tokens · {calls(
-              activeDays ? Math.round(sum.calls / activeDays) : 0,
-            )}
-          </dd>
-        </div>
-        <div class="stat">
-          <dt>Per call</dt>
-          <dd class="title num">{money(sum.calls ? sum.cost / sum.calls : 0, true)}</dd>
-          <dd class="sub num">{tokens(sum.calls ? total(sum) / sum.calls : 0)} tokens</dd>
-        </div>
-        <div class="stat">
-          <dt>Busiest day</dt>
-          {#if busiest[0]}
-            <dd class="title num">{shortDay.format(date(busiest[0][0]))}</dd>
-            <dd class="sub num">{money(busiest[0][1].cost)} · {calls(busiest[0][1].calls)}</dd>
-          {:else}
-            <dd class="title num">—</dd>
-            <dd class="sub">No calls {rangeWords}</dd>
-          {/if}
-        </div>
-      </dl>
-
-      <section class="group" aria-labelledby="usage-daily">
-        <h3 class="label" id="usage-daily">Est. cost by {weekly ? "week" : "day"}</h3>
-        <BarChart {bars} format={gridMoney} label="Estimated cost by {weekly ? 'week' : 'day'}, {rangeWords}" />
-      </section>
-
-      <section class="group" aria-labelledby="usage-busiest">
-        <h3 class="label" id="usage-busiest">Busiest days</h3>
-        <div class="busiest">
-          <Heatmap
-            counts={heat}
-            weeks={HEAT_WEEKS}
-            end={today}
-            start={since ?? undefined}
-            label="Estimated cost by day, last {HEAT_WEEKS} weeks"
-            describe={(d) => describeHeat(d)}
-          />
-          <div class="top">
-            {#if busiest.length}
-              <ol class="days">
-                {#each busiest as [day, s] (day)}
-                  <li class="day">
-                    <span class="day-name">{longDay.format(date(day))}</span>
-                    <span class="num end">{money(s.cost)}</span>
-                    <span class="meta">{calls(s.calls)} · mostly {mostly(day)}</span>
-                    <span class="meta num end">{tokens(total(s))} tokens</span>
-                  </li>
-                {/each}
-              </ol>
-            {:else}
-              <p class="hint">No calls {rangeWords}.</p>
-            {/if}
-            {#if weekday}<p class="pattern">{weekday}</p>{/if}
+      <section class="ledger" aria-label="Estimated cost by {weekly ? 'week' : 'day'}">
+        <BarChart {bars} format={(n) => money(n)} label="Estimated cost by {weekly ? 'week' : 'day'}, {rangeWords}" />
+        {#if sum.calls}
+          <div class="summary">
+            <p class="sentence">
+              {#if priced}
+                <strong class="num">{money(sum.byKind[1])}</strong> on output
+              {:else}
+                <strong class="num">{tokens(sum.tokens[1])}</strong> output tokens
+              {/if}
+              · <strong class="num">{percent(sum.tokens[3], total(sum))}</strong> of tokens read from cache
+            </p>
+            <ul class="legend" aria-label="Bars stacked by">
+              {#each KINDS as kind, n (kind.label)}
+                <li><StepKey step={segmentStep(n)} />{kind.label}</li>
+              {/each}
+            </ul>
           </div>
-        </div>
+          <p class="hint num">{facts}</p>
+        {:else}
+          <p class="hint">No model calls {rangeWords}.</p>
+        {/if}
       </section>
 
       {#if features.length}
         <section class="group" aria-labelledby="usage-features">
-          <table class="breakdown">
-            <thead>
-              <tr>
-                <th scope="col" class="label" id="usage-features">By feature</th>
-                <th scope="col" class="label n">Calls</th>
-                <th scope="col" class="label n">Tokens</th>
-                <th scope="col" class="label n">Est. cost</th>
-                <th scope="col" class="label n last">Share of cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each shownFeatures as [feature, s] (feature)}
-                <tr>
-                  <th scope="row">{FEATURES[feature]}</th>
-                  <td class="n num">{whole.format(s.calls)}</td>
-                  <td class="n num">{tokens(total(s))}</td>
-                  <td class="n num" {@attach tip(costNote(s))}>{money(s.cost)}</td>
-                  <td class="n">
-                    <span class="share">
-                      <Meter value={sum.cost ? s.cost / sum.cost : 0} label="{FEATURES[feature]}, share of cost" />
-                      <span class="num">{percent(s.cost, sum.cost)}</span>
-                    </span>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <h3 class="label" id="usage-features">By feature</h3>
+          <ul class="rows">
+            {#each shownFeatures as [feature, s] (feature)}
+              <li class="row">
+                <span class="name">{FEATURES[feature]}</span>
+                <span class="n calls num">{calls(s.calls)}</span>
+                <span class="n num">{tokens(total(s))} tokens</span>
+                <span class="n cost num" {@attach tip(costNote(s))}>{money(s.cost)}</span>
+                <span class="n share">
+                  <Meter value={sum.cost ? s.cost / sum.cost : 0} label="{FEATURES[feature]}, share of cost" />
+                  <span class="num">{percent(s.cost, sum.cost)}</span>
+                </span>
+              </li>
+            {/each}
+          </ul>
           {#if features.length > FOLDED}
             <div>
               <Button
@@ -450,49 +393,37 @@
         </section>
 
         <section class="group" aria-labelledby="usage-models">
-          <table class="breakdown">
-            <thead>
-              <tr>
-                <th scope="col" class="label" id="usage-models">By model</th>
-                <th scope="col" class="label n">Calls</th>
-                <th scope="col" class="label n">Tokens</th>
-                <th scope="col" class="label n">Est. cost</th>
-                <th scope="col" class="label n last">Cost from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each models as { key, agent, model, s } (key)}
-                <tr>
-                  <th scope="row">
-                    <span class="model">
-                      <CompanyMark size={20} src={makerIcon(model) ?? AGENTS[agent].icon} />
-                      <span class="model-name">{app.modelName(model)}</span>
-                      <span class="meta">{AGENTS[agent].name}</span>
-                    </span>
-                  </th>
-                  <td class="n num">{whole.format(s.calls)}</td>
-                  <td class="n num">{tokens(total(s))}</td>
-                  <td class="n num">{money(s.cost)}</td>
-                  <td class="n from" {@attach tip(costNote(s, AGENTS[agent].name))}>{costFrom(s)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <h3 class="label" id="usage-models">By model</h3>
+          <ul class="rows">
+            {#each models as { key, agent, model, s } (key)}
+              <li class="row">
+                <span class="name model">
+                  <CompanyMark size={20} src={makerIcon(model) ?? AGENTS[agent].icon} />
+                  <span class="model-name">{app.modelName(model)}</span>
+                  <span class="meta">{AGENTS[agent].name}</span>
+                </span>
+                <span class="n calls num">{calls(s.calls)}</span>
+                <span class="n num">{tokens(total(s))} tokens</span>
+                <span class="n cost num">{money(s.cost)}</span>
+                <span class="n from" {@attach tip(costNote(s, AGENTS[agent].name))}>{costFrom(s)}</span>
+              </li>
+            {/each}
+          </ul>
         </section>
 
         <section class="group" aria-labelledby="usage-mix">
           <h3 class="label" id="usage-mix">Token mix</h3>
-          <StackedBar segments={KINDS.map((label, i) => ({ label, value: sum.tokens[i] }))} label="Tokens by kind" />
+          <StackedBar segments={KINDS.map((k) => ({ label: k.label, value: sum.tokens[k.at] }))} label="Tokens by kind" />
           <dl class="mix">
-            {#each KINDS as kind, i (kind)}
+            {#each KINDS as kind, n (kind.label)}
               <div class="kind">
-                <dt><StepKey step={segmentStep(i)} />{kind}</dt>
+                <dt><StepKey step={segmentStep(n)} />{kind.label}</dt>
                 <dd class="num">
-                  <span class="kind-tokens">{tokens(sum.tokens[i])}</span>
-                  <span class="meta">{percent(sum.tokens[i], total(sum))}</span>
+                  <span class="kind-tokens">{tokens(sum.tokens[kind.at])}</span>
+                  <span class="meta">{percent(sum.tokens[kind.at], total(sum))}</span>
                 </dd>
                 {#if priced}
-                  <dd class="meta num">{money(sum.byKind[i])} · {percent(sum.byKind[i], priced)} of cost</dd>
+                  <dd class="meta num">{money(sum.byKind[kind.at])} · {percent(sum.byKind[kind.at], priced)} of cost</dd>
                 {/if}
               </div>
             {/each}
@@ -524,33 +455,37 @@
     gap: var(--space-1);
     container-type: inline-size;
   }
+  /* The range's cost and what it holds, then the range and Export CSV at the trailing edge. */
   .head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2);
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
     min-height: var(--control-sm);
   }
-  .name {
-    flex: 1;
+  .total {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
     min-width: 0;
     margin: 0;
-    font-size: var(--text-lg);
-    line-height: var(--leading-lg);
-    letter-spacing: var(--tracking-lg);
-    font-weight: var(--weight-medium);
   }
-  .lede,
+  .total .meta {
+    color: var(--ink-3);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
   .hint,
   .problem,
-  .pattern,
+  .sentence,
   .none-title {
     margin: 0;
     text-wrap: pretty;
-  }
-  .lede,
-  .pattern {
-    color: var(--ink-2);
   }
   .hint {
     font-size: var(--text-sm);
@@ -574,48 +509,57 @@
   .none-title {
     font-weight: var(--weight-medium);
   }
+  /* Nothing yet, or a failure, opens the card: no hairline or gap over it. */
+  .card > .none:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    box-shadow: none;
+  }
+  .card > .problem:first-child {
+    margin-top: 0;
+  }
   .foot {
     margin-top: var(--space-5);
     padding-top: var(--space-3);
     box-shadow: inset 0 1px 0 var(--line);
   }
 
-  /* Overview's stats: three to a row, hairlines between the rows. */
-  .stats {
+  /* The ledger under its cost: the sentence on where it went beside the parts' key, the facts under them. */
+  .ledger {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-3) var(--space-4);
-    margin: var(--space-3) 0 0;
-    padding-top: var(--space-3);
-    box-shadow: inset 0 1px 0 var(--line);
+    gap: var(--space-2);
+    margin-top: var(--space-4);
   }
-  .stat {
-    display: grid;
-    align-content: start;
-    gap: var(--space-0-5);
-    min-width: 0;
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-4);
+    margin-top: var(--space-2);
   }
-  .stat:nth-child(n + 4) {
-    padding-top: var(--space-3);
-    box-shadow: inset 0 1px 0 var(--line);
-  }
-  .stat dt,
-  .sub {
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-  }
-  .stat dt {
+  .sentence {
     color: var(--ink-2);
   }
-  .sub {
-    color: var(--ink-3);
+  .sentence strong {
+    font-weight: var(--weight-medium);
+    color: var(--ink);
   }
-  .stat dd {
-    min-width: 0;
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
     margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--ink-2);
+  }
+  .legend li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
   }
 
   .group {
@@ -628,74 +572,36 @@
     color: var(--ink-3);
   }
 
-  .busiest {
+  /* A breakdown: a row each on hairlines, no header (each number says what it counts), the columns shared down the
+     list so the numbers line up at their trailing edges. */
+  .rows {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: var(--space-6);
-    align-items: start;
-  }
-  .top {
-    display: grid;
-    gap: var(--space-3);
-    min-width: 0;
-  }
-  .days {
-    display: grid;
+    grid-template-columns: minmax(0, 1fr) 88px 104px 80px 112px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .day {
+  .row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: var(--space-3);
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: center;
     padding-block: var(--space-2);
-    box-shadow: inset 0 -1px 0 var(--line);
+    box-shadow: inset 0 1px 0 var(--line);
   }
-  .day:first-child {
-    padding-top: 0;
-  }
-  .day > span {
+  .row > span {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .end {
-    text-align: end;
-  }
-
-  /* A breakdown: its label row heads the columns; rows on hairlines, numbers at their trailing edge. */
-  .breakdown {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-  }
-  .breakdown th,
-  .breakdown td {
-    overflow: hidden;
-    padding: var(--space-2) 0;
-    text-align: start;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: var(--weight-regular);
-  }
-  .breakdown thead th {
-    width: 72px;
-    padding-top: 0;
-  }
-  .breakdown thead th:first-child {
-    width: auto;
-  }
-  .breakdown thead th.last {
-    width: 112px;
-  }
-  .breakdown tbody tr {
-    box-shadow: inset 0 1px 0 var(--line);
-  }
-  .breakdown .n {
+  .n {
     padding-inline-start: var(--space-3);
     text-align: end;
+    color: var(--ink-2);
+  }
+  .n.cost {
+    color: var(--ink);
   }
   .from {
     color: var(--ink-2);
@@ -752,17 +658,13 @@
     font-weight: var(--weight-medium);
   }
 
-  /* Narrow: two stats to a row, the heatmap over the busiest days, the mix in two columns. */
+  /* Narrow: the rows without their calls, the mix in two columns. */
   @container (width < 520px) {
-    .stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .rows {
+      grid-template-columns: minmax(0, 1fr) 104px 80px 112px;
     }
-    .stat:nth-child(n + 3) {
-      padding-top: var(--space-3);
-      box-shadow: inset 0 1px 0 var(--line);
-    }
-    .busiest {
-      grid-template-columns: minmax(0, 1fr);
+    .calls {
+      display: none;
     }
     .mix {
       grid-template-columns: repeat(2, minmax(0, 1fr));

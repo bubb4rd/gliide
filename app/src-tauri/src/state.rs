@@ -13,15 +13,15 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use resume_core::{Bank, Master, PageFacts, Resume, resolve};
-use resume_llm::{Agent, AgentKind, LlmError, Structured};
+use resume_llm::{Agent, LlmError, Route, Structured};
 use resume_render::{FontOptions, Renderer};
 use resume_store::{Rev, Store, StoreError};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
 
 use crate::dto::{
-    AgentsSettings, Backdrop, Feature, FeedStatus, Mode, Notifications, Progress, Settings, Stage, StartupKind,
-    StartupProblem, Theme,
+    AgentsSettings, Backdrop, ErrorKind, Feature, FeedStatus, Mode, Notifications, Progress, Routes, Settings, Stage,
+    StartupKind, StartupProblem, Theme,
 };
 use crate::error::{AppError, Result};
 use crate::export;
@@ -259,14 +259,34 @@ impl App {
         Ok(Some(Library { bank, masters }))
     }
 
-    /// The agent the settings run (at the path they name, else the one found), recording each call's usage under
-    /// `feature`.
-    pub async fn agent(self: &Arc<Self>, feature: Feature) -> Result<Metered> {
-        let s = self.settings();
-        let kind = AgentKind::from(s.agent);
-        let agent = match s.current().path.clone().filter(|p| !p.trim().is_empty()) {
-            Some(p) => Agent::new(kind, p),
-            None => Agent::discover(kind).await?,
+    /// The route `feature`'s role runs on, as the settings say now. Sync, so callers key their caches and single-flight
+    /// calls by its model before anything awaits.
+    pub fn route(&self, feature: Feature) -> Route {
+        lock(&self.settings).route(feature.role())
+    }
+
+    /// `route`'s agent (at the path the settings name for it, else the one found), recording each call's usage under
+    /// `feature`. Not found, the error names the role, since another agent for it, in Settings, is one way out.
+    pub async fn llm(self: &Arc<Self>, route: &Route, feature: Feature) -> Result<Metered> {
+        let path = lock(&self.settings)
+            .agents
+            .get(route.agent.into())
+            .path
+            .clone()
+            .filter(|p| !p.trim().is_empty());
+        let agent = match path {
+            Some(p) => Agent::new(route.agent, p),
+            None => Agent::discover(route.agent).await.map_err(|_| {
+                AppError::new(
+                    ErrorKind::Agent,
+                    format!(
+                        "{} runs on {}, which gliide can't find on this Mac. Install it, set its path in Settings, \
+                         or choose another agent for it.",
+                        feature.role().name(),
+                        route.agent.name()
+                    ),
+                )
+            })?,
         };
         Ok(Metered::new(agent, Arc::clone(self), feature))
     }
@@ -399,7 +419,7 @@ fn default_settings() -> Settings {
         theme: Theme::Light,
         backdrop: Backdrop::None,
         suggestions_from: Mode::BankAware,
-        agent: crate::dto::Agent::Claude,
+        routes: Routes::default(),
         agents: AgentsSettings::default(),
         export_dir: home.join("Documents/Resumes").display().to_string(),
         onboarded: false,

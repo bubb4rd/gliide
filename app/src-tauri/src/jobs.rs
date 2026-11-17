@@ -181,24 +181,25 @@ pub fn posting(app: &App, job: &str) -> Result<PostingRow> {
 /// Extract call (cancellable under the posting's id, its usage recorded under `feature`), joined by any asking for the
 /// same while it runs.
 pub async fn requirements(app: &Arc<App>, row: &PostingRow, feature: Feature) -> Result<Requirements> {
-    let model = app.settings().current().extract_model.clone();
+    let route = app.route(feature);
+    let model = &route.model;
     let key = extract_key(&row.posting);
     single_flight(app, &format!("extract {model} {key}"), async |_| {
-        if let Some(req) = lock(&app.store).requirements(&key, &model)? {
+        if let Some(req) = lock(&app.store).requirements(&key, model)? {
             return Ok(req);
         }
-        let llm = app.agent(feature).await?;
+        let llm = app.llm(&route, feature).await?;
         let posting = row.posting.clone();
         let m = model.clone();
         let (req, out) = model_call(app, &row.id, Stage::Extracting, async move {
             extract::extract(&llm, &extract::schema(), &posting, &m).await
         })
         .await?;
-        app.note_served(&model, &out);
+        app.note_served(model, &out);
         lock(&app.store).put_requirements(
             &row.id,
             &key,
-            &model,
+            model,
             &req,
             out.latency().as_millis() as u64,
         )?;

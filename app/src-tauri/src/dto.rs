@@ -99,32 +99,190 @@ impl From<resume_llm::AgentKind> for Agent {
     }
 }
 
-/// One agent's own settings, kept while another runs.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+/// A kind of work gliide asks an agent for, each run on the agent and model Settings names for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Role {
+    /// Postings, feed checks, imports and invites read into structure: fast, exact and the most frequent.
+    Read,
+    /// Suggestions, rewrites and the review's chat: reasoning grounded in the bank.
+    Tailor,
+    /// The cover letter: prose.
+    Write,
+    /// Prep, practice, nudges, Dig and debriefs: conversational judgment.
+    Coach,
+}
+
+impl Role {
+    pub const ALL: [Self; 4] = [Self::Read, Self::Tailor, Self::Write, Self::Coach];
+
+    /// Its name in the UI's words, for messages: "Reading", "Tailoring", "Writing", "Coaching".
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Read => "Reading",
+            Self::Tailor => "Tailoring",
+            Self::Write => "Writing",
+            Self::Coach => "Coaching",
+        }
+    }
+
+    /// The features it runs, in [`Feature::ALL`]'s order.
+    pub fn features(self) -> Vec<Feature> {
+        Feature::ALL
+            .into_iter()
+            .filter(|f| f.role() == self)
+            .collect()
+    }
+}
+
+/// The agent each role runs on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[ts(export)]
+pub struct Routes {
+    pub read: Agent,
+    pub tailor: Agent,
+    pub write: Agent,
+    pub coach: Agent,
+}
+
+impl Routes {
+    /// Every role on `agent`, as the setup chooses and as settings saved before routes load.
+    pub fn all(agent: Agent) -> Self {
+        Self {
+            read: agent,
+            tailor: agent,
+            write: agent,
+            coach: agent,
+        }
+    }
+
+    pub fn get(&self, role: Role) -> Agent {
+        match role {
+            Role::Read => self.read,
+            Role::Tailor => self.tailor,
+            Role::Write => self.write,
+            Role::Coach => self.coach,
+        }
+    }
+
+    pub fn set(&mut self, role: Role, agent: Agent) {
+        match role {
+            Role::Read => self.read = agent,
+            Role::Tailor => self.tailor = agent,
+            Role::Write => self.write = agent,
+            Role::Coach => self.coach = agent,
+        }
+    }
+}
+
+/// One agent's `--model` alias, slug or name for each role; its default to begin with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct RoleModels {
+    pub read: String,
+    pub tailor: String,
+    pub write: String,
+    pub coach: String,
+}
+
+impl RoleModels {
+    /// `model` for every role.
+    pub fn all(model: &str) -> Self {
+        Self {
+            read: model.to_owned(),
+            tailor: model.to_owned(),
+            write: model.to_owned(),
+            coach: model.to_owned(),
+        }
+    }
+
+    pub fn get(&self, role: Role) -> &str {
+        match role {
+            Role::Read => &self.read,
+            Role::Tailor => &self.tailor,
+            Role::Write => &self.write,
+            Role::Coach => &self.coach,
+        }
+    }
+
+    pub fn get_mut(&mut self, role: Role) -> &mut String {
+        match role {
+            Role::Read => &mut self.read,
+            Role::Tailor => &mut self.tailor,
+            Role::Write => &mut self.write,
+            Role::Coach => &mut self.coach,
+        }
+    }
+}
+
+/// One agent's own settings, kept while no role runs on it.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AgentSettings {
-    /// Model calls may run on it, and the agent picker offers it. Off, it never runs a call but is still checked
-    /// (found, signed in), so it can be turned back on. The agent in use is always on. On for settings saved before
-    /// it existed.
-    #[serde(default = "on")]
+    /// Model calls may run on it, and the agent pickers offer it. Off, it never runs a call but is still checked
+    /// (found, signed in), so it can be turned back on. An agent a role runs on is always on. On for settings saved
+    /// before it existed.
     pub enabled: bool,
     /// The binary; `None` finds it (`resume_llm::AgentKind::find`).
     pub path: Option<String>,
-    /// A `--model` alias, slug or name for reading postings and resumes; the agent's default to begin with.
-    pub extract_model: String,
-    /// The same, for every other call.
-    pub suggest_model: String,
+    /// Its model for each role, so moving a role to another agent and back restores the model it had here.
+    pub models: RoleModels,
 }
 
 impl AgentSettings {
     pub fn new(agent: Agent) -> Self {
-        let model = resume_llm::AgentKind::from(agent).default_model();
         Self {
             enabled: true,
             path: None,
-            extract_model: model.to_owned(),
-            suggest_model: model.to_owned(),
+            models: RoleModels::all(resume_llm::AgentKind::from(agent).default_model()),
+        }
+    }
+}
+
+/// One agent's settings as stored, from any version: before roles it kept a model for reading postings and resumes
+/// (`extractModel`) and one for every other call (`suggestModel`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredAgentSettings {
+    #[serde(default = "on")]
+    enabled: bool,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    models: StoredRoleModels,
+    #[serde(default)]
+    extract_model: Option<String>,
+    #[serde(default)]
+    suggest_model: Option<String>,
+}
+
+/// Each role's model as stored; a role missing takes the older per-agent model, else the agent's default.
+#[derive(Default, Deserialize)]
+struct StoredRoleModels {
+    read: Option<String>,
+    tailor: Option<String>,
+    write: Option<String>,
+    coach: Option<String>,
+}
+
+impl StoredAgentSettings {
+    fn load(self, agent: Agent) -> AgentSettings {
+        let default = resume_llm::AgentKind::from(agent).default_model();
+        // Reading was the extract model's work; every other role was the suggest model's.
+        let read = self.extract_model.as_deref().unwrap_or(default);
+        let rest = self.suggest_model.as_deref().unwrap_or(default);
+        let m = self.models;
+        AgentSettings {
+            enabled: self.enabled,
+            path: self.path,
+            models: RoleModels {
+                read: m.read.unwrap_or_else(|| read.to_owned()),
+                tailor: m.tailor.unwrap_or_else(|| rest.to_owned()),
+                write: m.write.unwrap_or_else(|| rest.to_owned()),
+                coach: m.coach.unwrap_or_else(|| rest.to_owned()),
+            },
         }
     }
 }
@@ -134,30 +292,20 @@ fn on() -> bool {
 }
 
 /// Each agent's settings.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct AgentsSettings {
     pub claude: AgentSettings,
-    #[serde(default = "codex")]
     pub codex: AgentSettings,
-    #[serde(default = "antigravity")]
     pub antigravity: AgentSettings,
-}
-
-fn codex() -> AgentSettings {
-    AgentSettings::new(Agent::Codex)
-}
-
-fn antigravity() -> AgentSettings {
-    AgentSettings::new(Agent::Antigravity)
 }
 
 impl Default for AgentsSettings {
     fn default() -> Self {
         Self {
             claude: AgentSettings::new(Agent::Claude),
-            codex: codex(),
-            antigravity: antigravity(),
+            codex: AgentSettings::new(Agent::Codex),
+            antigravity: AgentSettings::new(Agent::Antigravity),
         }
     }
 }
@@ -180,6 +328,27 @@ impl AgentsSettings {
     }
 }
 
+/// The agents' settings as stored: an agent added since loads with its defaults.
+#[derive(Deserialize)]
+struct StoredAgents {
+    claude: Option<StoredAgentSettings>,
+    codex: Option<StoredAgentSettings>,
+    antigravity: Option<StoredAgentSettings>,
+}
+
+impl StoredAgents {
+    fn load(self) -> AgentsSettings {
+        let load = |s: Option<StoredAgentSettings>, agent| {
+            s.map_or_else(|| AgentSettings::new(agent), |s| s.load(agent))
+        };
+        AgentsSettings {
+            claude: load(self.claude, Agent::Claude),
+            codex: load(self.codex, Agent::Codex),
+            antigravity: load(self.antigravity, Agent::Antigravity),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -188,8 +357,8 @@ pub struct Settings {
     pub backdrop: Backdrop,
     /// What every review's suggestions draw on: the master alone, or the bank entries outside it too.
     pub suggestions_from: Mode,
-    /// The agent every model call runs on; Claude Code until you connect another.
-    pub agent: Agent,
+    /// The agent each role runs on; Claude Code for all until you choose another.
+    pub routes: Routes,
     /// Each agent's path and models.
     pub agents: AgentsSettings,
     /// Absolute folder for exported PDFs and `applications.csv`; `~/Documents/Resumes` by default.
@@ -202,14 +371,27 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// The settings of the agent calls run on.
-    pub fn current(&self) -> &AgentSettings {
-        self.agents.get(self.agent)
+    /// Where `role`'s calls run: its agent, and that agent's model for it.
+    pub fn route(&self, role: Role) -> resume_llm::Route {
+        let agent = self.routes.get(role);
+        resume_llm::Route {
+            agent: agent.into(),
+            model: self.agents.get(agent).models.get(role).to_owned(),
+        }
+    }
+
+    /// The agents some role runs on, each once, in `resume_llm::AgentKind::ALL`'s order.
+    pub fn agents_in_use(&self) -> impl Iterator<Item = Agent> + '_ {
+        resume_llm::AgentKind::ALL
+            .into_iter()
+            .map(Agent::from)
+            .filter(|a| Role::ALL.into_iter().any(|r| self.routes.get(r) == *a))
     }
 }
 
-/// Settings as stored, from any version: what older ones lack takes its default, and Claude Code's models and path,
-/// stored at the top before there were other agents, move to `agents.claude`.
+/// Settings as stored, from any version: what older ones lack takes its default; Claude Code's models and path,
+/// stored at the top before there were other agents, move to `agents.claude`; and the one agent every call ran on
+/// before routes runs every role.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredSettings {
@@ -220,9 +402,11 @@ struct StoredSettings {
     /// Settings saved while master-only was the default (as `defaultMode`) load bank-aware.
     #[serde(default)]
     suggestions_from: Mode,
+    routes: Option<StoredRoutes>,
+    /// The one agent every call ran on, before routes.
     #[serde(default)]
     agent: Agent,
-    agents: Option<AgentsSettings>,
+    agents: Option<StoredAgents>,
     extract_model: Option<String>,
     suggest_model: Option<String>,
     claude_path: Option<String>,
@@ -238,27 +422,50 @@ struct StoredSettings {
     notifications: Notifications,
 }
 
+/// Routes as stored: a role naming an agent this build doesn't know (or none) runs on Claude Code.
+#[derive(Deserialize)]
+struct StoredRoutes {
+    read: Option<String>,
+    tailor: Option<String>,
+    write: Option<String>,
+    coach: Option<String>,
+}
+
+impl StoredRoutes {
+    fn load(self) -> Routes {
+        let known = |a: Option<String>| {
+            a.and_then(|a| serde_json::from_value(serde_json::Value::String(a)).ok())
+                .unwrap_or_default()
+        };
+        Routes {
+            read: known(self.read),
+            tailor: known(self.tailor),
+            write: known(self.write),
+            coach: known(self.coach),
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for Settings {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = StoredSettings::deserialize(d)?;
-        let agents = s.agents.unwrap_or_else(|| {
-            let mut agents = AgentsSettings::default();
-            let claude = &mut agents.claude;
-            claude.path = s.claude_path;
-            if let Some(m) = s.extract_model {
-                claude.extract_model = m;
-            }
-            if let Some(m) = s.suggest_model {
-                claude.suggest_model = m;
-            }
-            agents
+        let agents = s.agents.unwrap_or_else(|| StoredAgents {
+            claude: Some(StoredAgentSettings {
+                enabled: true,
+                path: s.claude_path,
+                models: StoredRoleModels::default(),
+                extract_model: s.extract_model,
+                suggest_model: s.suggest_model,
+            }),
+            codex: None,
+            antigravity: None,
         });
         Ok(Self {
             theme: s.theme,
             backdrop: s.backdrop,
             suggestions_from: s.suggestions_from,
-            agent: s.agent,
-            agents,
+            routes: s.routes.map_or(Routes::all(s.agent), StoredRoutes::load),
+            agents: agents.load(),
             export_dir: s.export_dir,
             onboarded: s.onboarded,
             check_updates: s.check_updates,
@@ -2136,6 +2343,36 @@ pub enum Feature {
     Debrief,
 }
 
+impl Feature {
+    /// Every feature, in declaration order (Settings → Agents sums a role's latency over its features).
+    pub const ALL: [Self; 13] = [
+        Self::Requirements,
+        Self::FeedCheck,
+        Self::Suggestions,
+        Self::Rewrite,
+        Self::Chat,
+        Self::CoverLetter,
+        Self::Import,
+        Self::Invite,
+        Self::Prep,
+        Self::Practice,
+        Self::Nudges,
+        Self::Dig,
+        Self::Debrief,
+    ];
+
+    /// The role whose route runs it. Feed checks read as opened postings do, so a job's score in the feed and in its
+    /// review come from the same extraction.
+    pub const fn role(self) -> Role {
+        match self {
+            Self::Requirements | Self::FeedCheck | Self::Import | Self::Invite => Role::Read,
+            Self::Suggestions | Self::Rewrite | Self::Chat => Role::Tailor,
+            Self::CoverLetter => Role::Write,
+            Self::Prep | Self::Practice | Self::Nudges | Self::Dig | Self::Debrief => Role::Coach,
+        }
+    }
+}
+
 /// Settings → Usage: the model calls recorded, a row per day, feature, agent and model.
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -2188,9 +2425,27 @@ pub struct UsageDay {
     pub cost_by_kind: [f64; 4],
 }
 
+/// How fast a role's route answers on this Mac (Settings → Agents): the median wall time of the calls its agent and
+/// model made for the role's features, repair turns included.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RouteLatency {
+    pub role: Role,
+    pub agent: Agent,
+    /// The model the role asks for, as Settings names it.
+    pub model: String,
+    /// The median, in milliseconds; `None` below five timed calls, too few to say.
+    #[ts(type = "number | null")]
+    pub p50_ms: Option<u64>,
+    /// Timed calls (those recorded before latency was kept don't count).
+    #[ts(type = "number")]
+    pub calls: u64,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Agent, Backdrop, Mode, Settings};
+    use super::{Agent, Backdrop, Mode, Role, Routes, Settings};
 
     const SAVED_BEFORE: &str = r#"{"theme":"dark","defaultMode":"master-only","extractModel":"haiku",
         "suggestModel":"opus","exportDir":"/tmp","claudePath":"/opt/claude"}"#;
@@ -2222,17 +2477,16 @@ mod tests {
     #[test]
     fn settings_saved_before_other_agents_keep_claudes_models_and_path() {
         let settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
-        assert_eq!(settings.agent, Agent::Claude);
-        let claude = settings.current();
+        assert_eq!(settings.routes, Routes::all(Agent::Claude));
+        let claude = &settings.agents.claude;
         assert_eq!(claude.path.as_deref(), Some("/opt/claude"));
-        assert_eq!(
-            (claude.extract_model.as_str(), claude.suggest_model.as_str()),
-            ("haiku", "opus")
-        );
+        let models: Vec<&str> = Role::ALL.map(|r| claude.models.get(r)).into();
+        assert_eq!(models, ["haiku", "opus", "opus", "opus"]);
+        assert_eq!(settings.route(Role::Read).to_string(), "claude:haiku");
         let codex = &settings.agents.codex;
         assert_eq!(codex.path, None);
         assert_eq!(
-            codex.extract_model,
+            codex.models.read,
             resume_llm::AgentKind::Codex.default_model()
         );
     }
@@ -2250,12 +2504,48 @@ mod tests {
     }
 
     #[test]
+    fn settings_saved_with_one_agent_run_every_role_on_it_with_its_two_models() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"theme":"light","exportDir":"/tmp","agent":"codex","agents":{
+                "claude":{"enabled":true,"path":null,"extractModel":"sonnet","suggestModel":"opus"},
+                "codex":{"enabled":true,"path":"/opt/codex","extractModel":"gpt-6-luna","suggestModel":"gpt-6"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(settings.routes, Routes::all(Agent::Codex));
+        let routes: Vec<String> = Role::ALL.map(|r| settings.route(r).to_string()).into();
+        assert_eq!(
+            routes,
+            ["codex:gpt-6-luna", "codex:gpt-6", "codex:gpt-6", "codex:gpt-6"]
+        );
+        assert_eq!(settings.agents_in_use().collect::<Vec<_>>(), [Agent::Codex]);
+        // Claude Code keeps its own, for when a role moves back to it.
+        assert_eq!(settings.agents.claude.models.read, "sonnet");
+        assert_eq!(settings.agents.claude.models.coach, "opus");
+    }
+
+    #[test]
+    fn a_route_to_an_agent_this_build_doesnt_know_runs_on_claude() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"theme":"light","exportDir":"/tmp","routes":{"read":"codex","tailor":"telepathy",
+                "write":"claude","coach":"antigravity"}}"#,
+        )
+        .unwrap();
+        assert_eq!(settings.routes.read, Agent::Codex);
+        assert_eq!(settings.routes.tailor, Agent::Claude);
+        assert_eq!(
+            settings.agents_in_use().collect::<Vec<_>>(),
+            [Agent::Claude, Agent::Codex, Agent::Antigravity]
+        );
+    }
+
+    #[test]
     fn settings_round_trip() {
         let mut settings: Settings = serde_json::from_str(SAVED_BEFORE).unwrap();
-        settings.agent = Agent::Antigravity;
-        settings.agents.antigravity.suggest_model = "gemini-test".to_owned();
+        settings.routes.set(Role::Write, Agent::Antigravity);
+        settings.agents.antigravity.models.write = "gemini-test".to_owned();
         let again: Settings =
             serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
         assert_eq!(again, settings);
+        assert_eq!(again.route(Role::Write).to_string(), "antigravity:gemini-test");
     }
 }

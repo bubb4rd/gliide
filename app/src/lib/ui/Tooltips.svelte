@@ -1,7 +1,8 @@
 <!--
   The tooltip layer (DESIGN.md Tooltip), rendered once by the layout: shows what `tip()` opened, in the top layer,
-  centered above its element (below when there's no room above), never past the window's edge. It never takes the
-  pointer. Opens with a 100ms opacity fade; straight from another tooltip it moves at once; closes instantly.
+  centered above its element (below when there's no room above), or with `beside`, after it (before it when there's
+  no room after), centered on it; never past the window's edge. It never takes the pointer. Opens with a 100ms
+  opacity fade; straight from another tooltip it moves at once; closes instantly.
 -->
 <script lang="ts">
   import Tooltip from "./Tooltip.svelte";
@@ -25,10 +26,18 @@
     const p = element.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
-    const above = a.top - GAP - p.height;
-    const below = a.bottom + GAP;
-    const top = above >= EDGE || below + p.height > vh - EDGE ? Math.max(above, EDGE) : below;
-    const left = Math.min(Math.max(a.left + a.width / 2 - p.width / 2, EDGE), vw - EDGE - p.width);
+    let left: number;
+    let top: number;
+    if (tipState.placement === "beside") {
+      const after = a.right + GAP;
+      left = after + p.width <= vw - EDGE ? after : Math.max(a.left - GAP - p.width, EDGE);
+      top = Math.min(Math.max(a.top + a.height / 2 - p.height / 2, EDGE), vh - EDGE - p.height);
+    } else {
+      const above = a.top - GAP - p.height;
+      const below = a.bottom + GAP;
+      top = above >= EDGE || below + p.height > vh - EDGE ? Math.max(above, EDGE) : below;
+      left = Math.min(Math.max(a.left + a.width / 2 - p.width / 2, EDGE), vw - EDGE - p.width);
+    }
     element.style.left = `${left}px`;
     element.style.top = `${top}px`;
   }

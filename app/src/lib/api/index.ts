@@ -49,6 +49,7 @@ import type { Rewritten } from "./bindings/Rewritten";
 import type { Round } from "./bindings/Round";
 import type { RoundDraft } from "./bindings/RoundDraft";
 import type { RoundsView } from "./bindings/RoundsView";
+import type { RouteLatency } from "./bindings/RouteLatency";
 import type { SalaryRange } from "./bindings/SalaryRange";
 import type { SearchCursor } from "./bindings/SearchCursor";
 import type { SearchResults } from "./bindings/SearchResults";
@@ -154,11 +155,15 @@ export type * from "./bindings/Progress";
 export type * from "./bindings/QuestionGroup";
 export type * from "./bindings/ReviewView";
 export type * from "./bindings/Rewritten";
+export type * from "./bindings/Role";
+export type * from "./bindings/RoleModels";
 export type * from "./bindings/Round";
 export type * from "./bindings/RoundDraft";
 export type * from "./bindings/RoundKind";
 export type * from "./bindings/RoundState";
 export type * from "./bindings/RoundsView";
+export type * from "./bindings/RouteLatency";
+export type * from "./bindings/Routes";
 export type * from "./bindings/SalaryPeriod";
 export type * from "./bindings/SalaryRange";
 export type * from "./bindings/SameEntry";
@@ -212,6 +217,8 @@ export const models = () => invoke<Record<string, string>>("models");
 export const usage = () => invoke<UsageView>("usage");
 /** Every model call recorded, one CSV row each, written to `path`. */
 export const exportUsage = (path: string) => invoke<void>("export_usage", { path });
+/** Each role's route and how fast it answers on this Mac, in Read, Tailor, Write, Coach order (Settings → Agents). */
+export const routeLatencies = () => invoke<RouteLatency[]>("route_latencies");
 
 // ── Startup ──
 /** Why the data couldn't be opened at launch (the window then shows only Startup); `null` when it opened. */

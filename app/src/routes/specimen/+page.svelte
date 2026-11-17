@@ -68,9 +68,8 @@
     PlaceMap,
     ScoreBar,
     ScoreHeader,
-    SectionNav,
-    type NavSection,
     Segmented,
+    Sheet,
     Sources,
     segmentStep,
     StackedBar,
@@ -144,21 +143,23 @@
     turnAt = index;
   }
 
-  // ── Section nav: Settings' links to its cards, over a sample scroll in each orientation ──
-  const JUMPS: (NavSection & { body: string; tall?: boolean })[] = [
-    { id: "agent", label: "Agents", body: "Short: a jump lands it at the top." },
-    { id: "tailoring", label: "Tailoring", body: "Scroll: each section turns current as its top reaches the top." },
-    { id: "feed", label: "Feed", body: "Tall, as Settings’ Feed card.", tall: true },
-    { id: "sources", label: "Sources", body: "A part of the one before: indented, regular weight.", sub: true },
-    { id: "long", label: "A section with a long name that truncates", body: "Its link truncates in the column." },
-    { id: "appearance", label: "Appearance", body: "Last and short: current at the end, or once jumped to." },
+  // ── Sheet: Settings over the window, on a sample of panes ──
+  const SHEET_PANES = [
+    { id: "agents", label: "Agents", icon: Sparkles, terms: "model calls models" },
+    { id: "general", label: "General", icon: SlidersHorizontal, terms: "theme backdrop" },
+    { id: "long", label: "A pane with a long name that truncates", icon: FileText, terms: "truncates" },
   ];
-  const jumpsIn = (prefix: string): NavSection[] =>
-    JUMPS.map(({ id, label, sub }) => ({ id: `${prefix}-${id}`, label, sub }));
-  const JUMPS_COLUMN = jumpsIn("spec-jump-column");
-  const JUMPS_ROW = jumpsIn("spec-jump-row");
-  let jumpColumn = $state<HTMLElement>();
-  let jumpRow = $state<HTMLElement>();
+  let sheetPane = $state<string | null>(null);
+  let sheetQuery = $state("");
+  let sheetSearch = $state<ReturnType<typeof Input>>();
+  const sheetShown = $derived.by(() => {
+    const words = sheetQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    return SHEET_PANES.filter((p) => words.every((w) => `${p.label} ${p.terms}`.toLowerCase().includes(w)));
+  });
+  function openSheet(query = "") {
+    sheetQuery = query;
+    sheetPane = "agents";
+  }
 
   // ── The composed Review screen: toggles update the score instantly ──
   type State = "in" | "off" | "left-out" | "forced";
@@ -486,49 +487,65 @@
   /** History began here (Heatmap `start`): the days before it are blank. */
   const heatStart = new Date(2026, 8, 23);
 
-  // ── Bar chart: made-up cost a day, ending on the Heatmap's fixed day ──
+  // ── Bar chart: made-up cost a day by token kind, ending on the Heatmap's fixed day ──
   const shortDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
   const longDay = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const weekdayShort = new Intl.DateTimeFormat("en-US", { weekday: "short" });
   const usd = (n: number) => (n > 0 && n < 0.005 ? "<$0.01" : `$${n.toFixed(2)}`);
-  const gridUsd = (n: number) => (Number.isInteger(n) ? `$${n}` : usd(n));
-  function costBars(days: number, seed: number, tickOn: (date: Date) => boolean): ChartBar[] {
-    return Array.from({ length: days }, (_, i) => {
-      seed = (seed * 48271) % 2147483647;
-      const date = new Date(2026, 9, 13 - (days - 1 - i));
-      const cost = seed % 5 === 0 ? 0 : (seed % 400) / 100;
-      return {
-        key: dayKey(date),
-        value: cost,
-        tick: tickOn(date) && i < days - 3 ? shortDay.format(date) : undefined,
-        tip: {
-          title: longDay.format(date),
-          value: usd(cost),
-          rows: [
-            { label: "Tokens", value: `${(cost * 0.7).toFixed(1)}M` },
-            { label: "Model calls", value: Math.round(cost * 20) },
-          ],
-          note: "Reported by Claude Code",
-        },
-      };
-    });
+  const KIND_NAMES = ["Output", "Input", "Cache write", "Cache read"];
+  /** Sparse ticks, as Usage gives them: every day in a week, else the first, the middle and "Today". */
+  function tickSparse(bars: ChartBar[]): ChartBar[] {
+    const last = bars.length - 1;
+    const at = bars.length <= 7 ? bars.map((_, i) => i) : [0, Math.floor(last / 2), last];
+    for (const i of at) {
+      const [y, m, d] = bars[i].key.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      bars[i].tick = i === last ? "Today" : bars.length <= 7 ? weekdayShort.format(date) : shortDay.format(date);
+    }
+    return bars;
   }
-  const barsMonth = costBars(30, 11, (d) => d.getDay() === 1);
-  const barsQuarter = costBars(90, 3, (d) => d.getDate() === 1);
-  // A few cents a day, one of them a fraction of a cent (its 2px minimum), two days of nothing; plain-label tooltips.
-  const barsSmall: ChartBar[] = [0.31, 0.004, 0, 0.12, 0.27, 0, 0.19].map((cost, i) => {
-    const date = new Date(2026, 9, 7 + i);
-    return {
-      key: dayKey(date),
-      value: cost,
-      tick: i % 3 === 0 ? shortDay.format(date) : undefined,
-      tip: `${longDay.format(date)}: ${usd(cost)}`,
-    };
-  });
-  const barsZero: ChartBar[] = barsSmall.map((b, i) => ({
-    ...b,
-    value: 0,
-    tip: `${longDay.format(new Date(2026, 9, 7 + i))}: ${usd(0)}`,
-  }));
+  function costBars(days: number, seed: number): ChartBar[] {
+    return tickSparse(
+      Array.from({ length: days }, (_, i) => {
+        seed = (seed * 48271) % 2147483647;
+        const date = new Date(2026, 9, 13 - (days - 1 - i));
+        const cost = seed % 5 === 0 ? 0 : (seed % 400) / 100;
+        // Output most of it, then input, the cache's writes and reads.
+        const parts = [0.42, 0.22, 0.14, 0.22].map((share, k) => cost * share * (1 + (((seed >> k) % 5) - 2) / 10));
+        return {
+          key: dayKey(date),
+          value: cost,
+          parts,
+          tip: {
+            title: longDay.format(date),
+            value: usd(cost),
+            rows: [
+              ...KIND_NAMES.map((label, k) => ({ label, value: usd(parts[k]), step: segmentStep(k) })),
+              { label: "Model calls", value: Math.round(cost * 20) },
+            ],
+            note: "Reported by Claude Code",
+          },
+        };
+      }),
+    );
+  }
+  const barsWeek = costBars(7, 5);
+  const barsMonth = costBars(30, 11);
+  const barsQuarter = costBars(90, 3);
+  // A few cents a day, one of them a fraction of a cent (its 2px minimum), two quiet days (stubs); one series, plain
+  // label tooltips.
+  const barsSmall: ChartBar[] = tickSparse(
+    [0.31, 0.004, 0, 0.12, 0.27, 0, 0.19].map((cost, i) => {
+      const date = new Date(2026, 9, 7 + i);
+      return { key: dayKey(date), value: cost, tip: `${longDay.format(date)}: ${usd(cost)}` };
+    }),
+  );
+  const barsZero: ChartBar[] = tickSparse(
+    Array.from({ length: 30 }, (_, i) => {
+      const date = new Date(2026, 9, 13 - (29 - i));
+      return { key: dayKey(date), value: 0, tip: `${longDay.format(date)}: ${usd(0)}` };
+    }),
+  );
 
   // ── Meter and stacked bar: shares of cost, tokens by kind ──
   const meterStates = [
@@ -541,8 +558,8 @@
     {
       name: "Four kinds",
       segments: [
-        { label: "Input", value: 4.6 },
         { label: "Output", value: 1.1 },
+        { label: "Input", value: 4.6 },
         { label: "Cache write", value: 2.9 },
         { label: "Cache read", value: 16.9 },
       ],
@@ -550,8 +567,8 @@
     {
       name: "One kind at 0 (left out)",
       segments: [
-        { label: "Input", value: 3.2 },
         { label: "Output", value: 0.9 },
+        { label: "Input", value: 3.2 },
         { label: "Cache write", value: 0 },
         { label: "Cache read", value: 7.4 },
       ],
@@ -559,8 +576,8 @@
     {
       name: "A sliver (its 2px minimum)",
       segments: [
-        { label: "Input", value: 0.01 },
         { label: "Output", value: 1.2 },
+        { label: "Input", value: 0.01 },
         { label: "Cache write", value: 3.1 },
         { label: "Cache read", value: 40 },
       ],
@@ -568,8 +585,8 @@
     {
       name: "Nothing yet",
       segments: [
-        { label: "Input", value: 0 },
         { label: "Output", value: 0 },
+        { label: "Input", value: 0 },
         { label: "Cache write", value: 0 },
         { label: "Cache read", value: 0 },
       ],
@@ -603,6 +620,21 @@
           { key: "tick", label: "Ceiling", value: 90 },
         ],
         note: "Read back from the exported PDF",
+      },
+    },
+    {
+      name: "Rows with step keys (a stacked chart's bar)",
+      content: {
+        title: "Wed, Nov 4",
+        value: "$10.52",
+        rows: [
+          { step: 4, label: "Output", value: "$4.27" },
+          { step: 3, label: "Input", value: "$2.85" },
+          { step: 2, label: "Cache write", value: "$1.52" },
+          { step: 1, label: "Cache read", value: "$1.89" },
+          { label: "Model calls", value: 60 },
+        ],
+        note: "$10.25 reported, $0.27 estimated",
       },
     },
     {
@@ -1628,44 +1660,46 @@
     <section class="section">
       <h2 class="title">Bar chart</h2>
       <p class="meta lede">
-        Estimated cost by day. Gridlines at round steps of the busiest day, labeled at the trailing edge; sparse ticks
-        under their bars. Hover a bar, or Tab in and use ←/→, Home and End: its column washes and its tooltip opens.
-        Past 60 bars they sit 1px apart; a fraction of a cent still shows 2px; a day of nothing shows no bar.
+        The ledger: estimated cost by day, each bar stacked by token kind from the baseline up (output first, in the
+        accent). One dashed rule at the busiest day, its value over the trailing end; sparse ticks under their bars. Hover
+        a bar, or Tab in and use ←/→, Home and End: the other bars step back and its tooltip opens beside it. 8px apart
+        up to 14 bars, 2px up to 60, 1px past; a fraction of a cent still shows 2px; a quiet day keeps a 2px stub.
       </p>
       <Card pad>
         <div class="tile">
-          <p class="label">30 days, ticks on Mondays</p>
-          <BarChart bars={barsMonth} format={gridUsd} label="Estimated cost by day (specimen), last 30 days" />
+          <p class="label">30 days, stacked by kind</p>
+          <BarChart bars={barsMonth} format={usd} label="Estimated cost by day (specimen), last 30 days" />
         </div>
       </Card>
       <div class="grid cols-2">
         <Card pad>
           <div class="tile">
-            <p class="label">90 days, dense, ticks on the 1st</p>
-            <BarChart bars={barsQuarter} format={gridUsd} label="Estimated cost by day (specimen), last 90 days" />
+            <p class="label">7 days, a weekday under each bar</p>
+            <BarChart bars={barsWeek} format={usd} label="Estimated cost by day (specimen), last 7 days" />
           </div>
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">Cents, a sliver, empty days, 96px, label tooltips</p>
-            <BarChart
-              bars={barsSmall}
-              format={gridUsd}
-              height={96}
-              label="Estimated cost by day (specimen), last 7 days"
-            />
+            <p class="label">90 days, dense: 1px apart</p>
+            <BarChart bars={barsQuarter} format={usd} label="Estimated cost by day (specimen), last 90 days" />
           </div>
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">All 0: the baseline alone</p>
-            <BarChart bars={barsZero} format={gridUsd} label="Estimated cost by day (specimen), nothing yet" />
+            <p class="label">One series: cents, a sliver, quiet days, 96px, label tooltips</p>
+            <BarChart bars={barsSmall} format={usd} height={96} label="Estimated cost by day (specimen), last 7 days" />
           </div>
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">No bars</p>
-            <BarChart bars={[]} format={gridUsd} label="Estimated cost by day (specimen), no days" />
+            <p class="label">All 0: the baseline and a stub a day, no rule</p>
+            <BarChart bars={barsZero} format={usd} label="Estimated cost by day (specimen), nothing yet" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">No bars: the baseline alone</p>
+            <BarChart bars={[]} format={usd} label="Estimated cost by day (specimen), no days" />
           </div>
         </Card>
       </div>
@@ -1840,55 +1874,62 @@
       </Card>
     </section>
 
-    <!-- ═══════════ Section nav ═══════════ -->
+    <!-- ═══════════ Sheet ═══════════ -->
     <section class="section">
-      <h2 class="title">Section nav</h2>
+      <h2 class="title">Sheet</h2>
       <p class="meta lede">
-        Settings’ links to its cards. The one you’re reading is ink with an accent tick: it follows the scroll, and the
-        last is current at the end. A link jumps at once and moves focus to its section, which stays current while its
-        top is in view. Under 720px of its container: a row over a hairline, the tick on it, scrolling sideways when
-        the links don’t fit.
+        Settings over the window: a modal dialog on a scrim, the rail on the sidebar’s tone (a search, the panes, the
+        version at its foot), the pane on paper with its title and Close, its body scrolling on its own. Esc, Close or
+        a click on the scrim closes it, and focus goes back to what opened it. A search that matches nothing says so.
+        While it’s open, toasts show over its pane and the screen’s keys are off.
       </p>
-      <div class="grid">
-        <Card>
-          <div class="jump" bind:this={jumpColumn}>
-            <div class="jump__layout">
-              <div class="jump__rail">
-                <SectionNav sections={JUMPS_COLUMN} root={jumpColumn} label="Sample sections, column" />
-              </div>
-              <div class="jump__body">
-                {#each JUMPS as j (j.id)}
-                  <section id="spec-jump-column-{j.id}" class="jump__section" tabindex="-1">
-                    <h3 class="jump__name">{j.label}</h3>
-                    <p class="meta">{j.body}</p>
-                    {#if j.tall}<div class="jump__well"></div>{/if}
-                  </section>
-                {/each}
-              </div>
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div class="narrow">
-            <div class="jump" bind:this={jumpRow}>
-              <div class="jump__layout">
-                <div class="jump__rail">
-                  <SectionNav sections={JUMPS_ROW} root={jumpRow} label="Sample sections, row" />
-                </div>
-                <div class="jump__body">
-                  {#each JUMPS as j (j.id)}
-                    <section id="spec-jump-row-{j.id}" class="jump__section" tabindex="-1">
-                      <h3 class="jump__name">{j.label}</h3>
-                      <p class="meta">{j.body}</p>
-                      {#if j.tall}<div class="jump__well"></div>{/if}
-                    </section>
-                  {/each}
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
+      <div class="row">
+        <Button onclick={() => openSheet()}>Open the sheet</Button>
+        <Button onclick={() => openSheet("zzz")}>Open on a search with no match</Button>
       </div>
+      {#if sheetPane}
+        <Sheet
+          label="Sample settings"
+          title={SHEET_PANES.find((p) => p.id === sheetPane)?.label ?? ""}
+          keys={{ "/": () => sheetSearch?.focus(), "mod+f": () => sheetSearch?.focus() }}
+          onclose={() => (sheetPane = null)}
+        >
+          {#snippet rail()}
+            <Input
+              bind:this={sheetSearch}
+              size="md"
+              placeholder="Search"
+              aria-label="Search sample settings"
+              bind:value={sheetQuery}
+            />
+            {#if sheetShown.length}
+              <Nav label="Sample panes">
+                {#each sheetShown as p (p.id)}
+                  <NavItem icon={p.icon} current={sheetPane === p.id} onclick={() => (sheetPane = p.id)}>{p.label}</NavItem>
+                {/each}
+              </Nav>
+            {:else}
+              <p class="sheet-note">No settings match “{sheetQuery.trim()}”.</p>
+            {/if}
+            <p class="sheet-note sheet-version num">gliide 0.7.1</p>
+          {/snippet}
+          <p class="sheet-lede">One pane at a time; its lede, then its card.</p>
+          <Card pad>
+            <div class="tile">
+              <p class="label">A toast while the sheet is open shows over its pane</p>
+              <div class="row">
+                <Button size="sm" onclick={exportDemo}>Success</Button>
+                <Button size="sm" onclick={() => toast("Couldn’t save the settings: disk full", { tone: "danger" })}>
+                  Error
+                </Button>
+              </div>
+              {#each { length: 14 } as _, i (i)}
+                <p class="meta">Line {i + 1}: enough of them to scroll the body on its own, under the pane’s title.</p>
+              {/each}
+            </div>
+          </Card>
+        </Sheet>
+      {/if}
     </section>
 
     <!-- ═══════════ Desk ═══════════ -->
@@ -1951,6 +1992,7 @@
             <Nav label="Nav states (specimen)">
               <NavItem href="#review" icon={ListChecks} current meta={12}>Current</NavItem>
               <NavItem href="#review" icon={Archive}>Default</NavItem>
+              <NavItem icon={SlidersHorizontal} aria-haspopup="dialog" onclick={() => openSheet()}>A button: opens the sheet</NavItem>
               <NavItem href="#review" quiet meta={78}>
                 {#snippet lead()}<CompanyMark size={16} />{/snippet}Quiet entry with a long title that truncates
               </NavItem>
@@ -2292,73 +2334,20 @@
     border: 1px solid transparent;
     box-shadow: var(--shadow-border);
   }
-  .narrow {
-    display: grid;
-    gap: var(--space-4);
-    max-width: 360px;
-  }
-  /* A sample scroll for SectionNav, as Settings': the rail held beside the sections, or a row held over them. */
-  .jump {
-    height: 280px;
-    overflow: auto;
-    overscroll-behavior: contain;
-    container-type: inline-size;
-    /* Inside the card's 1px border. */
-    border-radius: calc(var(--radius-lg) - 1px);
-  }
-  .jump__layout {
-    display: grid;
-    grid-template-columns: 160px minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-6);
-    padding: var(--space-5);
-  }
-  .jump__rail {
-    position: sticky;
-    top: var(--space-5);
-  }
-  .jump__body {
-    display: grid;
-    gap: var(--space-6);
-  }
-  .jump__section {
-    display: grid;
-    gap: var(--space-1);
-    scroll-margin-top: var(--space-5);
-  }
-  .jump__section:focus {
-    outline: none;
-  }
-  .jump__name,
-  .jump__section .meta {
+  /* The sample sheet's rail: a note when nothing matches, the version at its foot; its pane's lede. */
+  .sheet-note {
     margin: 0;
+    padding-inline: var(--space-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--ink-3);
   }
-  .jump__name {
-    font-size: var(--text-base);
-    font-weight: var(--weight-medium);
+  .sheet-version {
+    margin-top: auto;
   }
-  .jump__well {
-    height: 240px;
-    margin-top: var(--space-2);
-    border-radius: var(--radius-md);
-    background: var(--sunken);
-  }
-  @container (width < 720px) {
-    .jump__layout {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-5);
-      padding-top: 0;
-    }
-    .jump__rail {
-      top: 0;
-      z-index: 1;
-      margin-inline: calc(var(--space-5) * -1);
-      padding: var(--space-2) var(--space-5) 0;
-      background: var(--surface);
-    }
-    .jump__section {
-      scroll-margin-top: calc(var(--control-md) + var(--space-4) + var(--space-5));
-    }
+  .sheet-lede {
+    margin: 0 0 var(--space-4);
+    color: var(--ink-2);
   }
   /* The leaving step and the arriving one share the cell while they cross. */
   .turns {

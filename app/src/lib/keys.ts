@@ -6,6 +6,9 @@
 // (⌘ on macOS, Ctrl elsewhere), in any order. The newest bindings are asked first and older ones catch what they
 // don't bind. While you type in a field only ⌘-chords reach the bindings. A handler that returns `false` lets the
 // key through (no preventDefault, older bindings and the default action still get it).
+//
+// A modal surface (a `Sheet`) registers with `{ modal: true }`: while one is open, only the newest modal's bindings
+// are asked, and nothing it doesn't bind reaches the screen under it, however recently the screen bound its keys.
 
 export type KeyHandler = (event: KeyboardEvent) => unknown;
 export type KeyBindings = Record<string, KeyHandler>;
@@ -38,12 +41,21 @@ function typing(target: EventTarget | null): boolean {
   return target.isContentEditable || target.matches("input:not([type=checkbox], [type=radio]), textarea, select");
 }
 
-const layers: Map<string, KeyHandler>[] = [];
+type Layer = Map<string, KeyHandler>;
+
+const layers: Layer[] = [];
+const modals: Layer[] = [];
 
 function dispatch(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing) return;
   const combo = spell(e);
   if (typing(e.target) && !combo.includes("mod+")) return;
+  const modal = modals.at(-1);
+  if (modal) {
+    const handler = modal.get(combo);
+    if (handler && handler(e) !== false) e.preventDefault();
+    return;
+  }
   for (let i = layers.length - 1; i >= 0; i--) {
     const handler = layers[i].get(combo);
     if (!handler) continue;
@@ -54,13 +66,14 @@ function dispatch(e: KeyboardEvent) {
 }
 
 /** Registers `bindings` until the returned function is called (an `$effect` cleanup). */
-export function bindKeys(bindings: KeyBindings): () => void {
-  const layer = new Map(Object.entries(bindings).map(([k, h]) => [canonical(k), h]));
-  if (!layers.length) window.addEventListener("keydown", dispatch);
-  layers.push(layer);
+export function bindKeys(bindings: KeyBindings, { modal = false }: { modal?: boolean } = {}): () => void {
+  const layer: Layer = new Map(Object.entries(bindings).map(([k, h]) => [canonical(k), h]));
+  const stack = modal ? modals : layers;
+  if (!layers.length && !modals.length) window.addEventListener("keydown", dispatch);
+  stack.push(layer);
   return () => {
-    const i = layers.indexOf(layer);
-    if (i >= 0) layers.splice(i, 1);
-    if (!layers.length) window.removeEventListener("keydown", dispatch);
+    const i = stack.indexOf(layer);
+    if (i >= 0) stack.splice(i, 1);
+    if (!layers.length && !modals.length) window.removeEventListener("keydown", dispatch);
   };
 }

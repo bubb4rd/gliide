@@ -638,7 +638,7 @@
 <!-- `model`: the id, alias or name asked or served; shown with its maker's icon (else the agent's) and by name. -->
 {#snippet identity(model: string, at?: string, turn?: Turn)}
   <div class="who">
-    <CompanyMark size={20} src={makerIcon(model) ?? app.agentInfo.icon} /><span class="who__name"
+    <CompanyMark size={20} src={makerIcon(model) ?? app.routes.tailor.info.icon} /><span class="who__name"
       >{app.modelName(model)}</span
     >{#if at}<span
         class="meta num">{at}</span

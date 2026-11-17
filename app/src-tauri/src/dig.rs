@@ -62,8 +62,9 @@ pub async fn dig_questions(app: &Arc<App>, entry: &str, again: bool) -> Result<D
     if let Some(d) = kept {
         return view(&d);
     }
-    let llm = app.agent(Feature::Dig).await?;
-    let model = app.settings().current().suggest_model.clone();
+    let route = app.route(Feature::Dig);
+    let llm = app.llm(&route, Feature::Dig).await?;
+    let model = route.model;
     let today = Local::now().format("%Y-%m-%d").to_string();
     let job = format!("entry:{}", e.id);
     let (m, ee) = (model.clone(), e.clone());
@@ -133,8 +134,9 @@ pub async fn dig_capture(
         Ok(find(&bank, &id)?.clone())
     })
     .await?;
-    let llm = app.agent(Feature::Dig).await?;
-    let model = app.settings().current().suggest_model.clone();
+    let route = app.route(Feature::Dig);
+    let llm = app.llm(&route, Feature::Dig).await?;
+    let model = route.model;
     let today = Local::now().format("%Y-%m-%d").to_string();
     let job = format!("entry:{}", e.id);
     let (m, ee, aa, nn) = (model.clone(), e.clone(), answers.clone(), note.clone());

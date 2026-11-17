@@ -14,11 +14,11 @@ use resume_llm::pricing::{self, PRICES_AS_OF, Tokens};
 use resume_llm::{Agent, Attempt, Call, Llm, LlmError, Schema, Structured};
 use resume_store::UsageRow;
 
-use crate::dto::{Feature, UsageDay, UsageView};
+use crate::dto::{Feature, Role, RouteLatency, UsageDay, UsageView};
 use crate::error::Result;
 use crate::state::{App, lock};
 
-/// The agent the settings run, recording each call's usage under `feature` once it ends: a call that failed the
+/// A route's agent, recording each call's usage and wall time under `feature` once it ends: a call that failed the
 /// schema after its repair turn too (its turns were spent), never one that never got an answer (the agent didn't
 /// start, timed out or was stopped: it reported nothing).
 pub struct Metered {
@@ -57,7 +57,7 @@ impl Llm for Metered {
 }
 
 impl Metered {
-    /// Records the call; a store error is logged, never fails the call.
+    /// Records the call, its wall time the sum of its turns'; a store error is logged, never fails the call.
     fn record(&self, asked: Option<&str>, attempts: &[Attempt]) {
         let kind = self.agent.kind();
         let asked = asked.unwrap_or(kind.default_model());
@@ -73,6 +73,7 @@ impl Metered {
             cache_write_tokens: tokens.cache_write,
             cache_read_tokens: tokens.cache_read,
             cost_usd: pricing::reported_cost(attempts),
+            latency_ms: Some(attempts.iter().map(|a| a.latency_ms).sum()),
         };
         if let Err(e) = lock(&self.app.store).record_usage(&row) {
             eprintln!("gliide: could not record a model call's usage: {e}");
@@ -102,6 +103,36 @@ pub fn usage(app: &App) -> Result<UsageView> {
         prices_as_of: PRICES_AS_OF.to_owned(),
         rows: summed(&calls),
     })
+}
+
+/// Calls a route needs before Settings shows its median: fewer say too little.
+const MIN_TIMED_CALLS: u64 = 5;
+
+/// Each role's route as the settings say now, and how fast it has answered: the median wall time of its agent's calls
+/// for the role's features as its model (the asked alias, or the model id that last served it).
+pub fn route_latencies(app: &App) -> Result<Vec<RouteLatency>> {
+    let settings = app.settings();
+    let served = app.served_models()?;
+    let store = lock(&app.store);
+    Role::ALL
+        .into_iter()
+        .map(|role| {
+            let route = settings.route(role);
+            let agent = crate::dto::Agent::from(route.agent);
+            let mut models = vec![route.model.as_str()];
+            models.extend(served.get(&route.model).map(String::as_str));
+            let features: Vec<String> = role.features().iter().map(name).collect();
+            let features: Vec<&str> = features.iter().map(String::as_str).collect();
+            let l = store.latency(&name(&agent), &models, &features)?;
+            Ok(RouteLatency {
+                role,
+                agent,
+                model: route.model,
+                p50_ms: l.p50_ms.filter(|_| l.calls >= MIN_TIMED_CALLS),
+                calls: l.calls,
+            })
+        })
+        .collect()
 }
 
 fn summed(calls: &[UsageRow]) -> Vec<UsageDay> {
@@ -170,7 +201,7 @@ fn summed(calls: &[UsageRow]) -> Vec<UsageDay> {
 
 /// Writes every recorded call to `path` as CSV, oldest first: when (UTC) and the local day, what for, the agent and
 /// model, its tokens, its cost and where that came from (`reported` by the agent, `estimated` from list prices, or
-/// `none`).
+/// `none`), and its wall time (empty for calls recorded before it was kept).
 pub fn export_usage(app: &App, path: &Path) -> Result<()> {
     let calls = lock(&app.store).usage()?;
     std::fs::write(path, csv(&calls))?;
@@ -180,7 +211,7 @@ pub fn export_usage(app: &App, path: &Path) -> Result<()> {
 fn csv(calls: &[UsageRow]) -> String {
     let mut out = String::from(
         "at,day,feature,agent,model,input_tokens,output_tokens,cache_write_tokens,cache_read_tokens,cost_usd,\
-         cost_from\n",
+         cost_from,latency_ms\n",
     );
     for c in calls {
         let tokens = Tokens {
@@ -198,7 +229,7 @@ fn csv(calls: &[UsageRow]) -> String {
         };
         let _ = writeln!(
             out,
-            "{},{},{},{},{},{},{},{},{},{},{from}",
+            "{},{},{},{},{},{},{},{},{},{},{from},{}",
             field(&c.at),
             field(&c.day),
             field(&c.feature),
@@ -209,6 +240,7 @@ fn csv(calls: &[UsageRow]) -> String {
             c.cache_write_tokens,
             c.cache_read_tokens,
             cost.map_or(String::new(), |c| format!("{c:.6}")),
+            c.latency_ms.map_or(String::new(), |ms| ms.to_string()),
         );
     }
     out
@@ -239,6 +271,7 @@ mod tests {
             cache_write_tokens: 0,
             cache_read_tokens: 1_000_000,
             cost_usd: cost,
+            latency_ms: Some(9_000),
         }
     }
 
@@ -284,9 +317,9 @@ mod tests {
             call("2026-11-02", "feed-check", "codex", "gpt,odd", None),
         ]);
         let lines: Vec<&str> = text.lines().collect();
-        assert!(lines[1].ends_with(",3.000000,reported"));
-        assert!(lines[2].ends_with(",0.160000,estimated"));
+        assert!(lines[1].ends_with(",3.000000,reported,9000"));
+        assert!(lines[2].ends_with(",0.160000,estimated,9000"));
         assert!(lines[3].contains(",\"gpt,odd\","));
-        assert!(lines[3].ends_with(",,none"));
+        assert!(lines[3].ends_with(",,none,9000"));
     }
 }

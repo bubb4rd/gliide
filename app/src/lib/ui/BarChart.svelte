@@ -1,29 +1,36 @@
 <!--
-  BarChart: one accent bar per entry (a data series, not "good"), equal widths across the width, 2px apart (1px past
-  60 bars), rounded tops; any value above 0 shows at least 2px, 0 shows nothing. Hairline gridlines at round steps of
-  the busiest bar (the baseline stronger), each labeled with `format` at the trailing edge; a bar's `tick` under it.
-  Hovering or focusing a bar washes its column and shows its `tip`. One tab stop: ←/→ move between bars, Home/End to
-  the ends, the focused bar showing its tooltip. Nothing to show (no bars, or all 0): the baseline alone. Updates are
-  instant: no motion.
+  BarChart, the ledger: a column per entry across the full width, equal widths (8px apart up to 14, 2px up to 60, 1px
+  past), each bar in `--accent` or stacked from the baseline up in its `parts`, shaded as `StackedBar`'s segments (the
+  first the accent, then the lighter steps; a 1px slit between parts once each has 4px), top corners rounded 4px (at
+  most half the bar's width). Any value above 0 shows at least 2px; 0 keeps a 2px stub on the baseline, so a quiet day
+  reads as a day. One scale mark: a dashed rule at the busiest bar's top, its value (`format`) over the rule's trailing
+  end. A bar's `tick` under it (the first and last at the chart's edges once the bars are narrow, the rest centered).
+  Hovering or focusing a column dims the other bars and opens its `tip` beside it. One tab stop: ←/→ move between
+  bars, Home/End to the ends. Nothing to show: no bars, the baseline alone; all 0, the stubs, no rule. Updates are
+  instant; the dimming fades over `--dur-fast`.
 -->
 <script module lang="ts">
   import type { TipContent } from "./tip.svelte";
 
   export interface ChartBar {
     key: string;
+    /** The bar's height against the busiest. */
     value: number;
-    /** A label under the bar, from its leading edge; give one to a few bars, not each. */
+    /** Up to four parts of the value, from the baseline up; their shares split the bar. Without, one accent bar. */
+    parts?: number[];
+    /** A label under the bar; give one to a few bars, not each. */
     tick?: string;
     tip: TipContent;
   }
 </script>
 
 <script lang="ts">
+  import { segmentStep } from "./StackedBar.svelte";
   import { tip } from "./tip.svelte";
 
   interface Props {
     bars: ChartBar[];
-    /** A gridline's label ("$2"). */
+    /** The busiest bar's value, over the rule ("$6.20"); also each bar's accessible value. */
     format: (value: number) => string;
     /** What the chart shows, for assistive tech ("Estimated cost by day, last 30 days"). */
     label: string;
@@ -33,22 +40,22 @@
 
   let { bars, format, label, height = 128 }: Props = $props();
 
-  /** At most three gridlines over the baseline, at 1, 2, 2.5 or 5 times a power of ten. */
-  function niceStep(max: number): number {
-    const raw = max / 3;
-    const power = 10 ** Math.floor(Math.log10(raw));
-    const f = raw / power;
-    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * power;
-  }
+  /** A slit between parts once each has this much room. */
+  const SLIT_ROOM = 4;
 
-  const scale = $derived.by(() => {
-    const max = Math.max(0, ...bars.map((b) => b.value));
-    if (!max) return { top: 0, lines: [0] };
-    const step = niceStep(max);
-    const steps = Math.ceil(max / step - 1e-9);
-    return { top: steps * step, lines: Array.from({ length: steps + 1 }, (_, i) => +(i * step).toPrecision(12)) };
-  });
+  const peak = $derived(Math.max(0, ...bars.map((b) => b.value)));
   const ticked = $derived(bars.some((b) => b.tick));
+  const spacing = $derived(bars.length > 60 ? "dense" : bars.length > 14 ? "narrow" : "wide");
+
+  /** A bar's height in px and its parts, from the baseline up; parts of 0 are left out. */
+  function stack(bar: ChartBar) {
+    const px = Math.max(2, (bar.value / peak) * height);
+    const parts = (bar.parts ?? [])
+      .slice(0, 4)
+      .map((value, i) => ({ value: Math.max(0, value), step: segmentStep(i) }))
+      .filter((p) => p.value > 0);
+    return { px, parts, slit: parts.length > 1 && px >= parts.length * SLIT_ROOM };
+  }
 
   /** The bar that holds the tab stop: the last one focused, else the last. */
   let active = $state<number | null>(null);
@@ -56,6 +63,12 @@
 
   const barLabel = (bar: ChartBar) =>
     typeof bar.tip === "string" ? bar.tip : [bar.tip.title, format(bar.value)].filter(Boolean).join(", ");
+
+  /** Where a tick sits under its bar: at the chart's edges for the first and last once bars are narrow. */
+  function tickAlign(i: number): string {
+    if (spacing === "wide") return "center";
+    return i === 0 ? "start" : i === bars.length - 1 ? "end" : "center";
+  }
 
   function onkeydown(e: KeyboardEvent) {
     const last = bars.length - 1;
@@ -77,12 +90,11 @@
 </script>
 
 <div class="bar-chart" style:--bars={bars.length} style:--height="{height}px">
+  <span class="peak" aria-hidden="true">{peak ? format(peak) : ""}</span>
   <!-- The bars are one tab stop; arrows, Home and End move along them. -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class={["plot", bars.length > 60 && "plot--dense"]} role="group" aria-label={label} {onkeydown}>
-    {#each scale.lines as line (line)}
-      <span class={["line", line === 0 && "line--base"]} style:--at={scale.top ? line / scale.top : 0}></span>
-    {/each}
+  <div class="plot plot--{spacing}" role="group" aria-label={label} {onkeydown}>
+    {#if peak}<span class="rule"></span>{/if}
     {#each bars as bar, i (bar.key)}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <span
@@ -91,25 +103,25 @@
         aria-label={barLabel(bar)}
         tabindex={i === current ? 0 : -1}
         onfocus={() => (active = i)}
-        {@attach tip(() => bar.tip)}
+        {@attach tip(() => bar.tip, "beside")}
       >
-        {#if bar.value > 0 && scale.top}
-          <span class="bar" style:--at={bar.value / scale.top}></span>
+        {#if bar.value > 0 && peak}
+          {@const s = stack(bar)}
+          <span class={["bar", s.slit && "bar--slit"]} style:height="{s.px}px">
+            {#each s.parts as part (part.step)}
+              <span class="part" style:flex-grow={part.value} style:background="var(--accent-step-{part.step})"></span>
+            {/each}
+          </span>
+        {:else}
+          <span class="stub"></span>
         {/if}
       </span>
     {/each}
   </div>
-  <div class="y" aria-hidden="true">
-    {#if scale.top}
-      {#each scale.lines as line (line)}
-        <span style:--at={line / scale.top}>{format(line)}</span>
-      {/each}
-    {/if}
-  </div>
   {#if ticked}
-    <div class={["ticks", bars.length > 60 && "plot--dense"]} aria-hidden="true">
+    <div class="ticks plot--{spacing}" aria-hidden="true">
       {#each bars as bar, i (bar.key)}
-        {#if bar.tick}<span style:grid-column={i + 1}>{bar.tick}</span>{/if}
+        {#if bar.tick}<span style:grid-column={i + 1} style:justify-self={tickAlign(i)}>{bar.tick}</span>{/if}
       {/each}
     </div>
   {/if}
@@ -118,75 +130,87 @@
 <style>
   .bar-chart {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: var(--height) auto;
+    grid-template-rows: auto var(--height) auto;
     min-width: 0;
     font-size: var(--text-xs);
     line-height: var(--leading-xs);
     font-variant-numeric: tabular-nums;
     color: var(--ink-3);
   }
+  /* The busiest bar's value, over the rule's trailing end; its row kept while empty, so the plot never moves. */
+  .peak {
+    min-height: var(--leading-xs);
+    margin-bottom: var(--space-0-5);
+    text-align: end;
+    white-space: nowrap;
+  }
   .plot,
   .ticks {
     display: grid;
     grid-template-columns: repeat(var(--bars), minmax(0, 1fr));
+  }
+  .plot--wide {
+    column-gap: var(--space-2);
+  }
+  .plot--narrow {
     column-gap: var(--space-0-5);
   }
   .plot--dense {
     column-gap: 1px;
   }
+  /* The baseline lies just under the bars. */
   .plot {
     position: relative;
+    box-shadow: 0 1px 0 var(--line-strong);
   }
-  /* A gridline's bottom edge sits 1px under its value, so the baseline lies just under the bars. */
-  .line {
+  /* A dashed hairline at the busiest bar's top: 2px dashes, 2px apart. */
+  .rule {
     position: absolute;
     inset-inline: 0;
-    bottom: calc(var(--at) * 100% - 1px);
+    top: 0;
     height: 1px;
-    background: var(--line);
-  }
-  .line--base {
-    background: var(--line-strong);
+    background: repeating-linear-gradient(to right, var(--line-strong) 0 2px, transparent 2px 4px);
   }
   .col {
     position: relative;
     display: flex;
-    align-items: flex-end;
+    flex-direction: column;
+    justify-content: flex-end;
     min-width: 0;
-    border-radius: calc(var(--radius-xs) / 2) calc(var(--radius-xs) / 2) 0 0;
-  }
-  .col:focus-visible {
-    background: var(--hover);
-  }
-  @media (hover: hover) {
-    .col:hover {
-      background: var(--hover);
-    }
+    border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   }
   .bar {
-    width: 100%;
-    height: calc(var(--at) * 100%);
-    min-height: 2px;
-    border-radius: inherit;
+    display: flex;
+    flex-direction: column-reverse;
+    overflow: hidden;
+    border-radius: min(var(--radius-xs), 50%) min(var(--radius-xs), 50%) 0 0;
     background: var(--accent);
+    transition-property: opacity;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
   }
-  /* The labels share one cell (its width the widest), each centered on its gridline. */
-  .y {
-    display: grid;
-    grid-template-rows: minmax(0, 1fr);
+  .bar--slit {
+    gap: 1px;
+    background: transparent;
   }
-  .y span {
-    position: relative;
-    grid-area: 1 / 1;
-    align-self: end;
-    bottom: calc(var(--at) * 100%);
-    translate: 0 50%;
-    padding-inline-start: var(--space-2);
-    white-space: nowrap;
+  .part {
+    flex-basis: 0;
+  }
+  .stub {
+    height: 2px;
+    border-radius: 1px 1px 0 0;
+    background: var(--line-strong);
+  }
+  /* The column in hand keeps its ink; the other bars step back. */
+  .plot:has(.col:focus-visible) .col:not(:focus-visible) .bar {
+    opacity: var(--data-dim);
+  }
+  @media (hover: hover) {
+    .plot:has(.col:hover) .col:not(:hover) .bar {
+      opacity: var(--data-dim);
+    }
   }
   .ticks {
-    grid-column: 1;
     margin-top: var(--space-1-5);
   }
   .ticks span {
@@ -196,15 +220,19 @@
   }
 
   @media (forced-colors: active) {
-    .line,
-    .bar {
+    .plot {
+      box-shadow: none;
+      border-bottom: 1px solid CanvasText;
+    }
+    .rule,
+    .bar,
+    .part,
+    .stub {
       forced-color-adjust: none;
     }
-    .line {
+    .rule,
+    .stub {
       background: GrayText;
-    }
-    .line--base {
-      background: CanvasText;
     }
     .bar {
       background: Highlight;

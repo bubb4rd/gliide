@@ -72,12 +72,14 @@
   --accent-text: oklch(0.43 0.207 263.8);  /* links and accent text  ≥7.9:1 on every surface */
   --accent-soft: oklch(0.95 0.03 263.8);
   --on-accent: oklch(1 0 0);
-  /* Data steps (Heatmap, StackedBar): the accent mixed into --sunken in oklab (oklch would swing the hue from the
-     near-gray well toward the accent through green); 4 is the accent itself. A data series, never "good". */
+  /* Data steps (Heatmap, StackedBar, BarChart): the accent mixed into --sunken in oklab (oklch would swing the hue
+     from the near-gray well toward the accent through green); 4 is the accent itself. A data series, never "good". */
   --accent-step-1: color-mix(in oklab, var(--accent) 25%, var(--sunken));
   --accent-step-2: color-mix(in oklab, var(--accent) 50%, var(--sunken));
   --accent-step-3: color-mix(in oklab, var(--accent) 75%, var(--sunken));
   --accent-step-4: var(--accent);
+  /* A chart's other marks while one is in hand (BarChart): they step back, still read. */
+  --data-dim: 0.45;
 
   /* ── Meaning ── */
   --gain: oklch(0.52 0.13 150);            /* score gain, "you have it", applied */
@@ -111,6 +113,7 @@
   --ring-line: oklch(0.45 0.207 263.8 / 0.32);        /* the steady outline: --accent at 32% */
   --ring-glow: inset 0 0 28px 0 oklch(0.45 0.207 263.8 / 0.05); /* the faint light inside the edge */
   --ring-halo: 0.25;                                  /* opacity of the blurred band behind the bright one */
+  --scrim: oklch(0.22 0.008 85 / 0.18);    /* behind a modal Sheet (Settings): the window, dimmed in ink */
   --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
 
   /* ── Type ── */
@@ -218,6 +221,13 @@
   --accent-text: oklch(0.74 0.13 263.8);
   --accent-soft: oklch(0.26 0.06 263.8);
   --on-accent: oklch(0.165 0.003 85);
+  /* On charcoal the light steps nearly vanish (the first 1.4:1 on --surface at 25%): mixed at 45/65/85%, the first is
+     2:1, above light's 1.6:1, so a chart's palest part still reads. */
+  --accent-step-1: color-mix(in oklab, var(--accent) 45%, var(--sunken));
+  --accent-step-2: color-mix(in oklab, var(--accent) 65%, var(--sunken));
+  --accent-step-3: color-mix(in oklab, var(--accent) 85%, var(--sunken));
+  /* On charcoal the steps start darker, so dimmed marks keep more of their light. */
+  --data-dim: 0.6;
   --gain: oklch(0.76 0.15 150);
   --gain-text: oklch(0.76 0.15 150);
   --gain-soft: oklch(0.26 0.05 150);
@@ -234,6 +244,7 @@
   --ring-line: oklch(0.68 0.15 263.8 / 0.38);
   --ring-glow: inset 0 0 28px 0 oklch(0.68 0.15 263.8 / 0.08);
   --ring-halo: 0.375;
+  --scrim: oklch(0 0 0 / 0.5);
 }
 
 /* The theme switch must not animate every color at once (better-ui). */
@@ -248,7 +259,8 @@
  * `forced-color-adjust: none`.
  */
 @media (forced-colors: active) {
-  :root {
+  :root,
+  :root[data-theme="dark"] {
     --accent-step-1: color-mix(in srgb, Highlight 40%, Canvas);
     --accent-step-2: color-mix(in srgb, Highlight 60%, Canvas);
     --accent-step-3: color-mix(in srgb, Highlight 80%, Canvas);

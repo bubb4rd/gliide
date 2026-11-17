@@ -73,7 +73,7 @@
   s.onerror = (e) =>
     toast(e.message, {
       tone: "danger",
-      action: e.kind === "agent" ? { label: "Open Settings", run: () => goto("/settings") } : undefined,
+      action: e.kind === "agent" ? { label: "Open Settings", run: () => shell.openSettings("agents") } : undefined,
     });
 
   onMount(() => {
@@ -703,7 +703,7 @@
         <p>{s.error.message}</p>
         <div class="row">
           {#if s.error.kind === "agent"}
-            <Button variant="primary" onclick={() => goto("/settings")}>Open Settings</Button>
+            <Button variant="primary" onclick={() => shell.openSettings("agents")}>Open Settings</Button>
           {:else if !app.library?.bank}
             <Button variant="primary" onclick={() => goto("/bank")}>Open Experience</Button>
           {/if}

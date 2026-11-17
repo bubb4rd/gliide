@@ -3,7 +3,8 @@
   and the main area, where each screen draws its own Toolbar. Under 960px the sidebar becomes a sheet. A new install
   opens on the first-run setup (`/welcome`), which has no sidebar, nor has the import review it opens; until settings
   and the library are in (and with them whether the setup is due), the window is paper. When gliide couldn't open its
-  data at launch, the window shows `Startup` alone, without the sidebar.
+  data at launch, the window shows `Startup` alone, without the sidebar. Settings is a modal sheet over whichever
+  screen is showing (`shell.settings`), opened by ⌘, and the sidebar's Settings, update and agent rows.
 -->
 <script lang="ts">
   import "../app.css";
@@ -19,7 +20,7 @@
   import Palette from "@lucide/svelte/icons/palette";
   import Rss from "@lucide/svelte/icons/rss";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import { onNotification, startupProblem, type Stage, type StartupProblem } from "$lib/api";
+  import { onNotification, startupProblem, type AgentStatus, type Stage, type StartupProblem } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { feed } from "$lib/stores/feed.svelte";
@@ -29,6 +30,7 @@
   import { when } from "$lib/rounds";
   import { AgentMark, CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
   import Startup from "./Startup.svelte";
+  import Settings from "./settings/Settings.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -96,15 +98,16 @@
     return () => void stops?.then((all) => all.forEach((stop) => stop()));
   });
 
-  // Leaving a screen closes the compact sheet.
+  // Leaving a screen closes the compact sheet, and Settings (a banner's click goes to a job).
   $effect(() => {
     void page.url.pathname;
     shell.sidebarOpen = false;
+    shell.closeSettings();
   });
 
   $effect(() =>
     bindKeys({
-      "mod+,": () => goto("/settings"),
+      "mod+,": () => shell.openSettings(),
       Escape: () => {
         if (!shell.sidebarOpen) return false;
         shell.sidebarOpen = false;
@@ -125,15 +128,33 @@
     shell.bare = bare;
   });
 
-  /** The agent model calls run on (`app.agentInfo`), as the account you're signed in to: its icon with a presence dot,
-   *  its name, its state (and plan) under it. */
+  /** One agent's state, as its dot and words say it: alone ("Signed out"), and named among others ("Codex signed
+   *  out"); `rank` orders them worst first. */
+  function stateOf(a: AgentStatus | null, name: string) {
+    if (!a) return { tone: "neutral", sub: "Not checked", among: "Not checked", rank: 1 } as const;
+    if (!a.found) return { tone: "danger", sub: "Not installed", among: `${name} not installed`, rank: 3 } as const;
+    if (a.signedIn === false) return { tone: "warn", sub: "Signed out", among: `${name} signed out`, rank: 2 } as const;
+    if (a.signedIn === null)
+      return { tone: "neutral", sub: "Couldn't check sign-in", among: `Couldn't check ${name}'s sign-in`, rank: 1 } as const;
+    const sub = ["Signed in", a.plan].filter(Boolean).join(" · ");
+    return { tone: "gain", sub, among: "Signed in", rank: 0 } as const;
+  }
+
+  /** The agents model calls run on (`app.routed`), as the accounts you're signed in to: the one in the worst state
+   *  leads (its icon with a presence dot; Tailoring's on a tie), every one's name, and that state under them. */
   const agentLine = $derived.by(() => {
-    const a = app.agent;
-    if (!a) return { tone: "neutral", sub: "Not checked" } as const;
-    if (!a.found) return { tone: "danger", sub: "Not installed" } as const;
-    if (a.signedIn === false) return { tone: "warn", sub: "Signed out" } as const;
-    if (a.signedIn === null) return { tone: "neutral", sub: "Couldn't check sign-in" } as const;
-    return { tone: "gain", sub: ["Signed in", a.plan].filter(Boolean).join(" · ") } as const;
+    const states = app.routed.map((info) => {
+      const status = app.status(info.id);
+      return { info, status, ...stateOf(status, info.name) };
+    });
+    const worst = states.reduce((w, s) => (s.rank > w.rank ? s : w));
+    return {
+      icon: worst.info.icon,
+      tone: worst.tone,
+      name: states.map((s) => s.info.name).join(" + "),
+      sub: states.length > 1 ? worst.among : worst.sub,
+      problem: worst.status?.problem ?? null,
+    };
   });
 
   /** A newer release: the sidebar's foot says so, over the agent, until it's installed. */
@@ -223,14 +244,29 @@
       <div class="foot">
         <Nav label="App">
           {#if dev}<NavItem href="/specimen" icon={Palette} current={within("/specimen")}>Specimen</NavItem>{/if}
-          <NavItem href="/settings" icon={SlidersHorizontal} current={within("/settings")}>Settings</NavItem>
+          <NavItem
+            icon={SlidersHorizontal}
+            current={shell.settings !== null}
+            aria-haspopup="dialog"
+            onclick={() => shell.openSettings()}>Settings</NavItem
+          >
         </Nav>
         {#if updateLine}
-          <NavItem href="/settings#about" icon={CircleArrowDown} sub={updateLine}>Update available</NavItem>
+          <NavItem
+            icon={CircleArrowDown}
+            sub={updateLine}
+            aria-haspopup="dialog"
+            onclick={() => shell.openSettings("about")}>Update available</NavItem
+          >
         {/if}
-        <NavItem href="/settings" sub={agentLine.sub} {@attach tip(app.agent?.problem)}>
-          {#snippet lead()}<AgentMark src={app.agentInfo.icon} tone={agentLine.tone} />{/snippet}
-          {app.agentInfo.name}
+        <NavItem
+          sub={agentLine.sub}
+          aria-haspopup="dialog"
+          onclick={() => shell.openSettings("agents")}
+          {@attach tip(agentLine.problem)}
+        >
+          {#snippet lead()}<AgentMark src={agentLine.icon} tone={agentLine.tone} />{/snippet}
+          {agentLine.name}
         </NavItem>
       </div>
     </aside>
@@ -238,6 +274,7 @@
 
   <main class="main">
     {#if problem}<Startup {problem} />{:else if ready}{@render children()}{/if}
+    {#if ready && !problem && shell.settings}<Settings />{/if}
     <Toaster />
     <Tooltips />
   </main>

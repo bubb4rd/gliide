@@ -327,7 +327,7 @@
       <article class="agent">
         {#if turn.read}
           <p class="who">
-            <CompanyMark size={20} src={makerIcon(turn.model) ?? app.agentInfo.icon} /><span class="who__name"
+            <CompanyMark size={20} src={makerIcon(turn.model) ?? app.routes.coach.info.icon} /><span class="who__name"
               >{app.modelName(turn.model)}</span
             >
           </p>
@@ -417,7 +417,7 @@
       {@const c = turn.capture}
       <article class="agent">
         <p class="who">
-          <CompanyMark size={20} src={makerIcon(c.model) ?? app.agentInfo.icon} /><span class="who__name"
+          <CompanyMark size={20} src={makerIcon(c.model) ?? app.routes.coach.info.icon} /><span class="who__name"
             >{app.modelName(c.model)}</span
           >
         </p>

@@ -69,11 +69,9 @@
     field?.focus();
   }
 
-  /** The model an ask goes to (the agent in use's), by name; the agent's problem, if any, in its tooltip (its state is
-   *  the sidebar's). */
-  const model = $derived(
-    app.modelName((app.settings && app.settings.agents[app.settings.agent].suggestModel) ?? review.model),
-  );
+  /** The model an ask goes to (Tailoring's), by name; its agent's problem, if any, in its tooltip (its state is the
+   *  sidebar's). */
+  const model = $derived(app.modelName(app.routes.tailor.model || review.model));
 
   // ── The menu: `@` parts, `"` lines, or `/` quick asks ──
   interface Option {
@@ -356,7 +354,7 @@
 <div class="composer">
   {#if busy}
     <div class="thinking">
-      <CompanyMark size={16} src={app.agentInfo.icon} />
+      <CompanyMark size={16} src={app.routes.tailor.info.icon} />
       <div class="thinking__stage">
         <Thinking
           label="Working on your request…"
@@ -432,8 +430,8 @@
         onmousedown={(e: MouseEvent) => e.preventDefault()}
         onclick={() => insert("/")}
       />
-      <span class="agent" {@attach tip(app.agent?.problem)}>
-        <CompanyMark size={16} src={app.agentInfo.icon} />
+      <span class="agent" {@attach tip(app.routes.tailor.status?.problem)}>
+        <CompanyMark size={16} src={app.routes.tailor.info.icon} />
         <span class="agent__name">{model}</span>
       </span>
       <span class="tools__end">

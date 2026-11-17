@@ -1,6 +1,7 @@
 <!--
   Renders `toast()` messages above the main area. Enters with `.enter`, exits with opacity + blur + -12px over 150ms
-  (opacity only under reduced motion). Tone shows as an icon and its color, never motion alone.
+  (opacity only under reduced motion). Tone shows as an icon and its color, never motion alone. `layer="sheet"`: the
+  one inside a modal `Sheet`, over its pane; while a sheet is open, the window's one renders nothing.
 -->
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
@@ -10,13 +11,16 @@
   import Button from "./Button.svelte";
   import Icon from "./Icon.svelte";
   import { exit } from "./motion";
-  import { dismiss, toasts } from "./toast.svelte";
+  import { dismiss, toastHost, toasts } from "./toast.svelte";
+
+  let { layer = "window" }: { layer?: "window" | "sheet" } = $props();
 
   const ICONS = { gain: Check, warn: TriangleAlert, danger: CircleAlert } as const;
+  const items = $derived(layer === "sheet" || toastHost.sheets === 0 ? toasts : []);
 </script>
 
 <div class="toaster" role="status" aria-live="polite">
-  {#each toasts as t (t.id)}
+  {#each items as t (t.id)}
     <div class={["toast", "enter", `toast--${t.tone}`]} out:exit>
       {#if t.tone !== "neutral"}<Icon icon={ICONS[t.tone]} />{/if}
       <span class="message">{t.message}</span>
@@ -39,7 +43,7 @@
 </div>
 
 <style>
-  /* Sits over the main area (the layout's main is the positioned ancestor), clear of the key footer. */
+  /* Sits over its positioned ancestor (the layout's main, or a sheet's pane), clear of the key footer. */
   .toaster {
     position: absolute;
     inset-inline: 0;

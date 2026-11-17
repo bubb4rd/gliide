@@ -45,6 +45,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("debriefs.sql"),
     include_str!("links.sql"),
     include_str!("usage.sql"),
+    include_str!("latency.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -136,6 +137,15 @@ pub struct UsageRow {
     pub cache_read_tokens: u64,
     /// What the agent said it cost at API prices; `None` when it didn't say.
     pub cost_usd: Option<f64>,
+    /// Wall time from spawn to answer, its repair turn included; `None` for calls recorded before it was kept.
+    pub latency_ms: Option<u64>,
+}
+
+/// How fast a set of calls answered: the median of the timed ones (`None` when there are none), and how many.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Latency {
+    pub p50_ms: Option<u64>,
+    pub calls: u64,
 }
 
 /// A Suggest result to store as an analysis.
@@ -1619,7 +1629,7 @@ impl Store {
     pub fn record_usage(&self, u: &UsageRow) -> Result<(), StoreError> {
         self.conn.execute(
             "INSERT INTO usage (at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens, \
-             cache_read_tokens, cost_usd) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             cache_read_tokens, cost_usd, latency_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 now(),
                 u.day,
@@ -1631,6 +1641,7 @@ impl Store {
                 to_i64(u.cache_write_tokens),
                 to_i64(u.cache_read_tokens),
                 u.cost_usd,
+                u.latency_ms.map(to_i64),
             ],
         )?;
         Ok(())
@@ -1640,7 +1651,7 @@ impl Store {
     pub fn usage(&self) -> Result<Vec<UsageRow>, StoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens, \
-             cache_read_tokens, cost_usd FROM usage ORDER BY at, id",
+             cache_read_tokens, cost_usd, latency_ms FROM usage ORDER BY at, id",
         )?;
         let tokens = |r: &Row, i| r.get::<_, i64>(i).map(|n| u64::try_from(n).unwrap_or(0));
         let rows = stmt
@@ -1656,10 +1667,43 @@ impl Store {
                     cache_write_tokens: tokens(r, 7)?,
                     cache_read_tokens: tokens(r, 8)?,
                     cost_usd: r.get(9)?,
+                    latency_ms: r
+                        .get::<_, Option<i64>>(10)?
+                        .map(|n| u64::try_from(n).unwrap_or(0)),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    /// The timed calls `agent` made for any of `features`, served as any of `models` (an alias and the model id that
+    /// served it name the same calls): their median wall time and how many.
+    pub fn latency(
+        &self,
+        agent: &str,
+        models: &[&str],
+        features: &[&str],
+    ) -> Result<Latency, StoreError> {
+        let marks = |n: usize| vec!["?"; n].join(", ");
+        let sql = format!(
+            "SELECT latency_ms FROM usage WHERE latency_ms IS NOT NULL AND agent = ? AND model IN ({}) \
+             AND feature IN ({}) ORDER BY latency_ms",
+            marks(models.len()),
+            marks(features.len()),
+        );
+        let args = std::iter::once(agent)
+            .chain(models.iter().copied())
+            .chain(features.iter().copied());
+        let mut stmt = self.conn.prepare(&sql)?;
+        let times = stmt
+            .query_map(rusqlite::params_from_iter(args), |r| r.get::<_, i64>(0))?
+            .map(|t| t.map(|n| u64::try_from(n).unwrap_or(0)))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Latency {
+            // The lower middle when the count is even, so the median is a call that was made.
+            p50_ms: times.get(times.len().saturating_sub(1) / 2).copied(),
+            calls: times.len() as u64,
+        })
     }
 
     // Preps and practice.

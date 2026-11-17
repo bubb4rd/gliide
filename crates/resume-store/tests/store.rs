@@ -8,9 +8,9 @@ use resume_core::story::{Story, StoryKind, StorySource, StoryTheme};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, DEBRIEF_DAYS, Dig, DigAnswers, FeedState, LogoFound, LogoSource,
+    AppStatus, Application, DEBRIEF_DAYS, Dig, DigAnswers, FeedState, Latency, LogoFound, LogoSource,
     NewAnalysis, NewFeedJob, Notified, PracticeRow, Prep, Rev, Round, RoundState, StatusChange,
-    Store, StoreError, applications_csv, parse_ats_fit_csv,
+    Store, StoreError, UsageRow, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -731,7 +731,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 14);
+    assert_eq!(version, 15);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1104,7 +1104,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 14);
+    assert_eq!(version, 15);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1222,7 +1222,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 14);
+    assert_eq!(version, 15);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1396,7 +1396,7 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 14);
+    assert_eq!(version, 15);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1627,7 +1627,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 14);
+    assert_eq!(version, 15);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1764,4 +1764,98 @@ fn feed_checks_count_from_a_time() {
     let at = row.checked_at.unwrap();
     assert_eq!(store.feed_checked_since(&at).unwrap(), 2);
     assert_eq!(store.feed_checked_since("2999-01-01T00:00:00Z").unwrap(), 0);
+}
+
+fn usage_row(feature: &str, agent: &str, model: &str, latency_ms: Option<u64>) -> UsageRow {
+    UsageRow {
+        at: String::new(),
+        day: "2026-11-16".into(),
+        feature: feature.into(),
+        agent: agent.into(),
+        model: model.into(),
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_write_tokens: 0,
+        cache_read_tokens: 0,
+        cost_usd: None,
+        latency_ms,
+    }
+}
+
+/// Usage recorded before latency was kept (schema version 14) loads untimed and takes timed calls after.
+#[test]
+fn migrating_to_latency_keeps_the_usage() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v14-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    drop(Store::open(&path).unwrap());
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "ALTER TABLE usage DROP COLUMN latency_ms;
+         INSERT INTO usage (at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens,
+             cache_read_tokens, cost_usd)
+         VALUES ('2026-11-03T10:00:00Z', '2026-11-03', 'chat', 'claude', 'claude-sonnet-5-5', 10, 5, 0, 0, 0.01);
+         PRAGMA user_version = 14;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    store
+        .record_usage(&usage_row("chat", "claude", "claude-sonnet-5-5", Some(9_000)))
+        .unwrap();
+    let rows = store.usage().unwrap();
+    assert_eq!(
+        rows.iter().map(|r| r.latency_ms).collect::<Vec<_>>(),
+        [None, Some(9_000)]
+    );
+    assert_eq!(rows[0].cost_usd, Some(0.01));
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 15);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn latency_is_the_median_of_the_timed_calls_for_the_agent_models_and_features() {
+    let store = Store::open_in_memory().unwrap();
+    for (feature, agent, model, ms) in [
+        ("requirements", "claude", "sonnet", Some(7_000)),
+        ("feed-check", "claude", "claude-sonnet-5-5", Some(5_000)),
+        ("feed-check", "claude", "claude-sonnet-5-5", Some(9_000)),
+        ("feed-check", "claude", "claude-sonnet-5-5", Some(6_000)),
+        ("requirements", "claude", "claude-sonnet-5-5", None),
+        // Another agent, model or role: not counted.
+        ("requirements", "codex", "claude-sonnet-5-5", Some(1)),
+        ("requirements", "claude", "opus", Some(1)),
+        ("chat", "claude", "claude-sonnet-5-5", Some(1)),
+    ] {
+        store
+            .record_usage(&usage_row(feature, agent, model, ms))
+            .unwrap();
+    }
+    let read = store
+        .latency(
+            "claude",
+            &["sonnet", "claude-sonnet-5-5"],
+            &["requirements", "feed-check"],
+        )
+        .unwrap();
+    assert_eq!(
+        read,
+        Latency {
+            p50_ms: Some(6_000),
+            calls: 4
+        }
+    );
+    let none = store.latency("antigravity", &["x"], &["dig"]).unwrap();
+    assert_eq!(
+        none,
+        Latency {
+            p50_ms: None,
+            calls: 0
+        }
+    );
 }
