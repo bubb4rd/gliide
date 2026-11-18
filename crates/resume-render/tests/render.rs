@@ -12,19 +12,37 @@ fn renderer() -> Renderer {
     Renderer::new(&Template::classic_serif(), FontOptions::default())
 }
 
+/// Every built-in template's renderer, by name.
+fn built_ins() -> impl Iterator<Item = (&'static str, Renderer)> {
+    Template::BUILT_IN.into_iter().map(|name| {
+        let t = Template::built_in(name).unwrap();
+        assert_eq!(t.manifest.name, name);
+        (name, Renderer::new(&t, FontOptions::default()))
+    })
+}
+
 #[test]
 fn fixture_renders_one_page_with_a_metric_per_bullet_and_group() {
+    for (name, mut r) in built_ins() {
+        fixture_renders_in(name, &mut r);
+    }
+}
+
+fn fixture_renders_in(name: &str, r: &mut Renderer) {
     let resume = fixture();
-    let out = renderer()
+    let out = r
         .render(&serde_json::to_string(&resume).unwrap(), false)
         .unwrap();
-    // Bundled fonts only: Times New Roman is missing and Liberation Serif, next in the template's list, is used.
-    assert_eq!(
-        out.warnings,
-        ["warning: unknown font family: times new roman (resume.typ:22)"]
-    );
-    assert_eq!(out.metrics.pages, 1);
-    assert_eq!(out.page_count(), 1);
+    // Bundled fonts only: classic-serif asks for Times New Roman, missing, and Liberation Serif, next in its list, is
+    // used; every other template names only bundled fonts.
+    let warnings: &[&str] = if name == "classic-serif" {
+        &["warning: unknown font family: times new roman (resume.typ:22)"]
+    } else {
+        &[]
+    };
+    assert_eq!(out.warnings, warnings, "{name}");
+    assert_eq!(out.metrics.pages, 1, "{name}");
+    assert_eq!(out.page_count(), 1, "{name}");
 
     let bullets: Vec<_> = resume
         .sections
@@ -153,22 +171,23 @@ fn candidates(resume: &Resume) -> Vec<Candidate> {
 #[test]
 fn measure_counts_each_line_as_the_render_does() {
     let resume = fixture();
-    let mut r = renderer();
-    let rendered = r
-        .render(&serde_json::to_string(&resume).unwrap(), false)
-        .unwrap();
     let cands = candidates(&resume);
-    let measured = r.measure(&cands).unwrap();
-    let rendered: Vec<_> = rendered
-        .metrics
-        .bullets
-        .iter()
-        .chain(&rendered.metrics.groups)
-        .map(|m| (m.id.clone(), m.lines))
-        .collect();
-    assert_eq!(measured, rendered);
     // Some bullet sits under an entry with notes, so both widths are exercised.
     assert!(cands.iter().any(|c| c.depth == 1), "{cands:?}");
+    for (name, mut r) in built_ins() {
+        let rendered = r
+            .render(&serde_json::to_string(&resume).unwrap(), false)
+            .unwrap();
+        let measured = r.measure(&cands).unwrap();
+        let rendered: Vec<_> = rendered
+            .metrics
+            .bullets
+            .iter()
+            .chain(&rendered.metrics.groups)
+            .map(|m| (m.id.clone(), m.lines))
+            .collect();
+        assert_eq!(measured, rendered, "{name}");
+    }
 }
 
 #[test]

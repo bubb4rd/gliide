@@ -7,7 +7,7 @@ use resume_render::Template;
 
 use crate::dto::{BankSummary, EntryRow, Library, MasterRow, SectionRow, TemplateRow};
 use crate::error::{AppError, Result};
-use crate::state::{App, DEFAULT_TEMPLATE, lock};
+use crate::state::{App, lock};
 use crate::view::sentence_case;
 
 /// The bank's summary and sections, every master with its page count, and the templates.
@@ -149,18 +149,23 @@ pub fn set_master_options(
 
 /// The built-in templates, named for people: `classic-serif` → `Classic serif`.
 fn templates() -> Vec<TemplateRow> {
-    let t = Template::classic_serif();
-    let words = t.manifest.name.replace('-', " ");
-    let mut cs = words.chars();
-    let name = cs
-        .next()
-        .map(|c| c.to_uppercase().chain(cs).collect())
-        .unwrap_or_default();
-    vec![TemplateRow {
-        id: DEFAULT_TEMPLATE.to_owned(),
-        name,
-        ats_safe: t.manifest.ats_safe,
-    }]
+    Template::BUILT_IN
+        .into_iter()
+        .filter_map(Template::built_in)
+        .map(|t| {
+            let words = t.manifest.name.replace('-', " ");
+            let mut cs = words.chars();
+            let name = cs
+                .next()
+                .map(|c| c.to_uppercase().chain(cs).collect())
+                .unwrap_or_default();
+            TemplateRow {
+                id: t.manifest.name,
+                name,
+                ats_safe: t.manifest.ats_safe,
+            }
+        })
+        .collect()
 }
 
 /// `experience`, `skills`…, as the bank's JSON names the kind.

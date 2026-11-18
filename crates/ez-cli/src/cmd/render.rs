@@ -40,11 +40,13 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         Some(dir) => {
             Template::load(dir).with_context(|| format!("loading template {}", dir.display()))?
         }
-        None if master.template == "classic-serif" => Template::classic_serif(),
-        None => bail!(
-            "no built-in template `{}`; pass --template <dir>",
-            master.template
-        ),
+        None => match Template::built_in(&master.template) {
+            Some(t) => t,
+            None => bail!(
+                "no built-in template `{}`; pass --template <dir>",
+                master.template
+            ),
+        },
     };
     let data = serde_json::to_string(&resume)?;
 

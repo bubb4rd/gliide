@@ -46,7 +46,7 @@ runs, and model access through the agent subscription you already pay for.
 | Shell | Tauri 2 | Windows, menus, commands exposed to the UI, file dialogs, clipboard, agent subprocesses |
 | UI | Svelte + TypeScript on the "Paper & Ink" design system (`design/`) | Bank, masters, job, review, tracker |
 | Rendering | `typst`, `typst-pdf`, `typst-svg`, `typst-render` | PDF export, SVG/PNG preview, line and page metrics |
-| Fonts | Bundled OFL fonts (Liberation Serif / Tinos are metric-compatible with Times New Roman) | Same line breaks on every OS |
+| Fonts | Bundled OFL fonts (Liberation Serif / Tinos are metric-compatible with Times New Roman; Inter for `modern-sans`) | Same line breaks on every OS |
 | Storage | SQLite (`rusqlite`) | Bank, masters and revisions, postings, analyses, drafts, applications, interview rounds, preps, practice and debriefs, stories |
 | Model | Your agent CLI in its headless mode (`claude -p`, `codex exec`, `agy -p`), as a subprocess | Extract, suggest, rewrite, import, cover letter, invite, prep, practice, nudge, Dig, debrief |
 | Posting fetch | `reqwest` + HTML parsing (`scraper`) | Board APIs, JSON-LD `JobPosting`, `<main>` text |
@@ -510,11 +510,12 @@ unchanged (`local/eval/2026-11-17-read`).
 Rules in `prompts/suggest.md`: never invent; the posting's exact words; line budget; in-place swaps keep the part of
 speech; tags are never text.
 
-The line budget is 100 characters a line in the prompt; classic-serif wraps a bullet at about 114, which absorbs
-small overruns. Models still run past it (a rewrite that wraps to 2 lines where the bullet takes 1; telling them the
-bullet's length made it worse), so after Suggest answers, `resume_pipeline::shorten` measures every rewrite on the
-template and asks each that wraps longer once more, through Rewrite on Tailoring's route ("shorter: it wraps to 2
-lines and must fit in 1"); a reply that fits replaces it (its `hits` cut to the terms it still states), one that
+The line budget is 100 characters a line in the prompt; classic-serif wraps a bullet at about 114 and modern-sans at
+about 110 (real bullet text, measured 2026-11-17), which absorbs small overruns. Models still run past it (a rewrite
+that wraps to 2 lines where the bullet takes 1; telling them the bullet's length made it worse), so after Suggest
+answers, `resume_pipeline::shorten` measures every rewrite on the template and asks each that wraps longer once more,
+through Rewrite on Tailoring's route ("shorter: it wraps to 2 lines and must fit in 1"); a reply that fits replaces it
+(its `hits` cut to the terms it still states), one that
 doesn't leaves Suggest's for the fit check to leave out. Reviews with none pay nothing; the calls count as
 Suggestions in Usage.
 
@@ -649,8 +650,12 @@ A template is a `.typ` file plus a manifest (`name`, `atsSafe`, `columns`, previ
 4. In `sys.inputs.mode == "measure"`, lay out a list of candidate texts at the width of the line each targets and
    record their line counts.
 
-`classic-serif` sets 11pt type, 0.5in margins, ruled headings and a 12.62pt line pitch. A test
-compiles every template against fixture resumes and checks the metadata.
+`classic-serif` sets 11pt type, 0.5in margins, ruled headings and a 12.62pt line pitch. `modern-sans` sets Inter 9.5pt
+on a 0.6in side margin, teal small-caps section titles before a hairline, gray places and dates, and skills as a label
+column beside their items; one column, ATS-safe. Section titles keep their tracking at 0.05em: at 0.14em PDF
+extraction splits them into letters (`S U M M A RY`). The built-ins are `Template::BUILT_IN` (classic-serif the
+default); a master names its template, and Resumes' Template menu lists every built-in. Tests compile every built-in
+against the fixture resume and check its metadata, its measure mode against the render, and its PDF read-back.
 
 ### Fit, in one pass instead of a loop
 
@@ -926,7 +931,7 @@ gliide/
     src-tauri/               Tauri commands over the crates (dto.rs → TypeScript bindings via ts-rs)
     scripts/                 release-macos.sh: Developer ID signing, notarization, Gatekeeper checks
     src/                     Svelte UI (lib/api typed commands, lib/ui components, routes per screen, routes/specimen; Settings is a sheet the layout mounts, routes/settings/Settings.svelte)
-  templates/                 *.typ + manifests (classic-serif, cover-letter); fonts/
+  templates/                 *.typ + manifests (classic-serif, modern-sans, cover-letter); fonts/
   design/                    DESIGN.md, tokens.css, lint.mjs, UI fonts
   prompts/                   extract, suggest, rewrite, instruct, import, cover (.md + .schema.json)
   data/aliases.json          skill alias dictionary
@@ -1014,7 +1019,7 @@ later replaced; re-running them on today's fixtures may give different numbers.
 | M3 Tailor ✓ | `suggest` (prompt, schema, tagged resume), change engine + grounding validator + `apply`, `bank_candidates`, template measure mode, `resume-tailor` (states, fit, now / projected / ceiling, points per change), `ez tailor` with a suggestions cache | Done: 12 postings tailored to one page each (34.7 → 48.2 to 81.4 → 90.7); tailor step 23–97 ms after the model calls; bank-aware raised the ceiling on 1 of 4 trimmed runs (a junior SWE posting, now `northwind-jr-swe`: 74.2 → 84.2); a bank with roles outside the master is needed to settle the mode experiment |
 | M4 macOS app ✓ | Tauri 2 + Svelte app: bank import, masters (template, page limit), job (paste link or text), review with live SVG preview (toggles, wording, rewrite with a note, skill chips, your own edits, undo/redo over the draft log), export with PDFKit read-back ("on file"), applications log mirrored to `applications.csv`, agent settings; `resume-store` (SQLite), `resume-pipeline` | Done. Measured: toggle 19 ms median in release (70–130 ms click to screen in a dev build), export 4–77 ms; app and `ez tailor` gave identical scores, states and points on the recorded outputs of the time |
 | M4.5 Settings as a sheet ✓ | Settings leaves its page for a modal `Sheet` over whatever screen is open (⌘, or the sidebar): a rail of panes with a search over their settings and the version at its foot, one pane at a time (Agents, Usage, Feed, Sources, Notifications, Export folder, Appearance, About); the `/settings` route is gone | Done: every way in (⌘,, the sidebar's Settings, agent and update rows, Open Settings) opens it on the right pane; Esc, Close or the scrim closes it and focus returns; menus and toasts work inside it |
-| M5 Experience | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; new entries and bullets in Experience, in no master ✓; the default mode ✓ (bank-aware, bank suggestions in); second template (design track) | Decision on the default mode ✓ |
+| M5 Experience ✓ | PDF/DOCX import into the bank ✓ (`ez import`, the app's import review: model copy in 4–11 s, every line word for word on the smoke PDFs; merge adds, never changes); variants ✓ (entry editor with per-master wording, Save as variant in the review, edits that keep every master's words); entry details edited in the entry editor ✓; new entries and bullets in Experience, in no master ✓; the default mode ✓ (bank-aware, bank suggestions in); second template ✓ (`modern-sans`: Inter, one column, ATS-safe; chosen from six Typst prototypes) | Decision on the default mode ✓ |
 | M6 Around the application | Cover letters shipped early (after M4): written from the tailored resume as the draft has it and the posting (`prompts/cover.md`), each part editable, one paragraph rewritten with a note (`cover-paragraph.md`), rendered under the resume's letterhead (`templates/cover-letter`), exported beside the resume and recorded on its application (`covers` table, store schema 2). Statuses, CSV and rewrite-with-note on bullets shipped in M4 | Cover letters and application tracking |
 | M6.5 Job feed | Freehire pull, local check, daily check (cap 20), fit list (threshold 40%), search, Settings → Feed with auto filters, Overview's New for you, `enrollment` knockout (prompt change: a posting extracted before is extracted again when opened; the recorded fixture outputs stay valid) ✓; more sources ✓: LinkedIn's guest search (opt-in), the watchlist (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee), Fantastic.jobs through Apify, checks shared between sources | Done for the feed: a live pull checks jobs within the daily cap, per-place copies folded; a five-board watchlist pull kept 84 of 693 jobs, every board's first job read from its API |
 | M6.7 Interviews | The interviewer: you prepare for and practice a job's interviews, and gliide asks about your experience to deepen the bank. Data ✓ (facts per bank entry as sources for every model call and the validator; each application's status changes with their time; the resume as exported); the review's "Do you have Bash experience?" kept as a fact (**Yes, at…**) and the entry editor's Facts ✓; rounds ✓ (saving one moves a Saved or Applied application to Interviewing, Offer or Rejected cancels the upcoming ones, a pasted invite read by one call or an `.ics` parsed, the resume as sent rendered again) and the job's Interview tab ✓ (its rounds over the resume you sent; the next round in Up next, Recent and Applications' Next column); prep and typed practice ✓ (a round's prep by one call, kept until what it was written from changes; an answer read back without a grade, its new claims kept as facts); nudges while you answer ✓ (one call, not kept: where to start, what to add, what you could say with `…` for your words); Dig and stories ✓ (an entry's questions by one call, kept until the entry changes; your answers' facts kept at once and additions proposed by another; stories as their own record, linked from prep's questions, offered from practice and Dig, told alone); debriefs ✓ (what they asked, what you got stuck on and notes saved with no call; one call reads it for Dig questions on the entries it touches and notes for the next prep, which reads the earlier rounds' debriefs; a debrief due for 14 days after a round ends, and each application's latest activity); opt-in notifications ✓ (UserNotifications banners the day before a round, an hour before and an hour after it ends without a debrief, each once, fired by the app while it runs; a click opens the job); spoken practice, then a live interviewer | A practiced round's prep, practice and debrief, grounded in the bank like a tailored resume |

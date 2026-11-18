@@ -22,6 +22,18 @@ pub struct Template {
 }
 
 impl Template {
+    /// The built-in templates' names, the default first.
+    pub const BUILT_IN: [&str; 2] = ["classic-serif", "modern-sans"];
+
+    /// The built-in template named `name`.
+    pub fn built_in(name: &str) -> Option<Self> {
+        match name {
+            "classic-serif" => Some(Self::classic_serif()),
+            "modern-sans" => Some(Self::modern_sans()),
+            _ => None,
+        }
+    }
+
     /// `templates/classic-serif`, built in.
     pub fn classic_serif() -> Self {
         Self {
@@ -30,6 +42,17 @@ impl Template {
                 "../../../templates/classic-serif/manifest.json"
             ))
             .expect("classic-serif manifest is valid"),
+        }
+    }
+
+    /// `templates/modern-sans`, built in.
+    pub fn modern_sans() -> Self {
+        Self {
+            source: include_str!("../../../templates/modern-sans/resume.typ").to_owned(),
+            manifest: serde_json::from_str(include_str!(
+                "../../../templates/modern-sans/manifest.json"
+            ))
+            .expect("modern-sans manifest is valid"),
         }
     }
 

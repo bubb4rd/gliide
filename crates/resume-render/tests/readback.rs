@@ -61,36 +61,44 @@ fn with_front_end(pad: usize) -> Resume {
 #[test]
 fn the_pdf_reads_back_the_page_and_passes_the_check() {
     let r = with_front_end(0);
-    let mut renderer = Renderer::new(&Template::classic_serif(), FontOptions::default());
-    let rendered = renderer
-        .render(&serde_json::to_string(&r).unwrap(), false)
-        .unwrap();
-    let text = rendered.pdf_text().unwrap();
-    // Every bullet and skills line reads back as printed, wraps aside.
-    let pdf = words(&text);
-    for s in &r.sections {
-        for b in s.entries.iter().flat_map(|e| &e.bullets) {
-            assert!(pdf.contains(&words(&b.text)), "{:?} not in {pdf}", b.text);
+    for name in Template::BUILT_IN {
+        let mut renderer =
+            Renderer::new(&Template::built_in(name).unwrap(), FontOptions::default());
+        let rendered = renderer
+            .render(&serde_json::to_string(&r).unwrap(), false)
+            .unwrap();
+        let text = rendered.pdf_text().unwrap();
+        // Every section title, bullet and skills line reads back as printed, wraps aside.
+        let pdf = words(&text);
+        for s in &r.sections {
+            assert!(pdf.contains(&s.title), "{name}: {:?} not in {pdf}", s.title);
+            for b in s.entries.iter().flat_map(|e| &e.bullets) {
+                assert!(
+                    pdf.contains(&words(&b.text)),
+                    "{name}: {:?} not in {pdf}",
+                    b.text
+                );
+            }
+            for g in &s.groups {
+                assert!(
+                    pdf.contains(&g.items.join(", ")),
+                    "{name}: {:?} not in {pdf}",
+                    g.items
+                );
+            }
         }
-        for g in &s.groups {
-            assert!(
-                pdf.contains(&g.items.join(", ")),
-                "{:?} not in {pdf}",
-                g.items
-            );
-        }
-    }
-    // The renderer's read-back is the same text.
-    assert_eq!(renderer.pdf_text(&rendered).unwrap(), text);
+        // The renderer's read-back is the same text.
+        assert_eq!(renderer.pdf_text(&rendered).unwrap(), text);
 
-    let s = scored(&r, text);
-    assert!(
-        format_detail(&s).ends_with("PDF text carries every matched skill"),
-        "{}",
-        format_detail(&s)
-    );
-    // Identical text scores as the page's own text does.
-    assert_eq!(s, scored(&r, resume_text(&r)));
+        let s = scored(&r, text);
+        assert!(
+            format_detail(&s).ends_with("PDF text carries every matched skill"),
+            "{name}: {}",
+            format_detail(&s)
+        );
+        // Identical text scores as the page's own text does.
+        assert_eq!(s, scored(&r, resume_text(&r)), "{name}");
+    }
 }
 
 #[test]

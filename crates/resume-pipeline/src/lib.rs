@@ -141,10 +141,8 @@ pub fn candidates(bank: &Bank, master: &Master, req: &Requirements, mode: Mode) 
 
 /// The master's built-in template.
 pub fn template(master: &Master) -> Result<Template, PipelineError> {
-    match master.template.as_str() {
-        "classic-serif" => Ok(Template::classic_serif()),
-        other => Err(PipelineError::UnknownTemplate(other.to_owned())),
-    }
+    Template::built_in(&master.template)
+        .ok_or_else(|| PipelineError::UnknownTemplate(master.template.clone()))
 }
 
 /// The master resolved and rendered with the bundled fonts: the resume and its page facts for the score (page count

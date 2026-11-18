@@ -4,12 +4,17 @@ use typst::foundations::Bytes;
 use typst::text::{Font, FontInfo};
 use typst_kit::fonts::FontStore;
 
-/// Liberation Serif (SIL OFL 1.1, `templates/fonts/LICENSE-LiberationSerif`), metric-compatible with Times New Roman.
-const BUNDLED: [&[u8]; 4] = [
+/// Liberation Serif (SIL OFL 1.1, `templates/fonts/LICENSE-LiberationSerif`), metric-compatible with Times New Roman,
+/// for `classic-serif`; Inter regular, italic and semibold (SIL OFL 1.1, `templates/fonts/LICENSE-Inter`) for
+/// `modern-sans`.
+const BUNDLED: [&[u8]; 7] = [
     include_bytes!("../../../templates/fonts/LiberationSerif-Regular.ttf"),
     include_bytes!("../../../templates/fonts/LiberationSerif-Bold.ttf"),
     include_bytes!("../../../templates/fonts/LiberationSerif-Italic.ttf"),
     include_bytes!("../../../templates/fonts/LiberationSerif-BoldItalic.ttf"),
+    include_bytes!("../../../templates/fonts/Inter-Regular.ttf"),
+    include_bytes!("../../../templates/fonts/Inter-Italic.ttf"),
+    include_bytes!("../../../templates/fonts/Inter-SemiBold.ttf"),
 ];
 
 /// Which fonts a [`Renderer`](crate::Renderer) loads.
