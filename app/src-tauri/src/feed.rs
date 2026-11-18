@@ -1,12 +1,14 @@
 //! The job feed (ARCHITECTURE.md §7, Job feed): new jobs pulled at launch and every few hours from freehire, LinkedIn's
 //! guest search, the watchlist's company boards and (once a day, with an Apify token) Fantastic.jobs, each kept or
 //! skipped by the local check, then checked (read, Extract, every master scored) up to the day's cap, one at a time;
-//! plus search, and checks you ask for.
+//! plus search, and checks you ask for. While gliide is closed, launchd runs the same pull as `gliide --pull-feed`
+//! ([`pull_closed`], background.rs); the feed lock keeps the two from pulling at once.
 //!
 //! Settings → Feed is the `feed` setting ([`FeedSettings`]); the pull's progress is `feed_state` ([`FeedCursor`]).
 //! Every change to a row or the status is sent as the `feed` event.
 
 use std::collections::{HashMap, HashSet};
+use std::fs::{File, TryLockError};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -50,6 +52,10 @@ const LINKEDIN_EVERY: TimeDelta = TimeDelta::hours(1);
 const SEARCH_PAGE: u32 = 25;
 /// How often the scheduler looks whether a pull is due.
 const TICK: Duration = Duration::from_secs(60);
+/// A pull counts as due this much before `every_hours` have passed since the last: launchd's interval runs from one
+/// start to the next, the cursor's last pull is stamped once the sources are read, so a background pull isn't skipped
+/// for being a few minutes early.
+const DUE_EARLY: TimeDelta = TimeDelta::minutes(15);
 
 /// A feed row's company when neither freehire nor Extract names it.
 const UNNAMED: &str = "Unnamed company";
@@ -74,15 +80,58 @@ pub struct FeedRun {
     pub logos_again: bool,
 }
 
-/// Clears `busy` and `pulling` however `pull_feed` ends.
-struct Running(Arc<App>);
+/// Holds the feed's run: clears `busy` and `pulling` however a pull ends, and lets go of the feed lock.
+struct Running {
+    app: Arc<App>,
+    /// The feed lock file, locked while this lives (closed, it's unlocked); `None` for an app without a data folder.
+    _held: Option<File>,
+}
 
 impl Drop for Running {
     fn drop(&mut self) {
-        let mut run = lock(&self.0.feed);
+        let mut run = lock(&self.app.feed);
         run.busy = false;
         run.pulling = false;
     }
+}
+
+enum Claim {
+    Got(Running),
+    /// A pull runs in this process already.
+    Busy,
+    /// Another gliide holds the feed lock: the app, or `gliide --pull-feed`.
+    Elsewhere,
+}
+
+/// Claims the feed's run, in this process (`busy`), then across processes (an exclusive lock on the feed lock file,
+/// which the OS lets go of when the process ends, however it ends).
+fn claim(app: &Arc<App>) -> Result<Claim> {
+    {
+        let mut run = lock(&app.feed);
+        if run.busy {
+            return Ok(Claim::Busy);
+        }
+        run.busy = true;
+    }
+    // `busy` is cleared again however this ends.
+    let mut running = Running {
+        app: Arc::clone(app),
+        _held: None,
+    };
+    if let Some(path) = &app.feed_lock {
+        let file = File::options()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(path)?;
+        match file.try_lock() {
+            Ok(()) => running._held = Some(file),
+            Err(TryLockError::WouldBlock) => return Ok(Claim::Elsewhere),
+            Err(TryLockError::Error(e)) => return Err(e.into()),
+        }
+    }
+    lock(&app.feed).pulling = true;
+    Ok(Claim::Got(running))
 }
 
 // ── The feed and its status ──
@@ -181,59 +230,155 @@ pub(crate) fn changed(app: &App) {
 
 // ── Pull ──
 
+/// What [`run_pull`] came to.
+enum Pulled {
+    /// The pull and its checks ran: the first failure that stopped them (also in the status's `error`), and the logo
+    /// fetch started beside the checks, still running perhaps.
+    Ran {
+        result: Result<()>,
+        logos: Option<tokio::task::JoinHandle<()>>,
+    },
+    Busy,
+    Elsewhere,
+}
+
 /// Pulls new jobs from every source that's on, then checks the queue up to the day's cap; the feed after both. A pull
-/// already running isn't joined: this returns the feed as it is at once (`status.pulling`, and `feed` events as it goes
-/// on). Failures go to the status's `error`, a sentence per source, not to the caller. The scheduler runs the same.
+/// already running (here, or in `gliide --pull-feed`) isn't joined: this returns the feed as it is at once (here:
+/// `status.pulling`, and `feed` events as it goes on). Failures go to the status's `error`, a sentence per source, not
+/// to the caller. The scheduler runs the same.
 pub async fn pull_feed(app: &Arc<App>) -> Result<FeedView> {
-    let started = {
-        let mut run = lock(&app.feed);
-        let free = !run.busy;
-        if free {
-            run.busy = true;
-            run.pulling = true;
-        }
-        free
-    };
-    if !started {
-        return blocking(app, feed).await;
-    }
-    changed(app);
-    let running = Running(Arc::clone(app));
-    let task = tokio::spawn(async move {
-        let app = Arc::clone(&running.0);
-        let pulled = pull(&app).await;
-        lock(&app.feed).pulling = false;
-        changed(&app);
-        if pulled.is_ok() {
-            tokio::spawn(crate::logo::fetch_logos(Arc::clone(&app)));
-        }
-        let result = match pulled {
-            Ok(()) => drain(&app).await,
-            Err(e) => Err(e),
-        };
-        if let Err(e) = result {
-            let _ = add_error(&app, e.message);
-        }
-        let hours = settings(&app).map_or(FeedSettings::default().every_hours, |s| s.every_hours);
-        lock(&app.feed).next_pull = Some(Utc::now() + hours_of(hours));
-        drop(running);
-        changed(&app);
-    });
-    task.await?;
+    let run = Arc::clone(app);
+    // Its own task: the pull goes on to the end should the caller stop waiting.
+    tokio::spawn(async move { run_pull(&run).await }).await?;
     blocking(app, feed).await
 }
 
-/// Pulls at launch, then every `every_hours` while the feed is on; the settings are read again each minute.
+/// The one pull every caller runs (the app's `pull_feed` and scheduler, `gliide --pull-feed`): claims the feed's run,
+/// pulls, starts fetching logos, checks the queue, sets when the scheduler pulls next.
+async fn run_pull(app: &Arc<App>) -> Pulled {
+    let running = match claim(app) {
+        Ok(Claim::Got(running)) => running,
+        Ok(Claim::Busy) => return Pulled::Busy,
+        Ok(Claim::Elsewhere) => return Pulled::Elsewhere,
+        Err(e) => {
+            let _ = add_error(app, e.message.clone());
+            changed(app);
+            return Pulled::Ran {
+                result: Err(e),
+                logos: None,
+            };
+        }
+    };
+    changed(app);
+    let pulled = pull(app).await;
+    lock(&app.feed).pulling = false;
+    changed(app);
+    let logos = pulled
+        .is_ok()
+        .then(|| tokio::spawn(crate::logo::fetch_logos(Arc::clone(app))));
+    let result = match pulled {
+        Ok(()) => drain(app).await,
+        Err(e) => Err(e),
+    };
+    if let Err(e) = &result {
+        let _ = add_error(app, e.message.clone());
+    }
+    let hours = settings(app).map_or(FeedSettings::default().every_hours, |s| s.every_hours);
+    lock(&app.feed).next_pull = Some(Utc::now() + hours_of(hours));
+    drop(running);
+    changed(app);
+    Pulled::Ran { result, logos }
+}
+
+/// Pulls at launch, then every `every_hours` while the feed is on; the settings are read again each minute. A pull
+/// counts from the last one any gliide made (the cursor's): opened right after a background pull, the app waits.
 pub async fn schedule(app: Arc<App>) {
-    lock(&app.feed).next_pull = Some(Utc::now());
+    lock(&app.feed).next_pull = Some(due_by_cursor(&app).unwrap_or_else(Utc::now));
     loop {
         let on = settings(&app).is_ok_and(|s| s.enabled);
-        let due = lock(&app.feed).next_pull.is_some_and(|t| t <= Utc::now());
+        let now = Utc::now();
+        let due = lock(&app.feed).next_pull.is_some_and(|t| t <= now);
         if on && due {
-            let _ = pull_feed(&app).await;
+            match due_by_cursor(&app).filter(|t| *t > now) {
+                // `gliide --pull-feed` pulled since: its rows and status are new to the window.
+                Some(t) => {
+                    lock(&app.feed).next_pull = Some(t);
+                    changed(&app);
+                }
+                None => {
+                    if let Pulled::Elsewhere = run_pull(&app).await {
+                        // Asked again next tick: by then its pull has stamped the cursor, and the next counts from it.
+                        lock(&app.feed).next_pull = Some(now);
+                    }
+                }
+            }
         }
         tokio::time::sleep(TICK).await;
     }
+}
+
+/// `gliide --pull-feed` (launchd's, every 3 hours while Settings → Feed's "Pull while gliide is closed" is on): the
+/// app's pull and checks, awaited to the end, logos too. Nothing while the feed is off, a pull isn't due (the cursor's
+/// last pull and `every_hours`) or another gliide is pulling. A line saying what it did; an error when the pull or a
+/// check failed.
+pub async fn pull_closed(app: &Arc<App>) -> Result<String> {
+    let (s, due) = blocking(app, |app| Ok((settings(app)?, due_by_cursor(app)))).await?;
+    if !s.enabled {
+        return Ok("the feed is off; nothing pulled".to_owned());
+    }
+    if let Some(t) = due.filter(|t| *t > Utc::now()) {
+        return Ok(format!(
+            "pulled recently; the next pull is due after {}",
+            t.with_timezone(&Local).format("%-I:%M %p")
+        ));
+    }
+    let before = blocking(app, tally).await?;
+    let (result, logos) = match run_pull(app).await {
+        Pulled::Ran { result, logos } => (result, logos),
+        Pulled::Busy | Pulled::Elsewhere => {
+            return Ok("another gliide is pulling; skipped".to_owned());
+        }
+    };
+    if let Some(logos) = logos {
+        let _ = logos.await;
+    }
+    result?;
+    let after = blocking(app, tally).await?;
+    let error = blocking(app, cursor).await?.error;
+    Ok(format!(
+        "{} new jobs ({} kept), {} checked ({} of {} today){}",
+        after.found - before.found,
+        after.kept - before.kept,
+        after.checked_today.saturating_sub(before.checked_today),
+        after.checked_today,
+        s.daily_checks,
+        error.map(|e| format!("; {e}")).unwrap_or_default(),
+    ))
+}
+
+/// The feed's rows, those not skipped, and today's checks: what a background pull reports, as it changes them.
+struct Tally {
+    found: usize,
+    kept: usize,
+    checked_today: u32,
+}
+
+fn tally(app: &App) -> Result<Tally> {
+    let store = lock(&app.store);
+    let rows = store.feed()?;
+    Ok(Tally {
+        found: rows.len(),
+        kept: rows.iter().filter(|r| r.state != FeedState::Skipped).count(),
+        checked_today: store.feed_checked_since(&midnight())?,
+    })
+}
+
+/// When a pull is due by the cursor: `every_hours` after the last pull any gliide made, less [`DUE_EARLY`]; `None`
+/// before the first, or when the settings or cursor can't be read.
+fn due_by_cursor(app: &App) -> Option<DateTime<Utc>> {
+    let hours = settings(app).ok()?.every_hours;
+    let last = cursor(app).ok()?.last_pull.as_deref().and_then(parse_time)?;
+    Some(last + hours_of(hours) - DUE_EARLY)
 }
 
 /// Reads every source that's on: freehire newest first until a job the last pull saw (the first pull: the last few
@@ -941,11 +1086,13 @@ pub fn feed_settings(app: &App) -> Result<FeedSettingsView> {
         auto,
         masters,
         boards,
+        background: crate::background::status(),
     })
 }
 
 /// Saves the feed's settings (custom lists trimmed and lowercased, watchlist links as their boards' careers links, each
-/// once; the Apify token trimmed, empty is none); a new schedule counts from the last pull.
+/// once; the Apify token trimmed, empty is none); a new schedule counts from the last pull. The launchd agent is
+/// registered while the feed and `background` are both on, unregistered otherwise; when macOS refuses, nothing's saved.
 pub fn set_feed_settings(app: &App, dto: FeedSettingsDto) -> Result<FeedSettingsView> {
     let mut s = FeedSettings::from(dto);
     if !(0.0..=100.0).contains(&s.threshold) {
@@ -993,15 +1140,13 @@ pub fn set_feed_settings(app: &App, dto: FeedSettingsDto) -> Result<FeedSettings
         .map(|t| t.trim().to_owned())
         .filter(|t| !t.is_empty());
     let old = settings(app)?;
+    if let Some(id) = &s.master
+        && lock(&app.store).master(id)?.is_none()
     {
-        let store = lock(&app.store);
-        if let Some(id) = &s.master
-            && store.master(id)?.is_none()
-        {
-            return Err(AppError::missing("This master was deleted; choose another"));
-        }
-        store.put_setting(SETTINGS, &s)?;
+        return Err(AppError::missing("This master was deleted; choose another"));
     }
+    crate::background::set(s.enabled && s.background)?;
+    lock(&app.store).put_setting(SETTINGS, &s)?;
     {
         let mut run = lock(&app.feed);
         if let Some(t) = run.next_pull {
@@ -1030,6 +1175,7 @@ impl From<FeedSettings> for FeedSettingsDto {
             linkedin: s.linkedin,
             watchlist: s.watchlist,
             apify_token: s.apify_token,
+            background: s.background,
         }
     }
 }
@@ -1052,6 +1198,7 @@ impl From<FeedSettingsDto> for FeedSettings {
             linkedin: s.linkedin,
             watchlist: s.watchlist,
             apify_token: s.apify_token,
+            background: s.background,
         }
     }
 }

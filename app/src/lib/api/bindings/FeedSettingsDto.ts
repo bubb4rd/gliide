@@ -36,4 +36,8 @@ watchlist: Array<string>,
 /**
  * Apify API token for Fantastic.jobs; `None` leaves it off.
  */
-apifyToken: string | null, };
+apifyToken: string | null, 
+/**
+ * Pulls go on while gliide is closed: macOS's launchd runs `gliide --pull-feed` every 3 hours (with `enabled`).
+ */
+background: boolean, };

@@ -34,6 +34,11 @@ use crate::usage::Metered;
 
 /// The store file inside the app's data folder.
 pub const STORE_FILE: &str = "gliide.sqlite";
+/// The file a feed pull and its checks hold an exclusive lock on, inside the data folder: the app and
+/// `gliide --pull-feed` never pull at once (feed.rs).
+pub const FEED_LOCK_FILE: &str = "feed.lock";
+/// tauri.conf.json's `identifier` (a test holds them equal): Tauri names the data folder after it.
+pub const IDENTIFIER: &str = "dev.bubb4rd.gliide";
 /// The settings' key in the store.
 const SETTINGS: &str = "settings";
 /// The key of each asked `--model` alias or name → the model id that last served it.
@@ -76,6 +81,9 @@ pub struct App {
     pub feed: Mutex<FeedRun>,
     /// Held while a feed job is checked: one at a time.
     pub feed_lane: tokio::sync::Mutex<()>,
+    /// [`FEED_LOCK_FILE`] in the data folder; `None` for a store with no folder (in memory), which only this process
+    /// can pull into.
+    pub feed_lock: Option<PathBuf>,
     /// Settings → Benchmark's run (benchmark.rs).
     pub benchmark: Mutex<BenchRun>,
     pub emit: Emit,
@@ -102,6 +110,16 @@ pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 /// What went wrong opening the data at launch, if anything (`tauri::State<Startup>`): set before the window opens.
 pub struct Startup(pub Option<StartupProblem>);
 
+/// The app's data folder: `$GLIIDE_DATA_DIR` when set (to run against a copy), else where Tauri's `app_data_dir()`
+/// puts it, the platform's data folder and [`IDENTIFIER`] (`~/Library/Application Support/dev.bubb4rd.gliide`).
+/// The app and `gliide --pull-feed` both open it from here.
+pub fn data_dir() -> Option<PathBuf> {
+    match std::env::var_os("GLIIDE_DATA_DIR").filter(|d| !d.is_empty()) {
+        Some(dir) => Some(PathBuf::from(dir)),
+        None => dirs::data_dir().map(|d| d.join(IDENTIFIER)),
+    }
+}
+
 impl App {
     /// The app over the store in `dir` (created when missing); else why it couldn't open.
     pub fn open(dir: &Path, emit: Emit) -> std::result::Result<Self, StartupProblem> {
@@ -118,7 +136,9 @@ impl App {
             ),
             e => problem(StartupKind::Unreadable, AppError::from(e).message),
         })?;
-        Self::new(store, emit).map_err(|e| problem(StartupKind::Unreadable, e.message))
+        let mut app = Self::new(store, emit).map_err(|e| problem(StartupKind::Unreadable, e.message))?;
+        app.feed_lock = Some(dir.join(FEED_LOCK_FILE));
+        Ok(app)
     }
 
     /// The app over `store`: settings loaded (defaults when none), and the rows of `applications.csv` in the export
@@ -139,6 +159,7 @@ impl App {
             review_generation: AtomicU64::new(0),
             feed: Mutex::new(FeedRun::default()),
             feed_lane: tokio::sync::Mutex::new(()),
+            feed_lock: None,
             benchmark: Mutex::new(BenchRun::default()),
             emit,
         };
@@ -460,6 +481,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         App::open(&dir, Box::new(|_| {})).unwrap()
+    }
+
+    /// The data folder `gliide --pull-feed` opens is the one Tauri gives the app.
+    #[test]
+    fn identifier_matches_tauri_conf() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(conf["identifier"], IDENTIFIER);
     }
 
     /// Each caller's run: whether it had joined another, and what it returned.

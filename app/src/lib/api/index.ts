@@ -76,6 +76,7 @@ export type * from "./bindings/AppError";
 export type * from "./bindings/ApplicationRow";
 export type * from "./bindings/AppStatus";
 export type * from "./bindings/Backdrop";
+export type * from "./bindings/BackgroundStatus";
 export type * from "./bindings/BankSummary";
 export type * from "./bindings/BenchEstimate";
 export type * from "./bindings/BenchmarkView";
@@ -487,6 +488,8 @@ export const openFeedJob = (slug: string) => invoke<JobRow>("open_feed_job", { s
 export const feedSettings = () => invoke<FeedSettingsView>("feed_settings");
 export const setFeedSettings = (settings: FeedSettingsDto) =>
   invoke<FeedSettingsView>("set_feed_settings", { settings });
+/** System Settings → General → Login Items, where macOS holds back or lets run the pull while gliide is closed. */
+export const openLoginItems = () => invoke<void>("open_login_items");
 
 // ── Company logos ──
 export const logos = () => invoke<LogoRow[]>("logos");

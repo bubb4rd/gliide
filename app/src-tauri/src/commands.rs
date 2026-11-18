@@ -658,6 +658,12 @@ pub async fn set_feed_settings(app: St<'_>, settings: FeedSettingsDto) -> Res<Fe
     blocking(&app, move |app| feed::set_feed_settings(app, settings)).await
 }
 
+/// System Settings → General → Login Items, where macOS holds back or lets run the feed's launchd agent.
+#[tauri::command]
+pub async fn open_login_items() -> Res<()> {
+    crate::background::open_login_items()
+}
+
 // ── Usage ──
 
 /// Every model call recorded, summed per day, feature, agent and model.

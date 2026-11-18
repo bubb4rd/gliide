@@ -9,7 +9,8 @@
   check runs them all, off ones too), each with its presence on its icon, the roles it runs, a switch (locked while a
   role runs on it), and its path behind a disclosure. When an agent a role runs on can't run, a prompt under the roles
   offers to move them to another; it never switches by itself. Feed holds the job feed's own settings (saved apart
-  from the rest): each filter is Auto (worked out from your
+  from the rest): whether it pulls, and whether it pulls while gliide is closed too (a launchd agent macOS may hold
+  back in Login Items, read again whenever the window gains focus); each filter is Auto (worked out from your
   experience and masters, shown as it stands) or Custom;
   then its sources besides freehire: LinkedIn's search, a watchlist of careers boards and Fantastic.jobs through an
   Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
@@ -51,6 +52,7 @@
     type Mode,
     type NotificationPermission,
     notificationPermission,
+    openLoginItems,
     openNotificationSettings,
     requestNotifications,
     type Role,
@@ -143,7 +145,7 @@
       label: "Feed",
       icon: Rss,
       terms:
-        "pull new postings check against masters seniority employment category countries visa clearance place daily checks fit threshold",
+        "pull new postings while gliide is closed background launchd login items check against masters seniority employment category countries visa clearance place daily checks fit threshold",
     },
     {
       id: "sources",
@@ -341,6 +343,37 @@
     const token = feedDrafts.apifyToken.trim();
     if (token !== (fs.apifyToken ?? "")) saveFeed({ apifyToken: token || null });
     else feedDrafts.apifyToken = token;
+  }
+
+  /** What macOS says of the pull while gliide is closed: read again on focus, as you may have allowed it meanwhile. */
+  function readBackground() {
+    if (pane !== "feed" || !feedView) return;
+    feedSettings().then(
+      (v) => {
+        if (feedView) feedView.background = v.background;
+      },
+      (e) => console.error(`feed settings: ${appError(e).message}`),
+    );
+  }
+
+  /** The sentence under Pull while gliide is closed: what it does, or why it can't, or what macOS wants first. */
+  const backgroundLine = $derived.by(() => {
+    const status = feedView?.background;
+    if (status === "unbundled") return "Only gliide installed as an app can pull while closed; this build runs outside one.";
+    if (status === "unsupported") return "Pulling while gliide is closed needs macOS 13 or later.";
+    if (status === "notFound") return "This copy of gliide can’t pull while closed. Install the latest release again.";
+    if (heldBack) return "macOS is holding it back. Allow gliide in System Settings → General → Login Items.";
+    return "Every 3 hours macOS opens gliide without a window to pull and check, within your daily checks.";
+  });
+  /** On, and registered, but held back in Login Items until you allow it. */
+  const heldBack = $derived(feedView?.background === "requiresApproval" && !!fs?.background);
+  /** macOS can run the agent here (an installed app, macOS 13 or later, its plist in the bundle). */
+  const backgroundPossible = $derived(
+    !!feedView && !["unbundled", "unsupported", "notFound"].includes(feedView.background),
+  );
+
+  function openLogin() {
+    openLoginItems().catch((e) => toast(appError(e).message, { tone: "danger" }));
   }
 
   function visit(url: string) {
@@ -759,7 +792,12 @@
 </script>
 
 <!-- What macOS allows can change in System Settings while gliide is away. -->
-<svelte:window onfocus={readPermission} />
+<svelte:window
+  onfocus={() => {
+    readPermission();
+    readBackground();
+  }}
+/>
 
 {#snippet rail()}
   <Input
@@ -1073,6 +1111,23 @@
                   <dt>Pull new postings</dt>
                   <dd class="toggle">
                     <Checkbox checked={fs.enabled} label="Pull new postings" onchange={(on) => saveFeed({ enabled: on })} />
+                  </dd>
+                </div>
+                <div class="field field--detail">
+                  <dt>Pull while gliide is closed</dt>
+                  <dd class="toggle">
+                    <Checkbox
+                      checked={fs.background}
+                      label="Pull while gliide is closed"
+                      disabled={!fs.enabled || !backgroundPossible}
+                      onchange={(on) => saveFeed({ background: on })}
+                    />
+                  </dd>
+                  <dd class={["detail", heldBack && "detail--action"]}>
+                    <p class="hint">{backgroundLine}</p>
+                    {#if heldBack}
+                      <Button size="sm" icon={ExternalLink} onclick={openLogin}>Open Login Items</Button>
+                    {/if}
                   </dd>
                 </div>
                 <div class="field">
@@ -1780,6 +1835,13 @@
   }
   .detail .hint:first-child {
     margin-top: 0;
+  }
+  /* A meta sentence with its one action at the trailing edge (Pull while gliide is closed, held back by macOS). */
+  .detail--action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
   }
   .link-field {
     width: 280px;

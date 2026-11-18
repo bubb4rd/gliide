@@ -19,6 +19,8 @@ tauri-build = { version = "2", features = [] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # Calendar invites (.ics): a TZID time converted with the IANA database; the Mac's zone named for the invite call.
 chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+# The data folder without a Tauri handle (`gliide --pull-feed`), worked out as Tauri's `app_data_dir()` does.
+dirs = "7"
 iana-time-zone = "0.1"
 # Company logos you set: decoded, scaled to fit and stored as PNG (Typst's formats already built, plus BMP and ICO).
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "tiff", "webp"] }
@@ -54,6 +56,13 @@ block2 = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSString", "NSURL"] }
 objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument"] }
+# The feed's launchd agent (Settings → Feed, Pull while gliide is closed): registered with SMAppService.
+objc2-service-management = { version = "0.3", default-features = false, features = [
+    "std",
+    "objc2",
+    "objc2-foundation",
+    "SMAppService",
+] }
 objc2-user-notifications = { version = "0.3", default-features = false, features = [
     "std",
     "bitflags",

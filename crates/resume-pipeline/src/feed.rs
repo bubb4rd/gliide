@@ -54,6 +54,8 @@ pub struct FeedSettings {
     pub watchlist: Vec<String>,
     /// Apify API token: Fantastic.jobs' career-site index runs once a day while one is set.
     pub apify_token: Option<String>,
+    /// Pulls go on while the app is closed (a launchd agent runs the app headless). Opt-in.
+    pub background: bool,
 }
 
 impl Default for FeedSettings {
@@ -74,6 +76,7 @@ impl Default for FeedSettings {
             linkedin: false,
             watchlist: vec![],
             apify_token: None,
+            background: false,
         }
     }
 }

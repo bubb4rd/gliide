@@ -293,7 +293,7 @@ pub fn open_settings(handle: &AppHandle) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-pub use mac::{permission, request, setup};
+pub use mac::{bundled, permission, request, setup};
 
 #[cfg(target_os = "macos")]
 mod mac {
@@ -321,13 +321,17 @@ mod mac {
     /// How long macOS may take to say what it allows (asking waits for your answer instead).
     const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
-    /// The notification center, when this process is an app bundle; `currentNotificationCenter` raises (and aborts)
-    /// in a bare binary, whose main bundle is its folder (`tauri dev` embeds an Info.plist, so it has an identifier).
-    fn center() -> Option<Retained<UNUserNotificationCenter>> {
+    /// This process is an app bundle: a bare binary's main bundle is its folder (`tauri dev` embeds an Info.plist, so
+    /// it has an identifier). UserNotifications and SMAppService (background.rs) only work in one.
+    pub fn bundled() -> bool {
         let bundle = NSBundle::mainBundle();
-        let bundled = bundle.bundlePath().to_string().ends_with(".app")
-            && bundle.bundleIdentifier().is_some();
-        bundled.then(UNUserNotificationCenter::currentNotificationCenter)
+        bundle.bundlePath().to_string().ends_with(".app") && bundle.bundleIdentifier().is_some()
+    }
+
+    /// The notification center, when this process is an app bundle; `currentNotificationCenter` raises (and aborts)
+    /// in a bare binary.
+    fn center() -> Option<Retained<UNUserNotificationCenter>> {
+        bundled().then(UNUserNotificationCenter::currentNotificationCenter)
     }
 
     /// A one-shot sender a completion block can own: the block is `Fn`, so the sender is taken once.

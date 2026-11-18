@@ -2217,6 +2217,24 @@ pub struct FeedSettingsView {
     pub masters: Vec<MasterRef>,
     /// The watchlist's boards, in its order.
     pub boards: Vec<WatchBoard>,
+    /// Where the launchd agent that pulls while gliide is closed stands (`settings.background` asks for it).
+    pub background: BackgroundStatus,
+}
+
+/// The feed's launchd agent, as macOS's SMAppService reports it: `enabled` runs every few hours; `requiresApproval` is
+/// registered but held back until you allow gliide in System Settings → General → Login Items; `notRegistered` is off;
+/// `notFound` is a bundle without the agent's plist. `unbundled` is a build outside an `.app` (`tauri dev`) and
+/// `unsupported` a macOS before 13: neither can have the agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BackgroundStatus {
+    Enabled,
+    RequiresApproval,
+    NotRegistered,
+    NotFound,
+    Unbundled,
+    Unsupported,
 }
 
 /// A company board on the watchlist.
@@ -2261,6 +2279,8 @@ pub struct FeedSettingsDto {
     pub watchlist: Vec<String>,
     /// Apify API token for Fantastic.jobs; `None` leaves it off.
     pub apify_token: Option<String>,
+    /// Pulls go on while gliide is closed: macOS's launchd runs `gliide --pull-feed` every 3 hours (with `enabled`).
+    pub background: bool,
 }
 
 /// What Auto works out from the bank and the chosen master (empty without a bank).

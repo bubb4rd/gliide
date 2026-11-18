@@ -3,6 +3,7 @@
 //! `commands` is the bridge; the modules under it hold the work and run without a webview (`App::open` with any
 //! [`state::Emit`]), which is how they're smoke-tested.
 
+pub mod background;
 pub mod benchmark;
 mod commands;
 pub mod cover;
@@ -59,7 +60,7 @@ pub fn run() {
             tauri::async_runtime::spawn_blocking(move || responder.respond(logo::respond(&app, &path)));
         })
         .setup(|app| {
-            let dir = app.path().app_data_dir()?;
+            let dir = state::data_dir().ok_or("no data folder: HOME isn't set")?;
             let handle = app.handle().clone();
             let emit: state::Emit = Box::new(move |e| {
                 let _ = match e {
@@ -179,6 +180,7 @@ pub fn run() {
             commands::open_feed_job,
             commands::feed_settings,
             commands::set_feed_settings,
+            commands::open_login_items,
             commands::usage,
             commands::export_usage,
             commands::route_latencies,
