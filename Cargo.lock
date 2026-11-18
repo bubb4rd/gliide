@@ -1600,6 +1600,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "resume-bench",
  "resume-core",
  "resume-ingest",
  "resume-llm",
@@ -2223,6 +2224,7 @@ dependencies = [
  "objc2-pdf-kit",
  "objc2-user-notifications",
  "percent-encoding",
+ "resume-bench",
  "resume-core",
  "resume-ingest",
  "resume-llm",
@@ -4880,6 +4882,20 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+]
+
+[[package]]
+name = "resume-bench"
+version = "0.1.0"
+dependencies = [
+ "resume-core",
+ "resume-llm",
+ "resume-pipeline",
+ "resume-render",
+ "resume-tailor",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 //! The app's store: one SQLite file holding bank and master revisions, postings, Extract and Suggest output, drafts,
 //! cover letters, applications and their interview rounds, preps, practice and debriefs, the notifications sent,
-//! stories, Dig's questions and answers, company logos, the job feed, each model call's usage and settings
-//! (ARCHITECTURE.md §8).
+//! stories, Dig's questions and answers, company logos, the job feed, each model call's usage, what became of each
+//! exported change, benchmark runs and settings (ARCHITECTURE.md §8).
 //!
 //! Revisions are immutable and keyed by content hash, so an analysis records exactly the bank and master it ran
 //! against. Rows carry UUIDs and RFC 3339 `updated_at` so sync can be added without a migration. JSON columns hold
@@ -15,7 +15,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use resume_core::change::{Draft, DraftEvent, Mode};
+use resume_core::change::{Draft, DraftEvent, Mode, Origin};
 use resume_core::feed::FeedJob;
 use resume_core::posting::text_hash;
 use resume_core::salary::{self, Salary};
@@ -46,6 +46,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("links.sql"),
     include_str!("usage.sql"),
     include_str!("latency.sql"),
+    include_str!("bench.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -148,6 +149,102 @@ pub struct Latency {
     pub calls: u64,
 }
 
+/// A route's timed calls: how many, and their 50th and 90th percentile wall times, nearest-rank.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteTimes {
+    pub agent: String,
+    pub model: String,
+    pub calls: u64,
+    pub p50_ms: u64,
+    pub p90_ms: u64,
+}
+
+/// What became of a change at export, after the fit check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ChangeFate {
+    In,
+    /// You turned it off.
+    Off,
+    /// You turned it on although the fit check would leave it out.
+    Forced,
+    /// Left out because the grounding validator flagged it.
+    LeftOutValidator,
+    /// Left out by the fit check, to keep the resume to its page limit.
+    LeftOutFit,
+}
+
+impl ChangeFate {
+    /// The name stored in `change_outcomes.outcome`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::In => "in",
+            Self::Off => "off",
+            Self::Forced => "forced",
+            Self::LeftOutValidator => "left_out_validator",
+            Self::LeftOutFit => "left_out_fit",
+        }
+    }
+}
+
+/// One change of an exported resume and what became of it (see `bench.sql`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChangeOutcome {
+    /// The analysis the change came from; cleared when the analysis goes.
+    pub analysis_id: Option<String>,
+    /// `Change::key`.
+    pub key: String,
+    /// The Suggest route that proposed it, as `usage.agent` and `analyses.model` name it.
+    pub agent: String,
+    pub model: String,
+    /// The op's name (`rewrite`, `skill_add`…) as Suggest proposed it, before your wording.
+    pub op: String,
+    pub origin: Origin,
+    pub outcome: ChangeFate,
+    /// You decided it yourself (on or off), rather than taking the default.
+    pub explicit: bool,
+    /// You reworded it.
+    pub edited: bool,
+}
+
+/// What you kept of a Suggest route's changes at export: `kept` in or forced, out of `decided` (in, off or forced),
+/// over `postings` applications. Suggested changes only; the validator's and the fit check's left-outs aren't yours
+/// to keep or drop, and your own edits aren't the route's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeptRow {
+    pub agent: String,
+    pub model: String,
+    pub kept: u64,
+    pub decided: u64,
+    pub postings: u64,
+}
+
+/// One benchmark call's result, as stored. `role` and `outcome` are `resume-bench`'s serde names and `metrics` its
+/// `RunMetrics` JSON, so the store needn't know the benchmark's types.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BenchRunRow {
+    pub role: String,
+    pub agent: String,
+    pub model: String,
+    /// The fixture posting it ran on.
+    pub item: String,
+    /// The run number for this role, route and item.
+    pub n: u32,
+    pub outcome: String,
+    pub error: Option<String>,
+    pub latency_ms: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub cache_read_tokens: u64,
+    /// What the agent said it cost at API prices; `None` when it didn't say.
+    pub cost_usd: Option<f64>,
+    /// The model that served the call, when the agent said.
+    pub served: Option<String>,
+    pub metrics: Option<String>,
+    /// When it was recorded (RFC 3339 UTC); set by the store.
+    pub at: String,
+}
+
 /// A Suggest result to store as an analysis.
 #[derive(Debug, Clone, Copy)]
 pub struct NewAnalysis<'a> {
@@ -159,6 +256,8 @@ pub struct NewAnalysis<'a> {
     /// `resume_pipeline::suggest_key` of the Suggest input.
     pub key: &'a str,
     pub model: &'a str,
+    /// The Suggest route's agent, as `usage.agent` names it.
+    pub agent: &'a str,
     pub suggestions: &'a Suggestions,
     pub latency_ms: u64,
 }
@@ -172,6 +271,8 @@ pub struct AnalysisRow {
     pub master_rev: Rev,
     pub mode: Mode,
     pub model: String,
+    /// The Suggest route's agent, as `usage.agent` names it; `""` for analyses stored before it was kept.
+    pub agent: String,
     pub suggestions: Suggestions,
     /// The projected score, for the posting's fit score; `None` until the review computed it.
     pub projected: Option<f64>,
@@ -842,15 +943,16 @@ impl Store {
             master_rev: new.master_rev.clone(),
             mode: new.mode,
             model: new.model.to_owned(),
+            agent: new.agent.to_owned(),
             suggestions: new.suggestions.clone(),
             projected: None,
             created_at: now(),
             opened_at: String::new(),
         };
         self.conn.execute(
-            "INSERT INTO analyses (id, posting_id, bank_rev, master_id, master_rev, mode, key, model, suggestions,
-                 latency_ms, created_at, opened_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?11)",
+            "INSERT INTO analyses (id, posting_id, bank_rev, master_id, master_rev, mode, key, model, agent,
+                 suggestions, latency_ms, created_at, opened_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?12)",
             params![
                 row.id,
                 row.posting_id,
@@ -860,6 +962,7 @@ impl Store {
                 mode_name(row.mode),
                 new.key,
                 row.model,
+                row.agent,
                 serde_json::to_string(new.suggestions)?,
                 to_i64(new.latency_ms),
                 row.created_at,
@@ -1706,6 +1809,182 @@ impl Store {
         })
     }
 
+    /// Every route's timed calls for any of `features`, by agent and model (the model that served each, as recorded),
+    /// sorted by agent then model: how many, and their 50th and 90th percentile wall times. Both are nearest-rank, the
+    /// call at rank ⌈p·n⌉, so each is a call that was made; the 50th is the lower middle [`Store::latency`] takes.
+    pub fn latencies_by_route(&self, features: &[&str]) -> Result<Vec<RouteTimes>, StoreError> {
+        let sql = format!(
+            "SELECT agent, model, latency_ms FROM usage WHERE latency_ms IS NOT NULL AND feature IN ({}) \
+             ORDER BY agent, model, latency_ms",
+            vec!["?"; features.len()].join(", "),
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(features), |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0),
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows
+            .chunk_by(|a, b| (&a.0, &a.1) == (&b.0, &b.1))
+            .map(|calls| {
+                let times: Vec<u64> = calls.iter().map(|c| c.2).collect();
+                RouteTimes {
+                    agent: calls[0].0.clone(),
+                    model: calls[0].1.clone(),
+                    calls: times.len() as u64,
+                    p50_ms: nearest_rank(&times, 50),
+                    p90_ms: nearest_rank(&times, 90),
+                }
+            })
+            .collect())
+    }
+
+    // Change outcomes.
+
+    /// Sets what became of the application's exported changes, replacing what its last export recorded, in one
+    /// transaction. Empty clears them (an export whose route isn't known). Keys must be unique.
+    pub fn put_change_outcomes(
+        &self,
+        application_id: &str,
+        outcomes: &[ChangeOutcome],
+    ) -> Result<(), StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM change_outcomes WHERE application_id = ?1",
+            [application_id],
+        )?;
+        let at = now();
+        {
+            let mut insert = tx.prepare(
+                "INSERT INTO change_outcomes (application_id, analysis_id, key, agent, model, op, origin, outcome,
+                     explicit, edited, at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            )?;
+            for o in outcomes {
+                insert.execute(params![
+                    application_id,
+                    o.analysis_id,
+                    o.key,
+                    o.agent,
+                    o.model,
+                    o.op,
+                    origin_name(o.origin),
+                    o.outcome.as_str(),
+                    o.explicit,
+                    o.edited,
+                    at,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// What you kept of each Suggest route's changes over every exported application, by agent and model, sorted
+    /// by agent then model. A route none of whose suggestions you could keep or drop isn't listed.
+    pub fn kept_by_route(&self) -> Result<Vec<KeptRow>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT agent, model, sum(outcome IN ('in', 'forced')), count(*), count(DISTINCT application_id)
+             FROM change_outcomes WHERE origin = 'suggested' AND outcome IN ('in', 'off', 'forced')
+             GROUP BY agent, model ORDER BY agent, model",
+        )?;
+        let count = |r: &Row, i| r.get::<_, i64>(i).map(|n| u64::try_from(n).unwrap_or(0));
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(KeptRow {
+                    agent: r.get(0)?,
+                    model: r.get(1)?,
+                    kept: count(r, 2)?,
+                    decided: count(r, 3)?,
+                    postings: count(r, 4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    // Benchmark runs.
+
+    /// Records a benchmark run, now (`run.at` is ignored), replacing the one with the same role, route, item and
+    /// run number.
+    pub fn put_bench_run(&self, run: &BenchRunRow) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO bench_runs (role, agent, model, item, n, outcome, error, latency_ms, input_tokens,
+                 output_tokens, cache_write_tokens, cache_read_tokens, cost_usd, served, metrics, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                run.role,
+                run.agent,
+                run.model,
+                run.item,
+                run.n,
+                run.outcome,
+                run.error,
+                to_i64(run.latency_ms),
+                to_i64(run.input_tokens),
+                to_i64(run.output_tokens),
+                to_i64(run.cache_write_tokens),
+                to_i64(run.cache_read_tokens),
+                run.cost_usd,
+                run.served,
+                run.metrics,
+                now(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Every benchmark run, by role, agent, model, item and run number.
+    pub fn bench_runs(&self) -> Result<Vec<BenchRunRow>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT role, agent, model, item, n, outcome, error, latency_ms, input_tokens, output_tokens,
+                 cache_write_tokens, cache_read_tokens, cost_usd, served, metrics, at
+             FROM bench_runs ORDER BY role, agent, model, item, n",
+        )?;
+        let count = |r: &Row, i| r.get::<_, i64>(i).map(|n| u64::try_from(n).unwrap_or(0));
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(BenchRunRow {
+                    role: r.get(0)?,
+                    agent: r.get(1)?,
+                    model: r.get(2)?,
+                    item: r.get(3)?,
+                    n: r.get(4)?,
+                    outcome: r.get(5)?,
+                    error: r.get(6)?,
+                    latency_ms: count(r, 7)?,
+                    input_tokens: count(r, 8)?,
+                    output_tokens: count(r, 9)?,
+                    cache_write_tokens: count(r, 10)?,
+                    cache_read_tokens: count(r, 11)?,
+                    cost_usd: r.get(12)?,
+                    served: r.get(13)?,
+                    metrics: r.get(14)?,
+                    at: r.get(15)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Removes a route's benchmark runs for `role`, so a fresh run starts from none.
+    pub fn delete_bench_runs(
+        &self,
+        role: &str,
+        agent: &str,
+        model: &str,
+    ) -> Result<(), StoreError> {
+        self.conn.execute(
+            "DELETE FROM bench_runs WHERE role = ?1 AND agent = ?2 AND model = ?3",
+            params![role, agent, model],
+        )?;
+        Ok(())
+    }
+
     // Preps and practice.
 
     /// The prep stored under `key`.
@@ -2094,7 +2373,7 @@ const FEED_COLUMNS: &str = "json, state, overlap, posting_id, score, master_id, 
                             created_at";
 
 const ANALYSIS_COLUMNS: &str = "id, posting_id, bank_rev, master_id, master_rev, mode, model, suggestions, projected, \
-                                created_at, opened_at";
+                                created_at, opened_at, agent";
 
 const APPLICATION_COLUMNS: &str = "id, posting_id, analysis_id, date, company, role, url, status, now, projected, \
                                    on_file, resume_path, cover_path, notes, updated_at";
@@ -2155,6 +2434,7 @@ struct RawAnalysis {
     projected: Option<f64>,
     created_at: String,
     opened_at: String,
+    agent: String,
 }
 
 impl RawAnalysis {
@@ -2171,6 +2451,7 @@ impl RawAnalysis {
             projected: r.get(8)?,
             created_at: r.get(9)?,
             opened_at: r.get(10)?,
+            agent: r.get(11)?,
         })
     }
 
@@ -2183,6 +2464,7 @@ impl RawAnalysis {
             master_rev: Rev(self.master_rev),
             mode: serde_json::from_value(serde_json::Value::String(self.mode))?,
             model: self.model,
+            agent: self.agent,
             suggestions: from_json(&self.suggestions)?,
             projected: self.projected,
             created_at: self.created_at,
@@ -2398,6 +2680,19 @@ fn read_draft(conn: &Connection, analysis_id: &str) -> Result<DraftLog, StoreErr
         .collect::<Result<Vec<DraftEvent>, _>>()?;
     let cursor = usize::try_from(cursor).unwrap_or(0).min(events.len());
     Ok(DraftLog { events, cursor })
+}
+
+fn origin_name(origin: Origin) -> &'static str {
+    match origin {
+        Origin::Suggested => "suggested",
+        Origin::Yours => "yours",
+    }
+}
+
+/// The `pct`th percentile of `sorted` (ascending, not empty), nearest-rank: the value at rank ⌈pct·n/100⌉.
+fn nearest_rank(sorted: &[u64], pct: usize) -> u64 {
+    let rank = (pct * sorted.len()).div_ceil(100).max(1);
+    sorted[rank - 1]
 }
 
 fn mode_name(mode: Mode) -> &'static str {

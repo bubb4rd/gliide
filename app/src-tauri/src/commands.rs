@@ -7,18 +7,19 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::dto::{
-    Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, CoverPart, CoverView, CustomEdit,
-    Debrief, DebriefView, Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit,
-    EntryView, Exported, FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView,
-    ImportChoices, ImportView, Instructed, JobRow, JobView, KeyDecision, Library, LogoRow,
-    LogoSource, Nudge, Place, PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round,
-    RoundDraft, RoundsView, RouteLatency, SalaryRange, SearchCursor, SearchResults, SentView,
-    Settings, StatusSet, StoriesView, StoryDraft, StoryView, UpdateStatus, UsageView,
+    Accepted, AgentStatus, AppError, AppStatus, ApplicationRow, BenchEstimate, BenchPlan,
+    BenchRunStatus, BenchmarkView, CoverPart, CoverView, CustomEdit, Debrief, DebriefView,
+    Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit, EntryView, Exported,
+    FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView, ImportChoices, ImportView,
+    Instructed, JobRow, JobView, KeyDecision, Library, LogoRow, LogoSource, Nudge, Place,
+    PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round, RoundDraft, RoundsView,
+    RouteLatency, SalaryRange, SearchCursor, SearchResults, SentView, Settings, StatusSet,
+    StoriesView, StoryDraft, StoryView, UpdateStatus, UsageView,
 };
 use crate::state::{App, blocking};
 use crate::{
-    cover, debrief, dig, entry, export, feed, folder as files, import, jobs, library as lib, logo,
-    place, prep, review, rounds, settings, stories, update, usage,
+    benchmark, cover, debrief, dig, entry, export, feed, folder as files, import, jobs,
+    library as lib, logo, place, prep, review, rounds, settings, stories, update, usage,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -675,4 +676,36 @@ pub async fn export_usage(app: St<'_>, path: String) -> Res<()> {
 #[tauri::command]
 pub async fn route_latencies(app: St<'_>) -> Res<Vec<RouteLatency>> {
     blocking(&app, usage::route_latencies).await
+}
+
+// ── Benchmark ──
+
+/// Settings → Benchmark: each role's routes ranked, and the run on this Mac.
+#[tauri::command]
+pub async fn benchmark(app: St<'_>) -> Res<BenchmarkView> {
+    blocking(&app, benchmark::view).await
+}
+
+/// How many calls `plan` makes and about how long they take.
+#[tauri::command]
+pub async fn benchmark_estimate(app: St<'_>, plan: BenchPlan) -> Res<BenchEstimate> {
+    blocking(&app, move |app| benchmark::estimate(app, &plan)).await
+}
+
+/// Starts `plan`, this Mac's earlier runs of its roles and routes deleted first; fails while one runs.
+#[tauri::command]
+pub async fn benchmark_start(app: St<'_>, plan: BenchPlan) -> Res<BenchRunStatus> {
+    benchmark::start(&app, plan).await
+}
+
+/// Goes on with the stopped run, skipping the runs it recorded.
+#[tauri::command]
+pub async fn benchmark_resume(app: St<'_>) -> Res<BenchRunStatus> {
+    benchmark::resume(&app).await
+}
+
+/// Stops the run, the call in flight with it.
+#[tauri::command]
+pub async fn benchmark_stop(app: St<'_>) -> Res<()> {
+    blocking(&app, benchmark::stop).await
 }

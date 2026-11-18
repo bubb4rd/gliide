@@ -23,6 +23,8 @@ iana-time-zone = "0.1"
 # Company logos you set: decoded, scaled to fit and stored as PNG (Typst's formats already built, plus BMP and ICO).
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "tiff", "webp"] }
 percent-encoding = "2"
+# Settings → Benchmark: its fixtures, calls and scores, and the reference shipped with the app.
+resume-bench = { path = "../../crates/resume-bench" }
 resume-core = { path = "../../crates/resume-core" }
 resume-ingest = { path = "../../crates/resume-ingest" }
 resume-llm = { path = "../../crates/resume-llm" }

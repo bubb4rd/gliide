@@ -1,10 +1,10 @@
 //! The app's state (`tauri::State<Arc<App>>`): the store, the settings, the open review, warm renderers, the model
-//! calls running and the feed's run.
+//! calls running, the feed's run and the benchmark's.
 //!
 //! Locks are `std::sync::Mutex`, never held across an `await`. Order, when one is taken under another: `review`, then
-//! `renderers`, then `pages`; `store` is always taken last and released before any other lock; `feed` and `calls` are
-//! taken alone. The exceptions are `tokio` mutexes held across awaits: `feed_lane` (feed checks run one at a time) and
-//! each of `flights` (one call per stored answer, [`single_flight`]).
+//! `renderers`, then `pages`; `benchmark`, then `store`; `store` is always taken last and released before any other
+//! lock; `feed` and `calls` are taken alone. The exceptions are `tokio` mutexes held across awaits: `feed_lane` (feed
+//! checks run one at a time) and each of `flights` (one call per stored answer, [`single_flight`]).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -19,9 +19,10 @@ use resume_store::{Rev, Store, StoreError};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
 
+use crate::benchmark::BenchRun;
 use crate::dto::{
-    AgentsSettings, Backdrop, ErrorKind, Feature, FeedStatus, Mode, Notifications, Progress, Routes, Settings, Stage,
-    StartupKind, StartupProblem, Theme,
+    AgentsSettings, Backdrop, BenchRunStatus, ErrorKind, Feature, FeedStatus, Mode, Notifications,
+    Progress, Routes, Settings, Stage, StartupKind, StartupProblem, Theme,
 };
 use crate::error::{AppError, Result};
 use crate::export;
@@ -45,6 +46,8 @@ pub enum Event<'a> {
     Progress(&'a [Progress]),
     /// `feed`: a feed row or the feed's status changed.
     Feed(&'a FeedStatus),
+    /// `benchmark`: the benchmark's run, after every call and on every change of state.
+    Benchmark(&'a BenchRunStatus),
 }
 
 /// How the app tells the UI (Tauri's events; a no-op or a log without the webview).
@@ -72,6 +75,8 @@ pub struct App {
     pub feed: Mutex<FeedRun>,
     /// Held while a feed job is checked: one at a time.
     pub feed_lane: tokio::sync::Mutex<()>,
+    /// Settings → Benchmark's run (benchmark.rs).
+    pub benchmark: Mutex<BenchRun>,
     pub emit: Emit,
 }
 
@@ -133,6 +138,7 @@ impl App {
             review_generation: AtomicU64::new(0),
             feed: Mutex::new(FeedRun::default()),
             feed_lane: tokio::sync::Mutex::new(()),
+            benchmark: Mutex::new(BenchRun::default()),
             emit,
         };
         let _ = export::import_applications_csv(&app);

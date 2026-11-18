@@ -14,7 +14,9 @@
   then its sources besides freehire: LinkedIn's search, a watchlist of careers boards and Fantastic.jobs through an
   Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
   while Interviews is off or macOS doesn't allow gliide's banners, read again whenever the window gains focus. Usage
-  (`Usage.svelte`) shows the model calls' tokens and cost.
+  (`Usage.svelte`) shows the model calls' tokens and cost; Benchmark (`Benchmark.svelte`) ranks the routes per role and
+  runs the suite on this Mac. Set all to…'s presets and Benchmark's Use the best per role apply routes the same way
+  (`app.applyRoutes`, with Undo).
 -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
@@ -26,6 +28,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Bot from "@lucide/svelte/icons/bot";
+  import Gauge from "@lucide/svelte/icons/gauge";
   import ChartColumn from "@lucide/svelte/icons/chart-column";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import ExternalLink from "@lucide/svelte/icons/external-link";
@@ -58,7 +61,9 @@
   } from "$lib/api";
   import { AGENT_LIST, AGENTS, PRESETS, ROLES, type AgentInfo, type Preset } from "$lib/agents";
   import { CATEGORY, COUNTRIES, EMPLOYMENT, SENIORITY, countryName } from "$lib/feed";
+  import type { KeyBindings } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
+  import { benchmark } from "$lib/stores/benchmark.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { shell, type SettingsPane } from "$lib/stores/shell.svelte";
   import { theme } from "$lib/stores/theme.svelte";
@@ -79,6 +84,7 @@
     tip,
     toast,
   } from "$lib/ui";
+  import Benchmark from "./Benchmark.svelte";
   import Usage from "./Usage.svelte";
 
   const CUSTOM = "custom";
@@ -122,6 +128,13 @@
       icon: Bot,
       terms:
         "who does what reading tailoring writing coaching set all models suggestions from bank-aware master only claude code codex antigravity path sign in check again",
+    },
+    {
+      id: "benchmark",
+      label: "Benchmark",
+      icon: Gauge,
+      terms:
+        "leaderboard score quality reliability speed typical time cost reference run this mac routes best per role kept edits",
     },
     { id: "usage", label: "Usage", icon: ChartColumn, terms: "tokens cost model calls export csv" },
     {
@@ -176,11 +189,17 @@
     }
   }
 
-  const sheetKeys = {
+  /** The pane's own keys while it's shown (Benchmark's setup: ⏎ starts the run, Esc closes it). */
+  let paneKeys = $state<KeyBindings>({});
+  const sheetKeys = $derived<KeyBindings>({
+    ...(pane === "benchmark" ? paneKeys : {}),
     "mod+,": () => shell.closeSettings(),
     "mod+f": () => search?.focus(),
     "/": () => search?.focus(),
-  };
+  });
+
+  /** Benchmark's place in the rail while a run is going: "40/324". */
+  const runCount = $derived(benchmark.busy && benchmark.run ? `${benchmark.run.done}/${benchmark.run.total}` : undefined);
 
   // The fields start from what's stored for each role's agent, and follow it after each save or switch.
   $effect(() => {
@@ -483,7 +502,7 @@
       { value: CUSTOM, label: "Custom…" },
     ];
   }
-  const listed = (agent: Agent, model: string) => !!statusOf(agent)?.models.some((m) => m.id === model);
+  const listed = (agent: Agent, model: string) => app.lists(agent, model);
 
   const menuValue = (role: Role) => {
     const r = app.routes[role];
@@ -658,7 +677,7 @@
 
   // ── The roles' menus: the agents that are on and signed in, and always the one a role runs on ──
   const option = (a: AgentInfo) => ({ value: a.id, label: a.name, meta: statusOf(a.id)?.plan ?? undefined });
-  const offered = (a: AgentInfo) => !!s?.agents[a.id].enabled && ready(statusOf(a.id));
+  const offered = (a: AgentInfo) => app.offers(a.id);
   const agentOptions = (role: Role) => AGENT_LIST.filter((a) => a.id === s?.routes[role] || offered(a)).map(option);
   /** A preset's agents are on and signed in, and each lists the model it names (Claude Code's aliases always do). */
   const presetReady = (p: Preset) =>
@@ -689,18 +708,10 @@
   /** The agent whose mark leads a Set all to… option: the agent's own, or a preset's Tailoring agent. */
   const leadAgent = (value: string) => presetOf(value)?.routes.tailor.agent ?? (value as Agent);
 
-  /** Puts every role on the agent and model `p` names for it. */
-  function applyPreset(p: Preset) {
-    if (!s) return;
-    const routes = { ...s.routes };
-    const agents = { ...s.agents };
-    for (const { id } of ROLES) {
-      const { agent, model } = p.routes[id];
-      routes[id] = agent;
-      agents[agent] = { ...agents[agent], models: { ...agents[agent].models, [id]: model } };
-      custom[id] = false;
-    }
-    void save({ routes, agents });
+  /** Puts every role on the agent and model `p` names for it (Undo in its toast); a failed save redraws the menus. */
+  async function applyPreset(p: Preset) {
+    for (const { id } of ROLES) custom[id] = false;
+    if (!(await app.applyRoutes(p.routes))) resets++;
   }
 
   function setAll(value: string) {
@@ -764,7 +775,12 @@
   {#if shown.length}
     <Nav label="Settings panes">
       {#each shown as p (p.id)}
-        <NavItem icon={p.icon} current={pane === p.id} onclick={() => shell.openSettings(p.id)}>{p.label}</NavItem>
+        <NavItem
+          icon={p.icon}
+          current={pane === p.id}
+          meta={p.id === "benchmark" ? runCount : undefined}
+          metaTitle="Benchmark calls run"
+          onclick={() => shell.openSettings(p.id)}>{p.label}</NavItem>
       {/each}
     </Nav>
   {:else}
@@ -1032,6 +1048,9 @@
           </ul>
           </div>
         </Card>
+      {:else if pane === "benchmark"}
+        <!-- Its lede names the best route per role, so the pane draws it under its actions. -->
+        <Benchmark bind:keys={paneKeys} />
       {:else if pane === "usage"}
         <p class="lede">
           Tokens your model calls used, and what they’d cost at API prices. On a subscription that’s a measure of what

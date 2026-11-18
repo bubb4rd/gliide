@@ -6,105 +6,34 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Duration;
 
-use resume_core::matcher::{Page, find_literal};
-use resume_core::requirements::Skill;
+use resume_bench::{Fixtures, GOLD_DIR, Overlap, Role, Run, mean, overlap, run_one};
 use resume_core::{PageFacts, Requirements, Resume, score};
-use resume_llm::extract;
 use resume_pipeline::{master_page, today};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::report::{Bar, PerPosting, Section, by_route, common, common_metrics, m};
-use super::{Fixtures, Run, RunArgs, call, each, mean, stdev};
-
-const TIMEOUT: Duration = Duration::from_secs(180);
+use super::{RunArgs, each, stdev};
 
 pub async fn run(fx: &Fixtures, args: &RunArgs, out: &Path) -> anyhow::Result<()> {
-    let schema = extract::schema();
-    let items: Vec<(String, &resume_core::Posting)> = fx
+    let items: Vec<String> = fx
         .chosen(&args.only)
         .into_iter()
-        .map(|f| (f.id.clone(), &f.posting))
+        .map(|f| f.id.clone())
         .collect();
     each(
         "read",
+        Role::Read,
         args,
-        3,
-        TIMEOUT,
         out,
         &items,
-        async |llm, route, posting| {
-            let c = call(extract::extract(llm, &schema, posting, &route.model)).await;
-            let meta = json!({ "input_chars": extract::input(posting).chars().count() });
-            (c, meta)
-        },
+        async |llm, route, id, n| run_one(llm, route, Role::Read, fx, id, n).await,
     )
     .await
 }
 
 // ── Against gold ────────────────────────────────────────────────────────────────────────────────────────────────────
-
-/// Whether two requirement skills name the same thing: either's term or one of its aliases (its own and the alias
-/// dictionary's) appears as a whole term in the other's term or aliases, as `resume_core::matcher` finds terms on a
-/// page. So `Python` matches `Python 3`, and `JS` matches `JavaScript` through the dictionary.
-pub fn same_skill(a: &Skill, b: &Skill) -> bool {
-    let page = |s: &Skill| {
-        Page::new(
-            std::iter::once(s.term.as_str())
-                .chain(s.aliases.iter().map(String::as_str))
-                .map(|t| (None, t)),
-        )
-    };
-    find_literal(&page(b), &a.term, &a.aliases).is_some()
-        || find_literal(&page(a), &b.term, &b.aliases).is_some()
-}
-
-/// A run's skills against gold's.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Overlap {
-    /// Gold units found among the run's skills, of all gold units. A one-of group is one unit, found when any of its
-    /// members is.
-    pub recall: Option<f64>,
-    /// The run's skills that match some gold skill (of any unit), of all the run's skills.
-    pub precision: Option<f64>,
-    /// Recall over the must-have units: those with a member that is priority 1 or required.
-    pub must_recall: Option<f64>,
-}
-
-pub fn overlap(gold: &[Skill], run: &[Skill]) -> Overlap {
-    let mut units: Vec<Vec<&Skill>> = Vec::new();
-    let mut groups: BTreeMap<&str, usize> = BTreeMap::new();
-    for g in gold {
-        match g.group.as_deref() {
-            Some(id) => match groups.get(id) {
-                Some(&i) => units[i].push(g),
-                None => {
-                    groups.insert(id, units.len());
-                    units.push(vec![g]);
-                }
-            },
-            None => units.push(vec![g]),
-        }
-    }
-    let found = |u: &[&Skill]| u.iter().any(|g| run.iter().any(|r| same_skill(g, r)));
-    let share = |hit: usize, of: usize| (of > 0).then(|| hit as f64 / of as f64);
-    let must: Vec<&Vec<&Skill>> = units
-        .iter()
-        .filter(|u| u.iter().any(|g| g.priority == 1 || g.required))
-        .collect();
-    Overlap {
-        recall: share(units.iter().filter(|u| found(u)).count(), units.len()),
-        precision: share(
-            run.iter()
-                .filter(|r| gold.iter().any(|g| same_skill(g, r)))
-                .count(),
-            run.len(),
-        ),
-        must_recall: share(must.iter().filter(|u| found(u)).count(), must.len()),
-    }
-}
 
 /// The `now` score of `resume` against `run`'s requirements minus against `gold`'s: positive when the route's reading
 /// makes the master look better than it is.
@@ -252,7 +181,7 @@ pub fn section(fx: &Fixtures, runs: &[Run]) -> anyhow::Result<Vec<Section>> {
              stdev across a posting's runs, averaged over postings. Knockouts compare their kinds; degree its level \
              and `equivalent`. Literal-term rate, priority-1 share, soft and person-describing terms are the Extract \
              spike's checks.\n",
-            super::GOLD,
+            GOLD_DIR,
             fx.gold.len(),
             fx.postings.len()
         ),
@@ -315,11 +244,9 @@ pub fn section(fx: &Fixtures, runs: &[Run]) -> anyhow::Result<Vec<Section>> {
             .filter(|r| r.ok())
             .filter_map(|r| {
                 let out = r.output.as_ref()?;
-                let text = fx
-                    .posting(&r.posting)
-                    .map_or("", |f| f.posting.text.as_str());
+                let text = fx.posting(&r.item).map_or("", |f| f.posting.text.as_str());
                 let req = Requirements::deserialize(out).ok();
-                let gold = fx.gold.get(&r.posting);
+                let gold = fx.gold.get(&r.item);
                 let now = req.as_ref().map(|q| score(&resume, q, &facts, today).total);
                 Some(Measured {
                     run: r,
@@ -390,7 +317,7 @@ pub fn section(fx: &Fixtures, runs: &[Run]) -> anyhow::Result<Vec<Section>> {
         let mut by_posting: BTreeMap<&str, Vec<f64>> = BTreeMap::new();
         for x in &ms {
             if let Some(now) = x.now {
-                by_posting.entry(&x.run.posting).or_default().push(now);
+                by_posting.entry(&x.run.item).or_default().push(now);
             }
         }
         put(
@@ -428,14 +355,14 @@ pub fn section(fx: &Fixtures, runs: &[Run]) -> anyhow::Result<Vec<Section>> {
 
         for x in &ms {
             if let Some(r) = x.overlap.and_then(|o| o.recall) {
-                recall_pp.push(&x.run.posting, &route, r);
+                recall_pp.push(&x.run.item, &route, r);
             }
             if let Some(now) = x.now {
-                now_pp.push(&x.run.posting, &route, now);
+                now_pp.push(&x.run.item, &route, now);
             }
         }
         for r in &rs {
-            lat_pp.push(&r.posting, &route, r.secs());
+            lat_pp.push(&r.item, &route, r.secs());
         }
 
         let mut terms = String::new();
@@ -446,7 +373,7 @@ pub fn section(fx: &Fixtures, runs: &[Run]) -> anyhow::Result<Vec<Section>> {
             let _ = writeln!(
                 terms,
                 "- `{}` #{}: soft {}{}",
-                x.run.posting,
+                x.run.item,
                 x.run.n,
                 list(&x.spike.soft),
                 if x.spike.person.is_empty() {
@@ -479,25 +406,18 @@ fn list(xs: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use resume_core::migrate_v1;
-    use resume_core::requirements::{Seniority, SkillKind};
+    use resume_core::requirements::{Seniority, Skill, SkillKind};
 
     use super::*;
 
-    fn skill(
-        term: &str,
-        aliases: &[&str],
-        priority: u8,
-        required: bool,
-        group: Option<&str>,
-    ) -> Skill {
+    fn skill(term: &str) -> Skill {
         Skill {
             term: term.into(),
-            aliases: aliases.iter().map(|a| (*a).into()).collect(),
+            aliases: vec![],
             kind: SkillKind::Hard,
-            priority,
-            required,
-            group: group.map(str::to_owned),
+            priority: 1,
+            required: true,
+            group: None,
         }
     }
 
@@ -518,70 +438,8 @@ mod tests {
     }
 
     #[test]
-    fn aliases_match_either_way() {
-        let gold = skill("Kubernetes", &["K8s"], 2, false, None);
-        assert!(same_skill(&gold, &skill("k8s", &[], 2, false, None)));
-        assert!(same_skill(&skill("K8s", &[], 2, false, None), &gold));
-        assert!(same_skill(
-            &gold,
-            &skill("Kubernetes clusters", &[], 2, false, None)
-        ));
-        assert!(!same_skill(&gold, &skill("Docker", &[], 2, false, None)));
-        // A whole term only: `Java` is not in `JavaScript`.
-        assert!(!same_skill(
-            &skill("Java", &[], 2, false, None),
-            &skill("JavaScript", &[], 2, false, None)
-        ));
-    }
-
-    #[test]
-    fn a_one_of_group_is_one_unit() {
-        let gold = vec![
-            skill("Python", &[], 1, true, None),
-            skill("React", &[], 2, false, Some("ui")),
-            skill("Vue", &[], 2, false, Some("ui")),
-            skill("Svelte", &[], 2, false, Some("ui")),
-            skill("Terraform", &[], 3, false, None),
-        ];
-        // Python and one member of the group: 2 of 3 units; Terraform missing.
-        let run = vec![
-            skill("python", &[], 1, true, None),
-            skill("Vue.js", &["Vue"], 2, false, None),
-            skill("Cobol", &[], 3, false, None),
-        ];
-        let o = overlap(&gold, &run);
-        assert_eq!(o.recall, Some(2.0 / 3.0));
-        // Cobol matches nothing gold has.
-        assert_eq!(o.precision, Some(2.0 / 3.0));
-        // Only Python is a must-have, and it is found.
-        assert_eq!(o.must_recall, Some(1.0));
-    }
-
-    #[test]
-    fn must_recall_misses_a_required_skill() {
-        let gold = vec![
-            skill("Go", &[], 2, true, None),
-            skill("SQL", &[], 1, false, None),
-            skill("Rust", &[], 3, false, None),
-        ];
-        let o = overlap(&gold, &[skill("SQL", &[], 1, false, None)]);
-        assert_eq!(o.must_recall, Some(0.5));
-        assert_eq!(o.recall, Some(1.0 / 3.0));
-        assert_eq!(o.precision, Some(1.0));
-        assert_eq!(overlap(&[], &[]).recall, None);
-    }
-
-    #[test]
     fn drift_is_positive_when_the_run_flatters_the_master() {
-        let v1: Resume = serde_json::from_str(
-            &std::fs::read_to_string(
-                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/banks/jane-doe.v1.json"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let mig = migrate_v1(&v1);
-        let resume = resume_core::resolve(&mig.bank, &mig.master).unwrap();
+        let resume = Fixtures::embedded().unwrap().resume;
         let facts = PageFacts {
             pages: 1,
             page_limit: 1,
@@ -595,13 +453,10 @@ mod tests {
             .flat_map(|s| &s.groups)
             .flat_map(|g| &g.items)
             .take(4)
-            .map(|i| skill(i, &[], 1, true, None))
+            .map(|i| skill(i))
             .collect();
         assert!(!shown.is_empty());
-        let absent = vec![
-            skill("COBOL", &[], 1, true, None),
-            skill("Fortran 77", &[], 1, true, None),
-        ];
+        let absent = vec![skill("COBOL"), skill("Fortran 77")];
         let d = drift(
             &resume,
             &facts,

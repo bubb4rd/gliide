@@ -44,6 +44,9 @@ pub struct Review {
     pub req: Requirements,
     /// The `--model` alias or name the suggestions were made with.
     pub model: String,
+    /// The agent the suggestions were made with, as usage names it (`claude`); `""` for an analysis stored before
+    /// it was kept.
+    pub agent: String,
     pub suggestions: Suggestions,
     /// `changes_of` the suggestions: before your wording and your own edits.
     pub changes: Vec<Change>,
@@ -191,6 +194,7 @@ async fn make_review(
             mode,
             key: &key,
             model,
+            agent: &crate::usage::name(&crate::dto::Agent::from(route.agent)),
             suggestions: &s,
             latency_ms: out.latency().as_millis() as u64,
         })?;
@@ -215,6 +219,7 @@ async fn make_review(
             master,
             req,
             model: analysis.model,
+            agent: analysis.agent,
             suggestions: analysis.suggestions,
             changes,
             log,
@@ -366,6 +371,7 @@ fn detached(r: &Review) -> Review {
         master: r.master.clone(),
         req: r.req.clone(),
         model: r.model.clone(),
+        agent: r.agent.clone(),
         suggestions: r.suggestions.clone(),
         changes: r.changes.clone(),
         log: r.log.clone(),

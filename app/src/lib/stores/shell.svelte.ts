@@ -6,6 +6,7 @@ const COMPACT = "(max-width: 959px)";
 /** Settings' panes, in the rail's order. */
 export type SettingsPane =
   | "agents"
+  | "benchmark"
   | "usage"
   | "feed"
   | "sources"

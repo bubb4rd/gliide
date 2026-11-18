@@ -10,6 +10,10 @@ import type { AgentStatus } from "./bindings/AgentStatus";
 import type { AppError } from "./bindings/AppError";
 import type { ApplicationRow } from "./bindings/ApplicationRow";
 import type { AppStatus } from "./bindings/AppStatus";
+import type { BenchEstimate } from "./bindings/BenchEstimate";
+import type { BenchmarkView } from "./bindings/BenchmarkView";
+import type { BenchPlan } from "./bindings/BenchPlan";
+import type { BenchRunStatus } from "./bindings/BenchRunStatus";
 import type { CoverPart } from "./bindings/CoverPart";
 import type { CoverView } from "./bindings/CoverView";
 import type { CustomEdit } from "./bindings/CustomEdit";
@@ -73,6 +77,19 @@ export type * from "./bindings/ApplicationRow";
 export type * from "./bindings/AppStatus";
 export type * from "./bindings/Backdrop";
 export type * from "./bindings/BankSummary";
+export type * from "./bindings/BenchEstimate";
+export type * from "./bindings/BenchmarkView";
+export type * from "./bindings/BenchPart";
+export type * from "./bindings/BenchPlan";
+export type * from "./bindings/BenchResult";
+export type * from "./bindings/BenchRole";
+export type * from "./bindings/BenchRoute";
+export type * from "./bindings/BenchRouteId";
+export type * from "./bindings/BenchRunStatus";
+export type * from "./bindings/BenchScore";
+export type * from "./bindings/BenchSource";
+export type * from "./bindings/BenchState";
+export type * from "./bindings/BenchStep";
 export type * from "./bindings/BulletView";
 export type * from "./bindings/ChangeGroup";
 export type * from "./bindings/ChangeState";
@@ -128,6 +145,7 @@ export type * from "./bindings/Instructed";
 export type * from "./bindings/JobHead";
 export type * from "./bindings/JobRow";
 export type * from "./bindings/JobView";
+export type * from "./bindings/KeptShare";
 export type * from "./bindings/KeyDecision";
 export type * from "./bindings/Letter";
 export type * from "./bindings/Library";
@@ -199,6 +217,7 @@ export type * from "./bindings/UsageView";
 export type * from "./bindings/Verdict";
 export type * from "./bindings/WatchBoard";
 export type * from "./bindings/WordingView";
+export type * from "./bindings/YourUse";
 
 /** `e` as an `AppError`: commands reject with one; anything else (a bridge failure) becomes `other`. */
 export function appError(e: unknown): AppError {
@@ -219,6 +238,18 @@ export const usage = () => invoke<UsageView>("usage");
 export const exportUsage = (path: string) => invoke<void>("export_usage", { path });
 /** Each role's route and how fast it answers on this Mac, in Read, Tailor, Write, Coach order (Settings → Agents). */
 export const routeLatencies = () => invoke<RouteLatency[]>("route_latencies");
+
+// ── Benchmark ──
+/** Settings → Benchmark: each role's routes ranked (best first), and the run on this Mac. */
+export const benchmark = () => invoke<BenchmarkView>("benchmark");
+/** How many calls `plan` makes, about how long they take, and how many each agent makes. */
+export const benchmarkEstimate = (plan: BenchPlan) => invoke<BenchEstimate>("benchmark_estimate", { plan });
+/** Starts `plan`, this Mac's earlier runs of its roles and routes deleted first. Rejects while a run is going. */
+export const benchmarkStart = (plan: BenchPlan) => invoke<BenchRunStatus>("benchmark_start", { plan });
+/** Goes on with the stopped run, skipping the runs it recorded. */
+export const benchmarkResume = () => invoke<BenchRunStatus>("benchmark_resume");
+/** Stops the run, the call in flight with it; event `benchmark` then says Stopped. */
+export const benchmarkStop = () => invoke<void>("benchmark_stop");
 
 // ── Startup ──
 /** Why the data couldn't be opened at launch (the window then shows only Startup); `null` when it opened. */
@@ -473,6 +504,9 @@ export const onProgress = (handler: (calls: Progress[]) => void): Promise<Unlist
 /** Event `feed`: a row or the feed's status changed. */
 export const onFeed = (handler: (s: FeedStatus) => void): Promise<UnlistenFn> =>
   listen<FeedStatus>("feed", (e) => handler(e.payload));
+/** Event `benchmark`: the benchmark's run, after every call and on every change of state. */
+export const onBenchmark = (handler: (s: BenchRunStatus) => void): Promise<UnlistenFn> =>
+  listen<BenchRunStatus>("benchmark", (e) => handler(e.payload));
 /** Event `update`: checking, what a check found, or how an install is going. */
 export const onUpdate = (handler: (s: UpdateStatus) => void): Promise<UnlistenFn> =>
   listen<UpdateStatus>("update", (e) => handler(e.payload));

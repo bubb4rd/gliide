@@ -31,13 +31,14 @@
     {#if data.rows?.length}
       <dl class="rows">
         {#each data.rows as row, i (i)}
-          <div class="row">
+          <div class={["row", row.rule && "row--rule"]}>
             <dt>
               {#if row.key}<span class="key key--{row.key}" aria-hidden="true"></span>{/if}
               {#if row.step}<StepKey step={row.step} />{/if}
               {row.label}
             </dt>
             <dd class={["num", row.tone && `tone--${row.tone}`]}>{row.value ?? ""}</dd>
+            {#if row.sub}<dd class="sub">{row.sub}</dd>{/if}
           </div>
         {/each}
       </dl>
@@ -100,10 +101,11 @@
     gap: var(--space-4);
     font-weight: var(--weight-medium);
   }
+  /* No column gap (the value keeps 16px off its label as padding), so a rule runs across both. */
   .rows {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-0-5) var(--space-4);
+    gap: var(--space-0-5) 0;
   }
   .row {
     display: contents;
@@ -116,13 +118,31 @@
     color: var(--ink-2);
   }
   dd {
+    padding-inline-start: var(--space-4);
     text-align: end;
+  }
+  /* What a row's value was made from: a line under it, indented, in ink 3. */
+  .sub {
+    grid-column: 1 / -1;
+    padding-inline-start: var(--space-3);
+    text-align: start;
+    color: var(--ink-3);
+  }
+  /* Another group of rows starts: a hairline over the row. */
+  .row--rule > dt,
+  .row--rule > dd:not(.sub) {
+    margin-top: var(--space-1);
+    padding-top: var(--space-1-5);
+    box-shadow: inset 0 1px 0 var(--line);
   }
   .tone--gain {
     color: var(--gain-text);
   }
   .tone--warn {
     color: var(--warn);
+  }
+  .tone--danger {
+    color: var(--danger);
   }
 
   /* Legend keys draw the mark they stand for: the score bar's segments (pills) and its ceiling tick. */

@@ -68,6 +68,7 @@
     PlaceMap,
     ScoreBar,
     ScoreHeader,
+    ScorePill,
     Segmented,
     Sheet,
     Sources,
@@ -79,6 +80,7 @@
     Table,
     Textarea,
     Thinking,
+    TimeTrack,
     Toolbar,
     Tooltip,
     tip,
@@ -429,6 +431,46 @@
   let appChecked = $state(new Set(["3"]));
   let bulkStatus = $state<string | null>(null);
 
+  // ── A leaderboard (Settings → Benchmark): neutral score pills, time tracks, header tooltips, a row's details ──
+  interface BoardRow {
+    id: string;
+    name: string;
+    agent: "claude" | "codex" | "antigravity";
+    score: number;
+    time: number;
+    slow: number;
+    yours: number | null;
+    cost: number | null;
+  }
+  const boardRows: BoardRow[] = [
+    { id: "opus", name: "Opus", agent: "claude", score: 91.2, time: 37.9, slow: 49.6, yours: 41.2, cost: 0.09 },
+    { id: "flash", name: "Gemini 3.8 Flash Low", agent: "antigravity", score: 87.8, time: 10.5, slow: 18.3, yours: 11.2, cost: 0.016 },
+    { id: "sonnet", name: "Sonnet", agent: "claude", score: 87.6, time: 20.6, slow: 29.8, yours: 21.4, cost: 0.034 },
+    { id: "hydrogen", name: "Gemini 4 Hydrogen High", agent: "antigravity", score: 41.3, time: 86.3, slow: 110.6, yours: null, cost: null },
+  ];
+  const boardColumns: TableColumn<BoardRow>[] = [
+    { key: "route", label: "Route" },
+    { key: "score", label: "Score", numeric: true, width: "82px", sortBy: (r) => r.score, tip: "60% quality, 20% reliability, 20% speed." },
+    { key: "time", label: "Typical time", numeric: true, width: "104px", sortBy: (r) => -r.time, tip: "The median call; the tick is Tailoring’s 30 s target." },
+    { key: "cost", label: "Cost a call", numeric: true, width: "89px" },
+  ];
+  let boardSort = $state<TableSort>({ key: "score", dir: "desc" });
+  /** Opus's details open; a name's disclosure opens or folds a row. */
+  let boardOpen = $state<string[]>(["opus"]);
+  const scorePills = [
+    { name: "0", value: 0 },
+    { name: "A sliver", value: 1 },
+    { name: "Half", value: 50 },
+    { name: "Unrounded 91.2", value: 91.2 },
+    { name: "Full", value: 100 },
+  ];
+  const timeTracks: { name: string; seconds: number; slow?: number; target: number; yours?: number }[] = [
+    { name: "Under its target (Reading, 8 s)", seconds: 6.8, slow: 7.6, target: 8 },
+    { name: "Over its target, yours under it", seconds: 37.9, slow: 49.6, target: 30, yours: 41.2 },
+    { name: "Past 4× its target: the track is full", seconds: 140.2, slow: 180.4, target: 30 },
+    { name: "No slowest 1 in 10", seconds: 12.2, target: 20 },
+  ];
+
   // ── Score bar: Applications' Fit column ──
   interface BarSample {
     state: string;
@@ -657,6 +699,21 @@
           { label: "Added by your edits", key: "add", items: ["CI/CD", "SQL"] },
           { label: "Missing", key: "missing", tone: "warn", items: ["Objective-C", "scripting language", "AWS", "GCP", "Bash", "Kubernetes"] },
         ],
+      },
+    },
+    {
+      name: "Rows with a sub-row, a rule and a failure (a leaderboard's numbers)",
+      content: {
+        title: "Quality",
+        value: 88,
+        rows: [
+          { label: "Code checks", value: 86 },
+          { label: "Kept vs your average", value: "76% ÷ 68% → ×1.03", sub: "78% kept of 46 decided · your average 68% of 139" },
+          { label: "Grounded", value: "0.92", rule: true },
+          { label: "Fits the page", value: "0.99" },
+          { label: "Failed", value: 1, tone: "danger" },
+        ],
+        note: "86 ×1.03 = 88. Code checks from This Mac’s run, Nov 16 · 36 runs.",
       },
     },
   ];
@@ -1616,6 +1673,83 @@
       </Card>
     </section>
 
+    <!-- ═══════════ Leaderboard: score pill, time track, a table's details ═══════════ -->
+    <section class="section">
+      <h2 class="title">Leaderboard</h2>
+      <p class="meta lede">
+        Settings → Benchmark’s parts. A score that isn’t a fit: a neutral pill in ink 3 and its whole number, never
+        green. A typical time on a track to 4× its target, the slowest 1 in 10 fainter, a tick at the target, your own
+        median under it. In a table, headers carry tooltips and a row opens its details under it (Opus, open; the
+        hairline goes under the details).
+      </p>
+      <div class="grid cols-2">
+        <Card pad>
+          <div class="tile">
+            {#each scorePills as p (p.name)}
+              <div class="row">
+                <ScorePill value={p.value} label="Score {Math.round(p.value)} (specimen)" />
+                <span class="meta">{p.name}</span>
+              </div>
+            {/each}
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            {#each timeTracks as t (t.name)}
+              <div class="row">
+                <TimeTrack seconds={t.seconds} slow={t.slow ?? null} target={t.target} yours={t.yours ?? null} />
+                <span class="meta">{t.name}</span>
+              </div>
+            {/each}
+          </div>
+        </Card>
+      </div>
+      <Card>
+        <div class="table">
+          <Table
+            columns={boardColumns}
+            rows={boardRows}
+            bind:sort={boardSort}
+            key={(r) => r.id}
+            label="Leaderboard (specimen)"
+            expanded={(r) => boardOpen.includes(r.id)}
+          >
+            {#snippet cell(row, column)}
+              {#if column.key === "route"}
+                <span class="row nowrap">
+                  <CompanyMark size={20} src={AGENTS[row.agent].icon} />
+                  <button
+                    type="button"
+                    class="board-name"
+                    aria-expanded={boardOpen.includes(row.id)}
+                    onclick={() =>
+                      (boardOpen = boardOpen.includes(row.id)
+                        ? boardOpen.filter((x) => x !== row.id)
+                        : [...boardOpen, row.id])}
+                  >
+                    {row.name}
+                  </button>
+                </span>
+              {:else if column.key === "score"}
+                <ScorePill value={row.score} label="Score {Math.round(row.score)}" {@attach tip(`${row.score} before rounding`)} />
+              {:else if column.key === "time"}
+                <TimeTrack seconds={row.time} slow={row.slow} target={30} yours={row.yours} />
+              {:else if row.cost === null}
+                <span class="board-none">No price</span>
+              {:else}
+                ${row.cost.toFixed(3)}
+              {/if}
+            {/snippet}
+            {#snippet detail(row)}
+              <p class="board-detail meta">
+                {row.name}’s details: the score’s sum, then its sources side by side (the pane draws them).
+              </p>
+            {/snippet}
+          </Table>
+        </div>
+      </Card>
+    </section>
+
     <!-- ═══════════ Heatmap ═══════════ -->
     <section class="section">
       <h2 class="title">Heatmap</h2>
@@ -2314,6 +2448,28 @@
   .table {
     overflow: hidden;
     border-radius: var(--radius-lg);
+  }
+  /* The leaderboard specimen: a route's name as its disclosure, a missing price, the details' stand-in. */
+  .board-name {
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: none;
+    font: inherit;
+    font-weight: var(--weight-medium);
+    color: var(--ink);
+    cursor: default;
+  }
+  .board-none {
+    color: var(--ink-3);
+  }
+  .board-detail {
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--sunken);
+    box-shadow: inset 0 0 0 1px var(--line);
   }
   .file {
     color: var(--accent-text);

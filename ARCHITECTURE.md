@@ -893,7 +893,7 @@ composed Review screen.
 | Job | Posting input; requirements as chips; master picker with each master's score; score header |
 | Review | Score header; changes grouped by section, then **From your bank**; then **Other lines**: every master line no change touches, each with Edit and Rewrite with a note (either makes it your edit); live preview beside them |
 | Applications | Table with status, scores, files, posting link; CSV export. Statuses set many at once (checked rows, one `set_status` call: all or none, one CSV rewrite, Undo); an export starts as Saved, and the job's **Mark applied** moves it to Applied |
-| Settings | A modal sheet over any screen (⌘,), a pane at a time from a searchable rail: Agents (found, signed in or not, model per call, suggestions from), Usage, Feed, Sources, Notifications, Export folder, Appearance, About |
+| Settings | A modal sheet over any screen (⌘,), a pane at a time from a searchable rail: Agents (found, signed in or not, model per call, suggestions from), Benchmark (each role's leaderboard of routes, a run on this Mac, Use the best per role; §12), Usage, Feed, Sources, Notifications, Export folder, Appearance, About |
 
 **Score header:** `Now 53%` → `Projected 78%` (large, live) with `Ceiling 85%` beside it; a bar showing now, the gain
 from your selections, and the headroom left; components on hover.
@@ -969,6 +969,37 @@ seconds, 3 runs a posting for Reading and Tailoring, Hydrogen on 4 postings):
 | `antigravity:gemini-4-hydrogen-high` | 48.6 / 58.5 | 86.3 / 110.6 | 37.0 / 45.4 | 38.8 / 68.4 | 27.6 / 29.7 |
 
 Only sonnet and Flash Low meet Reading's 8 s; opus and Hydrogen miss Tailoring's 30 s.
+
+### Benchmark (Settings → Benchmark)
+
+The same suite, in the app: a leaderboard per role of every route (an agent and model), so you can see which does
+each kind of work best for you and put it there (**Use the best per role**, **Use for …**: `app.applyRoutes`, the
+presets' path too, with Undo).
+
+- **Sources.** Three, side by side for each route. *Reference*: gliide's own `ez eval` run, shipped with each release
+  (`resume-bench`'s embedded reference; it spent none of your quota). *This Mac*: runs you start from the pane, on the
+  bundled fixtures (12 postings against the sample resume; Quick is 4 postings once, Full 12 with 3 runs for Reading
+  and Tailoring), on your own agents, one call at a time; Stop aborts the call in flight and Resume skips the runs
+  already recorded (`bench_runs`); a new run replaces this Mac's earlier runs of its roles on its routes. *Your use*:
+  your own calls' times from `usage` and, for Tailoring, what you did with each route's suggested changes. A route's
+  score mixes the two runs' sources by what each measures: quality from whichever has more runs for the role (this Mac
+  on a tie: `qualityFrom`), so a quick run here doesn't outweigh the reference's full one; reliability and speed from
+  this Mac as soon as it has runs, else the reference (`timingFrom`), since that's how fast the route answers for you.
+  The rank's tie-break on time uses the timing source's median.
+- **Scoring** (`resume-bench`, never the UI): quality 0–100 per role (Reading: recall, precision and must-have recall
+  against the gold requirements; Tailoring: the code checks, grounded, fits the page and lift out of 20 points;
+  Coaching: the share of prep items the checks keep; Writing: none, so it's timed and never ranked); reliability:
+  valid on the first try, a repaired answer half, a failure nothing; speed: 100 at the role's target (Reading 8 s,
+  Tailoring 30 s, Writing 15 s, Coaching 20 s), 0 at four times it. Score = 0.6 quality + 0.2 reliability + 0.2 speed,
+  ranked unrounded; equal scores share a rank. Cost is shown, never scored.
+- **Kept edits** count toward Tailoring's quality: at export (the final state after the fit check), each suggested
+  change's outcome is stored per route (`change_outcomes`); kept is in or forced over everything you decided, your own
+  edits and the validator's and fit check's left-outs aside. Each route's share is pulled toward your average over
+  every route by 10 decisions' worth of it, and the code checks are scaled by 0.75 + 0.25 × (its share ÷ your
+  average): ×1.00 at your average. With nothing decided, kept carries no weight.
+- **Runs stay off Usage.** Benchmark calls are built as `App::llm` builds a role's, without `Metered`, so they never
+  land in `usage`, Settings → Usage or a route's pace in Settings → Agents. The `benchmark` event carries the run's
+  status after every call; the layout follows it, so the rail counts the calls while a run goes.
 
 ## 13. Roadmap
 

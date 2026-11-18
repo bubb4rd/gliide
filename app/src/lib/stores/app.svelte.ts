@@ -37,7 +37,7 @@ import {
   type Settings,
   type UpdateStatus,
 } from "$lib/api";
-import { AGENT_LIST, AGENTS, type AgentInfo } from "$lib/agents";
+import { AGENT_LIST, AGENTS, ROLES, type AgentInfo, type PresetRoutes } from "$lib/agents";
 import { modelName } from "$lib/models";
 import { LIFETIME_WITH_ACTION_MS, toast } from "$lib/ui/toast.svelte";
 import { theme } from "./theme.svelte";
@@ -240,6 +240,82 @@ class AppStore {
   /** `agent`'s status; null while unknown. */
   status(agent: Agent): AgentStatus | null {
     return this.agents?.find((a) => a.agent === agent) ?? null;
+  }
+
+  /** On in Settings, found and signed in: the role menus offer it, and calls may run on it. */
+  offers(agent: Agent): boolean {
+    const status = this.status(agent);
+    return !!this.settings?.agents[agent].enabled && !!status?.found && status.signedIn === true;
+  }
+
+  /** `agent`'s status lists `model` (Claude Code's aliases always do). */
+  lists(agent: Agent, model: string): boolean {
+    return !!this.status(agent)?.models.some((m) => m.id === model);
+  }
+
+  /**
+   * Runs each role in `routes` on the agent and model it names (Settings' presets; Benchmark's Use the best per role
+   * and Use for …), with Undo in a toast that puts back the routes and models those roles had. A role already on its
+   * route is left alone; with nothing to change, nothing is saved. Resolves whether it saved; a failed save says why in
+   * a toast.
+   */
+  async applyRoutes(routes: Partial<PresetRoutes>): Promise<boolean> {
+    if (!this.settings) return false;
+    const before = $state.snapshot(this.settings);
+    const roles = ROLES.map((r) => r.id).filter((role) => {
+      const r = routes[role];
+      return !!r && (before.routes[role] !== r.agent || before.agents[r.agent].models[role] !== r.model);
+    });
+    if (!roles.length) return true;
+    const next = { ...before.routes };
+    const agents = { ...before.agents };
+    for (const role of roles) {
+      const { agent, model } = routes[role]!;
+      next[role] = agent;
+      agents[agent] = { ...agents[agent], models: { ...agents[agent].models, [role]: model } };
+    }
+    try {
+      await this.saveSettings({ ...before, routes: next, agents });
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+      return false;
+    }
+    toast(this.#moved(roles, routes), {
+      action: { label: "Undo", run: () => void this.#restoreRoutes(roles, before) },
+    });
+    return true;
+  }
+
+  /** "Reading and coaching now run on Sonnet; tailoring now runs on Opus". */
+  #moved(roles: Role[], routes: Partial<PresetRoutes>): string {
+    const by = new Map<string, string[]>();
+    for (const role of roles) {
+      const name = this.modelName(routes[role]!.model);
+      by.set(name, [...(by.get(name) ?? []), ROLES.find((r) => r.id === role)!.name.toLowerCase()]);
+    }
+    const and = (words: string[]) =>
+      words.length < 2 ? words[0] : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
+    const text = [...by].map(([name, rs]) => `${and(rs)} now ${rs.length > 1 ? "run" : "runs"} on ${name}`).join("; ");
+    return text[0].toUpperCase() + text.slice(1);
+  }
+
+  /** Undo for `applyRoutes`: `roles` back on the routes they had, with the models they had on both agents. */
+  async #restoreRoutes(roles: Role[], before: Settings) {
+    const now = this.settings;
+    if (!now) return;
+    const routes = { ...now.routes };
+    const agents = { ...now.agents };
+    for (const role of roles) {
+      for (const agent of new Set([before.routes[role], now.routes[role]])) {
+        agents[agent] = { ...agents[agent], models: { ...agents[agent].models, [role]: before.agents[agent].models[role] } };
+      }
+      routes[role] = before.routes[role];
+    }
+    try {
+      await this.saveSettings({ ...now, routes, agents });
+    } catch (e) {
+      toast(`Couldn’t undo: ${appError(e).message}`, { tone: "danger" });
+    }
   }
 
   /** Checks every agent again (all three at once). */

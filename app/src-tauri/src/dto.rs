@@ -2443,6 +2443,235 @@ pub struct RouteLatency {
     pub calls: u64,
 }
 
+// ── Benchmark ───────────────────────────────────────────────────────────────────────────────────────────────────
+//
+// Settings → Benchmark (`benchmark.rs`). Seconds are f64, scores 0–100 f64 unrounded (the UI rounds), shares 0–1.
+// `resume-bench` computes every score; nothing here or in the UI does.
+
+/// The pane: each role's routes, ranked, and the run on this Mac.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchmarkView {
+    /// Read, Tailor, Write, Coach, in that order.
+    pub roles: Vec<BenchRole>,
+    /// The day of the newest runs the shipped reference holds (`YYYY-MM-DD`).
+    pub reference_date: String,
+    /// The run going on this Mac, or the last one; `None` before any.
+    pub run: Option<BenchRunStatus>,
+    /// What you kept of every Tailoring route's suggestions at export, pooled; `None` before any decision.
+    pub kept_average: Option<KeptShare>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchRole {
+    pub role: Role,
+    /// The p50 at which speed starts to drop below 100.
+    pub target_s: f64,
+    /// Ranked, best first: every route the reference, this Mac's runs or your own calls know, and the current one.
+    pub routes: Vec<BenchRoute>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchRoute {
+    pub agent: Agent,
+    /// The model as Settings names it (the alias asked for: `sonnet`, `gpt-6-luna`).
+    pub model: String,
+    /// From 1; equal composites share one; `None` without a composite.
+    pub rank: Option<u32>,
+    /// Where the quality came from: the source with more runs, this Mac on a tie; `None` for Writing (no quality) and
+    /// when neither source has runs.
+    pub quality_from: Option<BenchSource>,
+    /// Where reliability and speed came from: this Mac when it has runs for this role and route, else the reference;
+    /// `None` when neither has.
+    pub timing_from: Option<BenchSource>,
+    pub score: Option<BenchScore>,
+    pub reference: Option<BenchResult>,
+    pub this_mac: Option<BenchResult>,
+    pub yours: Option<YourUse>,
+    /// The role runs on this route now.
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BenchSource {
+    Reference,
+    ThisMac,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchScore {
+    /// 0.6 × quality + 0.2 × reliability + 0.2 × speed; `None` without a quality (Writing).
+    pub composite: Option<f64>,
+    /// Tailoring: the composite with the code checks alone, kept edits left out. Equal to `composite` for the other
+    /// roles, and for Tailoring before any decision.
+    pub composite_without_kept: Option<f64>,
+    /// Tailoring: the code checks scaled by kept edits.
+    pub quality: Option<f64>,
+    /// Tailoring: the code checks before kept edits; `None` for the other roles.
+    pub code_checks: Option<f64>,
+    /// Tailoring: this route's kept share counted toward your average, over your average (1 at the average); the
+    /// quality multiplier is 0.75 + 0.25 × it. `None` for the other roles and before any decision.
+    pub kept_factor: Option<f64>,
+    pub reliability: f64,
+    pub speed: f64,
+}
+
+/// One source's runs of a route on a role, summed. `runs` = `valid` + `repaired` + `failed`.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchResult {
+    pub runs: u32,
+    /// Valid on the first turn.
+    pub valid: u32,
+    /// Valid after the repair turn.
+    pub repaired: u32,
+    pub failed: u32,
+    /// The postings the runs covered ("4 postings × 3").
+    pub items: u32,
+    /// Nearest-rank, every run's wall time, failed runs included.
+    pub p50_s: Option<f64>,
+    pub p90_s: Option<f64>,
+    /// Mean per call, of the runs whose cost is known.
+    pub cost_usd: Option<f64>,
+    /// 0–100; Tailoring: the code checks before kept edits; `None` for Writing.
+    pub quality: Option<f64>,
+    pub parts: Vec<BenchPart>,
+    /// The day of the newest run (`YYYY-MM-DD`).
+    pub at: String,
+    /// Distinct failure messages (their first line), at most 3.
+    pub errors: Vec<String>,
+}
+
+/// One part of a quality, as `resume-bench` names it. Read: `recall`, `precision`, `must_recall` (shares 0–1).
+/// Tailoring: `grounded`, `fits`, `lift` (shares 0–1), `lift_pts` (mean projected − now, points), and the sums
+/// `changes`, `flagged`, `left_fit`. Coaching: `grounded` (share 0–1) and the sums `kept_items`, `dropped_items`.
+/// Writing: none.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchPart {
+    pub id: String,
+    pub value: f64,
+}
+
+/// Your own calls on a route for the role's features, and (Tailoring) what you kept of its suggestions.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct YourUse {
+    /// Timed calls.
+    pub calls: u32,
+    /// Nearest-rank; `None` below 5 timed calls, too few to say.
+    pub p50_s: Option<f64>,
+    pub p90_s: Option<f64>,
+    /// Tailoring: its suggestions you decided on at export.
+    pub kept: Option<KeptShare>,
+    /// Tailoring: its kept share pulled toward your average by 10 decisions' worth of it.
+    pub kept_counted: Option<f64>,
+}
+
+/// Suggested changes kept (in or forced in) of those decided (in, off or forced in), over `postings` exports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct KeptShare {
+    pub kept: u32,
+    pub decided: u32,
+    pub postings: u32,
+}
+
+/// What a run covers: quick (4 postings once) or full (12; Read and Tailoring 3 times each), for these roles on these
+/// routes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchPlan {
+    pub quick: bool,
+    pub roles: Vec<Role>,
+    pub routes: Vec<BenchRouteId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchRouteId {
+    pub agent: Agent,
+    pub model: String,
+}
+
+/// What a plan would take.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchEstimate {
+    pub calls: u32,
+    /// Each route and role's calls × your p50 there (5 timed calls or more), else the reference's, else the role's
+    /// target.
+    pub seconds: f64,
+    /// Calls per agent, in Claude, Codex, Antigravity order; agents with none left out.
+    pub per_agent: Vec<(Agent, u32)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BenchState {
+    Running,
+    /// Stopped by you, or by gliide quitting: `benchmark_resume` goes on from where it was.
+    Stopped,
+    Done,
+    /// Something other than a call failed (the store); `error` says what.
+    Failed,
+}
+
+/// The run on this Mac: in event `benchmark` after every call and on every change of state.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchRunStatus {
+    pub state: BenchState,
+    pub plan: BenchPlan,
+    /// Runs of the plan recorded (resumed runs count those from before).
+    pub done: u32,
+    pub total: u32,
+    /// When the plan was started (RFC 3339 UTC); resuming keeps it.
+    pub started_at: String,
+    /// Time spent running, stops left out.
+    pub elapsed_s: f64,
+    /// The call running now; `None` unless running.
+    pub now: Option<BenchStep>,
+    pub error: Option<String>,
+}
+
+/// The call a run is making.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchStep {
+    pub role: Role,
+    pub agent: Agent,
+    pub model: String,
+    /// The fixture posting's id.
+    pub item: String,
+    /// Its company ("Globex").
+    pub company: String,
+    /// The run number on this posting, from 1, of `runs`.
+    pub n: u32,
+    pub runs: u32,
+    /// RFC 3339 UTC.
+    pub started_at: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Agent, Backdrop, Mode, Role, Routes, Settings};

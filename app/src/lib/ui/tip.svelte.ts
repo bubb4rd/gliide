@@ -10,8 +10,8 @@ import type { Attachment } from "svelte/attachments";
  * keyword meter's cells: on the resume, added by an edit, missing).
  */
 export type TipKey = "base" | "gain" | "lost" | "tick" | "have" | "add" | "missing";
-/** A number's meaning, in the system's colors: points gained, or lost. */
-export type TipTone = "gain" | "warn";
+/** A number's meaning, in the system's colors: points gained, left out (or lost), or failed. */
+export type TipTone = "gain" | "warn" | "danger";
 
 export interface TipRow {
   label: string;
@@ -20,6 +20,10 @@ export interface TipRow {
   /** A data step's swatch (`StepKey`), keying a row to a stacked chart's part. */
   step?: 1 | 2 | 3 | 4;
   tone?: TipTone;
+  /** A line under the row, indented, in ink 3: what its value was made from. */
+  sub?: string;
+  /** A hairline above the row: the rows after it are another group. */
+  rule?: boolean;
 }
 
 /** A named list: its legend key, label and count over its items, which wrap (`tone` colors them). */

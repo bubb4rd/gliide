@@ -4,71 +4,31 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Duration;
 
-use resume_llm::cover::{self, CoverInput, Letter};
+use resume_bench::{Fixtures, Role, Run, mean, run_one, words};
+use resume_llm::cover::Letter;
 use serde::Deserialize;
-use serde_json::json;
 
 use super::report::{
     PerPosting, Section, by_route, common, common_metrics, errors, m, rates, write_blind,
 };
-use super::{Fixture, Fixtures, Run, RunArgs, call, each, mean};
-
-const TIMEOUT: Duration = Duration::from_secs(300);
-
-/// The company and role the letter is for: the posting's hints, else its requirements (gold, else sonnet's).
-pub fn job(fx: &Fixtures, f: &Fixture) -> (String, String) {
-    let req = fx.requirements(&f.id).map(|(r, _)| r);
-    let pick = |hint: &Option<String>, from: Option<&String>| {
-        hint.clone().or_else(|| from.cloned()).unwrap_or_default()
-    };
-    (
-        pick(&f.posting.company, req.map(|r| &r.company)),
-        pick(&f.posting.title, req.map(|r| &r.role)),
-    )
-}
+use super::{RunArgs, each};
 
 pub async fn run(fx: &Fixtures, args: &RunArgs, out: &Path) -> anyhow::Result<()> {
-    let schema = cover::schema();
-    let items: Vec<(String, (&Fixture, String, String))> = fx
+    let items: Vec<String> = fx
         .chosen(&args.only)
         .into_iter()
-        .map(|f| {
-            let (company, role) = job(fx, f);
-            (f.id.clone(), (f, company, role))
-        })
+        .map(|f| f.id.clone())
         .collect();
     each(
         "write",
+        Role::Write,
         args,
-        1,
-        TIMEOUT,
         out,
         &items,
-        async |llm, route, (f, company, role)| {
-            let input = CoverInput {
-                company,
-                role,
-                resume: &fx.resume,
-                posting: &f.posting.text,
-            };
-            let c = call(cover::write(llm, &schema, &input, &route.model)).await;
-            (
-                c,
-                json!({ "company": company, "role": role, "master": fx.master.id }),
-            )
-        },
+        async |llm, route, id, n| run_one(llm, route, Role::Write, fx, id, n).await,
     )
     .await
-}
-
-fn words(l: &Letter) -> usize {
-    std::iter::once(&l.greeting)
-        .chain(&l.paragraphs)
-        .chain(std::iter::once(&l.closing))
-        .map(|s| s.split_whitespace().count())
-        .sum()
 }
 
 pub fn section(runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Section>> {
@@ -112,11 +72,11 @@ pub fn section(runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Section>> {
             }
         }
         for r in &rs {
-            lat_pp.push(&r.posting, &route, r.secs());
+            lat_pp.push(&r.item, &route, r.secs());
         }
         for (r, l) in &letters {
-            words_pp.push(&r.posting, &route, words(l) as f64);
-            let sheet = blind.entry(r.posting.clone()).or_default();
+            words_pp.push(&r.item, &route, words(l) as f64);
+            let sheet = blind.entry(r.item.clone()).or_default();
             if !sheet.contains_key(&route) {
                 let mut body = String::new();
                 for part in std::iter::once(&l.greeting)

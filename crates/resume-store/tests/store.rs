@@ -1,16 +1,17 @@
 //! The store as the app sees it, on synthetic data: the Jane Doe bank, a fixture posting's requirements and
 //! suggestions, and made-up applications.
 
-use resume_core::change::{Decision, DraftEvent, Mode};
+use resume_core::change::{Decision, DraftEvent, Mode, Origin};
 use resume_core::feed::FeedJob;
 use resume_core::salary::{Period, Salary};
 use resume_core::story::{Story, StoryKind, StorySource, StoryTheme};
 use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
-    AppStatus, Application, DEBRIEF_DAYS, Dig, DigAnswers, FeedState, Latency, LogoFound, LogoSource,
-    NewAnalysis, NewFeedJob, Notified, PracticeRow, Prep, Rev, Round, RoundState, StatusChange,
-    Store, StoreError, UsageRow, applications_csv, parse_ats_fit_csv,
+    AppStatus, Application, BenchRunRow, ChangeFate, ChangeOutcome, DEBRIEF_DAYS, Dig, DigAnswers,
+    FeedState, KeptRow, Latency, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Notified,
+    PracticeRow, Prep, Rev, Round, RoundState, RouteTimes, StatusChange, Store, StoreError,
+    UsageRow, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -80,6 +81,7 @@ impl Fixture {
                 mode: Mode::MasterOnly,
                 key,
                 model,
+                agent: "claude",
                 suggestions: s,
                 latency_ms: 15_000,
             })
@@ -661,6 +663,7 @@ fn migrating_to_covers_keeps_the_data() {
                 mode: Mode::MasterOnly,
                 key: "k",
                 model: "sonnet",
+                agent: "claude",
                 suggestions: &suggestions(),
                 latency_ms: 15_000,
             })
@@ -678,7 +681,8 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; DROP TABLE feed; DROP TABLE covers; DROP TABLE companies;
@@ -731,7 +735,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -840,7 +844,8 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
          DROP TABLE places; DROP TABLE logo_lookups; ALTER TABLE companies DROP COLUMN source;
@@ -871,7 +876,8 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
          PRAGMA user_version = 7;",
@@ -1087,7 +1093,8 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; ALTER TABLE postings DROP COLUMN url;
          DROP TABLE usage; PRAGMA user_version = 8;",
     )
@@ -1104,7 +1111,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1205,7 +1212,8 @@ fn migrating_to_practice_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
          PRAGMA user_version = 9;",
     )
@@ -1222,7 +1230,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1353,7 +1361,8 @@ fn migrating_to_stories_keeps_the_practice() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice;
          CREATE TABLE practice (
              id TEXT PRIMARY KEY,
@@ -1396,7 +1405,7 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1609,7 +1618,8 @@ fn migrating_to_debriefs_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE notified; DROP TABLE debriefs; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         DROP TABLE notified; DROP TABLE debriefs; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
          PRAGMA user_version = 11;",
     )
     .unwrap();
@@ -1627,7 +1637,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1790,7 +1800,8 @@ fn migrating_to_latency_keeps_the_usage() {
     drop(Store::open(&path).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE usage DROP COLUMN latency_ms;
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         ALTER TABLE usage DROP COLUMN latency_ms;
          INSERT INTO usage (at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens,
              cache_read_tokens, cost_usd)
          VALUES ('2026-11-03T10:00:00Z', '2026-11-03', 'chat', 'claude', 'claude-sonnet-5-5', 10, 5, 0, 0, 0.01);
@@ -1814,7 +1825,7 @@ fn migrating_to_latency_keeps_the_usage() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1857,5 +1868,316 @@ fn latency_is_the_median_of_the_timed_calls_for_the_agent_models_and_features() 
             p50_ms: None,
             calls: 0
         }
+    );
+}
+
+/// Analyses stored before their agent was kept (schema version 15) load with agent `""` and their draft; new ones
+/// keep theirs.
+#[test]
+fn migrating_to_bench_keeps_the_analyses() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v15-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    let (bank, master) = jane();
+    let (posting_id, analysis_id) = {
+        let store = Store::open(&path).unwrap();
+        let bank_rev = store.put_bank(&bank).unwrap();
+        let master_rev = store.put_master(&master).unwrap();
+        let posting_id = store.put_posting(&posting("Backend engineer.")).unwrap();
+        let a = store
+            .put_analysis(&NewAnalysis {
+                posting_id: &posting_id,
+                bank_rev: &bank_rev,
+                master_id: &master.id,
+                master_rev: &master_rev,
+                mode: Mode::MasterOnly,
+                key: "k",
+                model: "sonnet",
+                agent: "claude",
+                suggestions: &suggestions(),
+                latency_ms: 15_000,
+            })
+            .unwrap();
+        assert_eq!(a.agent, "claude");
+        store.push_draft_event(&a.id, &decide("b1")).unwrap();
+        (posting_id, a.id)
+    };
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+         PRAGMA user_version = 15;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    let old = store.analysis_by_id(&analysis_id).unwrap().unwrap();
+    assert_eq!((old.agent.as_str(), old.model.as_str()), ("", "sonnet"));
+    assert_eq!(old.suggestions, suggestions());
+    assert_eq!(store.draft(&analysis_id).unwrap().events, [decide("b1")]);
+    assert!(store.kept_by_route().unwrap().is_empty());
+    assert!(store.bench_runs().unwrap().is_empty());
+    let (bank_rev, _) = store.bank().unwrap().unwrap();
+    let (master_rev, _) = store.master(&master.id).unwrap().unwrap();
+    let new = store
+        .put_analysis(&NewAnalysis {
+            posting_id: &posting_id,
+            bank_rev: &bank_rev,
+            master_id: &master.id,
+            master_rev: &master_rev,
+            mode: Mode::MasterOnly,
+            key: "k",
+            model: "sonnet",
+            agent: "codex",
+            suggestions: &suggestions(),
+            latency_ms: 9_000,
+        })
+        .unwrap();
+    assert_eq!(store.analysis("k", "sonnet").unwrap().unwrap().id, new.id);
+    assert_eq!(
+        store.analysis_by_id(&new.id).unwrap().unwrap().agent,
+        "codex"
+    );
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 16);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn outcome(key: &str, route: (&str, &str), origin: Origin, fate: ChangeFate) -> ChangeOutcome {
+    ChangeOutcome {
+        analysis_id: None,
+        key: key.into(),
+        agent: route.0.into(),
+        model: route.1.into(),
+        op: "rewrite".into(),
+        origin,
+        outcome: fate,
+        explicit: false,
+        edited: false,
+    }
+}
+
+fn kept(route: (&str, &str), kept: u64, decided: u64, postings: u64) -> KeptRow {
+    KeptRow {
+        agent: route.0.into(),
+        model: route.1.into(),
+        kept,
+        decided,
+        postings,
+    }
+}
+
+/// A re-export replaces the application's outcomes rather than adding to them; an empty one clears them. They
+/// outlive their analysis.
+#[test]
+fn change_outcomes_are_replaced_on_re_export() {
+    use ChangeFate::*;
+    let f = Fixture::new();
+    let a = f.analysis("sk", "sonnet", &suggestions());
+    let mut applied = app("app-1", "2026-10-01", "Acme");
+    applied.posting_id = Some(f.posting_id.clone());
+    applied.analysis_id = Some(a.id.clone());
+    f.store.put_application(&applied).unwrap();
+    let claude = ("claude", "sonnet");
+    let first = [
+        outcome("a", claude, Origin::Suggested, In),
+        outcome("b", claude, Origin::Suggested, Off),
+        outcome("c", claude, Origin::Suggested, Off),
+    ]
+    .map(|o| ChangeOutcome {
+        analysis_id: Some(a.id.clone()),
+        ..o
+    });
+    f.store.put_change_outcomes("app-1", &first).unwrap();
+    assert_eq!(f.store.kept_by_route().unwrap(), [kept(claude, 1, 3, 1)]);
+
+    // You turned `b` back on and exported again: the same keys, not counted twice.
+    let mut second = first.clone();
+    second[1].outcome = In;
+    second[1].explicit = true;
+    f.store.put_change_outcomes("app-1", &second).unwrap();
+    assert_eq!(f.store.kept_by_route().unwrap(), [kept(claude, 2, 3, 1)]);
+
+    // The analysis goes with its posting; what you kept stays with the application.
+    f.store.delete_posting(&f.posting_id).unwrap();
+    assert_eq!(f.store.kept_by_route().unwrap(), [kept(claude, 2, 3, 1)]);
+
+    f.store.put_change_outcomes("app-1", &[]).unwrap();
+    assert!(f.store.kept_by_route().unwrap().is_empty());
+}
+
+/// Kept counts suggested changes you could keep or drop: in and forced out of in, off and forced, per agent and
+/// model, never a left-out or your own edit.
+#[test]
+fn kept_by_route_counts_decided_suggestions_per_agent_and_model() {
+    use ChangeFate::*;
+    let store = Store::open_in_memory().unwrap();
+    for id in ["app-1", "app-2"] {
+        store
+            .put_application(&app(id, "2026-10-01", "Acme"))
+            .unwrap();
+    }
+    let (sonnet, opus, codex) = (
+        ("claude", "sonnet"),
+        ("claude", "opus"),
+        ("codex", "sonnet"),
+    );
+    store
+        .put_change_outcomes(
+            "app-1",
+            &[
+                outcome("a", sonnet, Origin::Suggested, In),
+                outcome("b", sonnet, Origin::Suggested, Forced),
+                outcome("c", sonnet, Origin::Suggested, Off),
+                outcome("d", sonnet, Origin::Suggested, LeftOutValidator),
+                outcome("e", sonnet, Origin::Suggested, LeftOutFit),
+                outcome("f", sonnet, Origin::Yours, In),
+                outcome("g", sonnet, Origin::Yours, Off),
+            ],
+        )
+        .unwrap();
+    store
+        .put_change_outcomes(
+            "app-2",
+            &[
+                outcome("a", sonnet, Origin::Suggested, Off),
+                outcome("b", opus, Origin::Suggested, In),
+                outcome("c", codex, Origin::Suggested, Off),
+                outcome("d", codex, Origin::Suggested, Off),
+                // Only left out: nothing to keep or drop.
+                outcome("e", ("codex", "gpt-5"), Origin::Suggested, LeftOutFit),
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        store.kept_by_route().unwrap(),
+        [
+            kept(opus, 1, 1, 1),
+            kept(sonnet, 2, 4, 2),
+            kept(codex, 0, 2, 1),
+        ]
+    );
+}
+
+#[test]
+fn latencies_by_route_are_nearest_rank_over_the_timed_calls() {
+    let store = Store::open_in_memory().unwrap();
+    for ms in (1..=10).rev() {
+        let row = usage_row("suggestions", "claude", "sonnet", Some(ms * 1_000));
+        store.record_usage(&row).unwrap();
+    }
+    for (feature, agent, model, ms) in [
+        ("suggestions", "claude", "sonnet", None),
+        ("chat", "claude", "sonnet", Some(1)),
+        ("rewrite", "codex", "sonnet", Some(3_000)),
+        ("suggestions", "codex", "sonnet", Some(1_000)),
+        ("suggestions", "claude", "opus", None),
+    ] {
+        store
+            .record_usage(&usage_row(feature, agent, model, ms))
+            .unwrap();
+    }
+    let times = |agent: &str, calls, p50_ms, p90_ms| RouteTimes {
+        agent: agent.into(),
+        model: "sonnet".into(),
+        calls,
+        p50_ms,
+        p90_ms,
+    };
+    // Ten calls: ranks 5 and 9. Two: ranks 1 and 2. Untimed calls and other features don't count, and a route
+    // with no timed call isn't listed.
+    assert_eq!(
+        store
+            .latencies_by_route(&["suggestions", "rewrite"])
+            .unwrap(),
+        [
+            times("claude", 10, 5_000, 9_000),
+            times("codex", 2, 1_000, 3_000),
+        ]
+    );
+    assert!(store.latencies_by_route(&["dig"]).unwrap().is_empty());
+}
+
+fn bench_run(role: &str, model: &str, item: &str, n: u32, latency_ms: u64) -> BenchRunRow {
+    BenchRunRow {
+        role: role.into(),
+        agent: "claude".into(),
+        model: model.into(),
+        item: item.into(),
+        n,
+        outcome: "valid".into(),
+        error: None,
+        latency_ms,
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_write_tokens: 0,
+        cache_read_tokens: 0,
+        cost_usd: None,
+        served: None,
+        metrics: None,
+        at: String::new(),
+    }
+}
+
+/// A run again under the same role, route, item and run number replaces the last; deleting takes one role and route.
+#[test]
+fn bench_runs_replace_by_key_and_delete_per_role_and_route() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_bench_run(&bench_run("tailor", "sonnet", "p1", 1, 30_000))
+        .unwrap();
+    store
+        .put_bench_run(&bench_run("tailor", "sonnet", "p1", 2, 31_000))
+        .unwrap();
+    store
+        .put_bench_run(&bench_run("read", "sonnet", "p1", 1, 8_000))
+        .unwrap();
+    store
+        .put_bench_run(&bench_run("tailor", "opus", "p1", 1, 40_000))
+        .unwrap();
+    let again = BenchRunRow {
+        outcome: "failed".into(),
+        error: Some("timed out".into()),
+        cost_usd: Some(0.02),
+        served: Some("claude-sonnet-5-5".into()),
+        metrics: Some(r#"{"role":"tailor"}"#.into()),
+        ..bench_run("tailor", "sonnet", "p1", 1, 90_000)
+    };
+    store.put_bench_run(&again).unwrap();
+
+    let runs = store.bench_runs().unwrap();
+    let keys = |runs: &[BenchRunRow]| {
+        runs.iter()
+            .map(|r| (r.role.clone(), r.model.clone(), r.n, r.latency_ms))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        keys(&runs),
+        [
+            ("read".into(), "sonnet".into(), 1, 8_000),
+            ("tailor".into(), "opus".into(), 1, 40_000),
+            ("tailor".into(), "sonnet".into(), 1, 90_000),
+            ("tailor".into(), "sonnet".into(), 2, 31_000),
+        ]
+    );
+    assert!(!runs[2].at.is_empty());
+    assert_eq!(
+        BenchRunRow {
+            at: String::new(),
+            ..runs[2].clone()
+        },
+        again
+    );
+
+    store.delete_bench_runs("tailor", "claude", "sonnet").unwrap();
+    assert_eq!(
+        keys(&store.bench_runs().unwrap()),
+        [
+            ("read".into(), "sonnet".into(), 1, 8_000),
+            ("tailor".into(), "opus".into(), 1, 40_000),
+        ]
     );
 }

@@ -23,6 +23,7 @@
   import { onNotification, startupProblem, type AgentStatus, type Stage, type StartupProblem } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
+  import { benchmark } from "$lib/stores/benchmark.svelte";
   import { feed } from "$lib/stores/feed.svelte";
   import { shell } from "$lib/stores/shell.svelte";
   import { jobFit } from "$lib/fit";
@@ -92,8 +93,13 @@
           .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
           .finally(() => (ready = true));
         void feed.refresh();
-        // A round's banner clicked: its job (or its debrief).
-        stops = Promise.all([feed.listen(), app.listen(), onNotification((to) => void goto(to))]);
+        // A round's banner clicked: its job (or its debrief). A benchmark run's status: the rail's count.
+        stops = Promise.all([
+          feed.listen(),
+          app.listen(),
+          benchmark.listen(),
+          onNotification((to) => void goto(to)),
+        ]);
       });
     return () => void stops?.then((all) => all.forEach((stop) => stop()));
   });

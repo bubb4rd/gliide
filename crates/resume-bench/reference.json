@@ -1,0 +1,527 @@
+{
+  "date": "2026-11-17",
+  "roles": {
+    "read": {
+      "antigravity:gemini-3.8-flash-low": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 8.098,
+        "p90_s": 9.395,
+        "cost_usd": 0.013583077083333332,
+        "quality": {
+          "value": 89.28766432098905,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.8611150527462449
+            },
+            {
+              "id": "precision",
+              "value": 0.9070456393308558
+            },
+            {
+              "id": "must_recall",
+              "value": 0.910469237552571
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 48.629,
+        "p90_s": 58.524,
+        "cost_usd": null,
+        "quality": {
+          "value": 89.74091880341882,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.8781250000000002
+            },
+            {
+              "id": "precision",
+              "value": 0.8833333333333333
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9307692307692309
+            }
+          ]
+        }
+      },
+      "claude:haiku": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 20.327,
+        "p90_s": 27.281,
+        "cost_usd": 0.002785188055555556,
+        "quality": {
+          "value": 90.49045128497745,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.8626931401215459
+            },
+            {
+              "id": "precision",
+              "value": 0.9155442588266377
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9364761396011397
+            }
+          ]
+        }
+      },
+      "claude:sonnet": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 6.889,
+        "p90_s": 7.469,
+        "cost_usd": 0.01602468055555556,
+        "quality": {
+          "value": 90.33979371225674,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.8781448105558013
+            },
+            {
+              "id": "precision",
+              "value": 0.907787960925861
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9242610398860399
+            }
+          ]
+        }
+      },
+      "codex:gpt-6-luna": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 18.386,
+        "p90_s": 22.298,
+        "cost_usd": 0.0012474699999999999,
+        "quality": {
+          "value": 85.03205206959076,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.8285909319868299
+            },
+            {
+              "id": "precision",
+              "value": 0.8514173164392463
+            },
+            {
+              "id": "must_recall",
+              "value": 0.8709533136616471
+            }
+          ]
+        }
+      }
+    },
+    "tailor": {
+      "antigravity:gemini-3.8-flash-low": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 10.574,
+        "p90_s": 17.588,
+        "cost_usd": 0.0151879125,
+        "quality": {
+          "value": 85.6838336783989,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.937888198757764
+            },
+            {
+              "id": "fits",
+              "value": 0.9130434782608696
+            },
+            {
+              "id": "lift",
+              "value": 0.7195833333333332
+            },
+            {
+              "id": "lift_pts",
+              "value": 14.391666666666664
+            },
+            {
+              "id": "changes",
+              "value": 161.0
+            },
+            {
+              "id": "flagged",
+              "value": 10.0
+            },
+            {
+              "id": "left_fit",
+              "value": 14.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-high": {
+        "runs": 12,
+        "valid": 11,
+        "repaired": 0,
+        "failed": 1,
+        "items": 4,
+        "p50_s": 86.273,
+        "p90_s": 110.611,
+        "cost_usd": null,
+        "quality": {
+          "value": 80.88104448742747,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.8936170212765957
+            },
+            {
+              "id": "fits",
+              "value": 0.9787234042553191
+            },
+            {
+              "id": "lift",
+              "value": 0.5540909090909093
+            },
+            {
+              "id": "lift_pts",
+              "value": 11.081818181818186
+            },
+            {
+              "id": "changes",
+              "value": 47.0
+            },
+            {
+              "id": "flagged",
+              "value": 5.0
+            },
+            {
+              "id": "left_fit",
+              "value": 1.0
+            }
+          ]
+        }
+      },
+      "claude:opus": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 34.553,
+        "p90_s": 47.737,
+        "cost_usd": 0.08592625555555555,
+        "quality": {
+          "value": 83.73611111111113,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9027777777777778
+            },
+            {
+              "id": "fits",
+              "value": 0.9930555555555556
+            },
+            {
+              "id": "lift",
+              "value": 0.6162500000000002
+            },
+            {
+              "id": "lift_pts",
+              "value": 12.325000000000003
+            },
+            {
+              "id": "changes",
+              "value": 144.0
+            },
+            {
+              "id": "flagged",
+              "value": 14.0
+            },
+            {
+              "id": "left_fit",
+              "value": 1.0
+            }
+          ]
+        }
+      },
+      "claude:sonnet": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 17.531,
+        "p90_s": 23.464,
+        "cost_usd": 0.03221039444444445,
+        "quality": {
+          "value": 82.16140929064659,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9915254237288136
+            },
+            {
+              "id": "fits",
+              "value": 0.940677966101695
+            },
+            {
+              "id": "lift",
+              "value": 0.5326388888888889
+            },
+            {
+              "id": "lift_pts",
+              "value": 10.652777777777779
+            },
+            {
+              "id": "changes",
+              "value": 118.0
+            },
+            {
+              "id": "flagged",
+              "value": 1.0
+            },
+            {
+              "id": "left_fit",
+              "value": 7.0
+            }
+          ]
+        }
+      },
+      "codex:gpt-6-luna": {
+        "runs": 36,
+        "valid": 36,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 18.502,
+        "p90_s": 24.648,
+        "cost_usd": 0.0014151761111111112,
+        "quality": {
+          "value": 62.97059946544483,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 1.0
+            },
+            {
+              "id": "fits",
+              "value": 0.711340206185567
+            },
+            {
+              "id": "lift",
+              "value": 0.1777777777777778
+            },
+            {
+              "id": "lift_pts",
+              "value": 3.5555555555555562
+            },
+            {
+              "id": "changes",
+              "value": 97.0
+            },
+            {
+              "id": "flagged",
+              "value": 0.0
+            },
+            {
+              "id": "left_fit",
+              "value": 28.0
+            }
+          ]
+        }
+      }
+    },
+    "write": {
+      "antigravity:gemini-4-hydrogen-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 37.006,
+        "p90_s": 45.402,
+        "cost_usd": null,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "claude:opus": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 15.735,
+        "p90_s": 18.736,
+        "cost_usd": 0.056304166666666655,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "claude:sonnet": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 6.168,
+        "p90_s": 6.731,
+        "cost_usd": 0.018035583333333334,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "codex:gpt-6-luna": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 11.433,
+        "p90_s": 13.816,
+        "cost_usd": 0.0011088833333333333,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      }
+    },
+    "coach": {
+      "antigravity:gemini-4-hydrogen-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 38.793,
+        "p90_s": 68.446,
+        "cost_usd": null,
+        "quality": {
+          "value": 98.6159169550173,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.986159169550173
+            },
+            {
+              "id": "kept_items",
+              "value": 285.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 4.0
+            }
+          ]
+        }
+      },
+      "claude:opus": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 20.9,
+        "p90_s": 28.363,
+        "cost_usd": 0.06218068333333333,
+        "quality": {
+          "value": 98.71382636655949,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9871382636655949
+            },
+            {
+              "id": "kept_items",
+              "value": 307.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 4.0
+            }
+          ]
+        }
+      },
+      "claude:sonnet": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 12.15,
+        "p90_s": 15.895,
+        "cost_usd": 0.025364233333333333,
+        "quality": {
+          "value": 97.6027397260274,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.976027397260274
+            },
+            {
+              "id": "kept_items",
+              "value": 285.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 7.0
+            }
+          ]
+        }
+      },
+      "codex:gpt-6-luna": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 22.955,
+        "p90_s": 25.02,
+        "cost_usd": 0.0014267983333333333,
+        "quality": {
+          "value": 99.1701244813278,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.991701244813278
+            },
+            {
+              "id": "kept_items",
+              "value": 239.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 2.0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

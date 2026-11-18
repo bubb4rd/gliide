@@ -1,63 +1,55 @@
 //! The Coach role (§3.4): Prep for a technical round per posting, with no earlier debriefs or stories, from the
-//! resolved `swe` master; and Dig's questions per bank entry, with the terms your postings ask for that the entry
-//! doesn't state. Both are built as the app builds them (`app/src-tauri/src/prep.rs`, `dig.rs`), minimally. Validity,
-//! latency, question counts after the app's checks, and a blind sheet.
+//! resolved `swe` master (`resume_bench`'s, as the app's Benchmark runs it); and Dig's questions per bank entry, with
+//! the terms your postings ask for that the entry doesn't state, built as the app's `dig.rs` builds them, minimally.
+//! Validity, latency, question counts after the app's checks, and a blind sheet.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Duration;
 
+use resume_bench::{Fixtures, Role, Run, call, date, mean, prep_checked, run_one};
 use resume_core::Requirements;
 use resume_core::bank::{BankEntry, SectionKind};
 use resume_core::matcher::{Page, find_literal, weight};
 use resume_llm::dig::{self, Questions, QuestionsInput};
-use resume_llm::prep::{self, Prep, PrepInput, SentResume};
+use resume_llm::prep::{Prep, SentResume};
 use serde::Deserialize;
 use serde_json::json;
 
 use super::report::{
     PerPosting, Section, by_route, common, common_metrics, errors, m, rates, write_blind,
 };
-use super::{Fixtures, Run, RunArgs, call, date, each, mean};
+use super::{RunArgs, each};
 
-const TIMEOUT: Duration = Duration::from_secs(300);
-/// The round every prep is for.
-const ROUND: &str = "technical";
 /// Dig's item ids: `dig-<entry id>`.
 const DIG: &str = "dig-";
 
-enum Item<'a> {
-    Prep {
-        company: String,
-        role: String,
-        req: Option<&'a Requirements>,
-    },
-    Dig {
-        entry: &'a BankEntry,
-        masters: Vec<String>,
-        terms: Vec<(String, usize)>,
-    },
+/// Whether item `id` is a Dig run's.
+pub fn is_dig(id: &str) -> bool {
+    id.starts_with(DIG)
+}
+
+/// What Dig asks about one entry.
+struct DigItem<'a> {
+    entry: &'a BankEntry,
+    masters: Vec<String>,
+    terms: Vec<(String, usize)>,
 }
 
 pub async fn run(fx: &Fixtures, args: &RunArgs, out: &Path) -> anyhow::Result<()> {
-    let sent = SentResume::tagged(&fx.resume, &fx.bank);
     let today = date();
-    let (prep_schema, dig_schema) = (prep::schema(), dig::questions_schema());
-    let mut items: Vec<(String, Item)> = fx
+    let dig_schema = dig::questions_schema();
+    let mut items: Vec<String> = fx
         .chosen(&args.only)
         .into_iter()
-        .map(|f| {
-            let (company, role) = super::write::job(fx, f);
-            let req = fx.requirements(&f.id).map(|(r, _)| r);
-            (f.id.clone(), Item::Prep { company, role, req })
-        })
+        .map(|f| f.id.clone())
         .collect();
     let reqs: Vec<&Requirements> = fx
         .postings
         .iter()
-        .filter_map(|f| fx.requirements(&f.id).map(|(r, _)| r))
+        .filter_map(|f| fx.gold.get(&f.id))
         .collect();
+    let mut digs: BTreeMap<String, DigItem> = BTreeMap::new();
     for e in entries(fx) {
         let id = format!("{DIG}{}", e.id);
         if !args.only.is_empty() && !args.only.contains(&id) {
@@ -68,62 +60,36 @@ pub async fn run(fx: &Fixtures, args: &RunArgs, out: &Path) -> anyhow::Result<()
             .sections
             .iter()
             .any(|s| s.entries.iter().any(|x| x.id == e.id));
-        items.push((
-            id,
-            Item::Dig {
-                entry: e,
-                masters: if shown {
-                    vec![fx.master.title.clone()]
-                } else {
-                    vec![]
-                },
-                terms: unstated_terms(e, &reqs),
+        let item = DigItem {
+            entry: e,
+            masters: if shown {
+                vec![fx.master.title.clone()]
+            } else {
+                vec![]
             },
-        ));
+            terms: unstated_terms(e, &reqs),
+        };
+        items.push(id.clone());
+        digs.insert(id, item);
     }
     each(
         "coach",
+        Role::Coach,
         args,
-        1,
-        TIMEOUT,
         out,
         &items,
-        async |llm, route, item| match item {
-            Item::Prep { company, role, req } => {
-                let input = PrepInput {
-                    kind: ROUND,
-                    with: "",
-                    notes: "",
-                    role,
-                    company,
-                    requirements: *req,
-                    sent: &sent,
-                    stories: &[],
-                    debriefs: &[],
-                    today: &today,
-                };
-                let c = call(prep::write(llm, &prep_schema, &input, &route.model)).await;
-                (
-                    c,
-                    json!({ "kind": "prep", "round": ROUND, "company": company, "role": role }),
-                )
-            }
-            Item::Dig {
-                entry,
-                masters,
-                terms,
-            } => {
+        async |llm, route, id, n| match digs.get(id) {
+            None => run_one(llm, route, Role::Coach, fx, id, n).await,
+            Some(d) => {
                 let input = QuestionsInput {
-                    entry,
-                    masters,
-                    terms,
+                    entry: d.entry,
+                    masters: &d.masters,
+                    terms: &d.terms,
                     today: &today,
                 };
                 let c = call(dig::ask(llm, &dig_schema, &input, &route.model)).await;
-                (
-                    c,
-                    json!({ "kind": "dig", "entry": entry.id, "terms": terms }),
-                )
+                let meta = json!({ "kind": "dig", "entry": d.entry.id, "terms": d.terms });
+                Run::new(Role::Coach, route, id, n, c, meta)
             }
         },
     )
@@ -197,8 +163,7 @@ fn quote(s: &str) -> String {
 pub fn section(fx: &Fixtures, runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Section>> {
     let sent = SentResume::tagged(&fx.resume, &fx.bank);
     let pref = rates(dir)?;
-    let (preps, digs): (Vec<&Run>, Vec<&Run>) =
-        runs.iter().partition(|r| !r.posting.starts_with(DIG));
+    let (preps, digs): (Vec<&Run>, Vec<&Run>) = runs.iter().partition(|r| !is_dig(&r.item));
     let mut blind: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
 
     let mut prep_s = Section::new(
@@ -227,8 +192,10 @@ pub fn section(fx: &Fixtures, runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Se
             let Some(p) = r.output.as_ref().and_then(|o| Prep::deserialize(o).ok()) else {
                 continue;
             };
-            let req = fx.requirements(&r.posting).map(|(q, _)| q);
-            let (p, d) = prep::checked(p, &sent, req, &[]);
+            let Some(req) = fx.gold.get(&r.item) else {
+                continue;
+            };
+            let (p, d) = prep_checked(&sent, req, p);
             let dropped = d.lines.len() + d.gaps.len() + d.sentences.len() + d.stories.len();
             kept.push((r, p, dropped));
         }
@@ -256,11 +223,11 @@ pub fn section(fx: &Fixtures, runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Se
             }
         }
         for r in &rs {
-            lat_pp.push(&r.posting, &route, r.secs());
+            lat_pp.push(&r.item, &route, r.secs());
         }
         for (r, p, _) in &kept {
-            q_pp.push(&r.posting, &route, p.questions.len() as f64);
-            let sheet = blind.entry(r.posting.clone()).or_default();
+            q_pp.push(&r.item, &route, p.questions.len() as f64);
+            let sheet = blind.entry(r.item.clone()).or_default();
             if !sheet.contains_key(&route) {
                 let mut body = format!("> **Focus:** {}\n>\n", quote(&p.focus));
                 for q in &p.questions {
@@ -296,7 +263,7 @@ pub fn section(fx: &Fixtures, runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Se
         let mut n = common(&rs);
         let mut kept: Vec<(&Run, Questions)> = Vec::new();
         for r in rs.iter().filter(|r| r.ok()) {
-            let entry = entries(fx).find(|e| r.posting.strip_prefix(DIG) == Some(e.id.as_str()));
+            let entry = entries(fx).find(|e| r.item.strip_prefix(DIG) == Some(e.id.as_str()));
             let (Some(q), Some(e)) = (
                 r.output
                     .as_ref()
@@ -322,11 +289,11 @@ pub fn section(fx: &Fixtures, runs: &[Run], dir: &Path) -> anyhow::Result<Vec<Se
             }
         }
         for r in &rs {
-            lat_pp.push(&r.posting, &route, r.secs());
+            lat_pp.push(&r.item, &route, r.secs());
         }
         for (r, q) in &kept {
-            q_pp.push(&r.posting, &route, q.questions.len() as f64);
-            let sheet = blind.entry(r.posting.clone()).or_default();
+            q_pp.push(&r.item, &route, q.questions.len() as f64);
+            let sheet = blind.entry(r.item.clone()).or_default();
             if !sheet.contains_key(&route) {
                 let mut body = format!("> **Read:** {}\n>\n", quote(&q.read));
                 for x in &q.questions {

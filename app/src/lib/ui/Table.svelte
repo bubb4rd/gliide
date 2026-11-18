@@ -15,8 +15,14 @@
   rows `checkable` allows (all by default) get one; a checked row wears the --selected wash. Shift-click checks or
   clears every checkable row from the last one clicked, in the order shown. The header's checkbox covers the rows
   shown: on when all are, mixed when some are; a click checks them all, or clears them when all were.
+
+  With `detail`, a row can open its details in a full-width row under it while `expanded` says so (a disclosure in a
+  cell is its control): no hover wash, the hairline under the details, not between. A column's `tip` is its header's
+  tooltip, saying what it measures.
 -->
 <script lang="ts" module>
+  import type { TipContent } from "./tip.svelte";
+
   export type SortDir = "asc" | "desc";
 
   export interface TableSort {
@@ -35,6 +41,8 @@
     sortBy?: (row: Row) => string | number | null | undefined;
     /** The direction a first click sorts in: `desc` for numeric columns, `asc` otherwise. */
     sortFirst?: SortDir;
+    /** The header's tooltip: what the column measures. */
+    tip?: TipContent;
   }
 
   const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
@@ -61,6 +69,7 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Checkbox from "./Checkbox.svelte";
   import Icon from "./Icon.svelte";
+  import { tip } from "./tip.svelte";
 
   interface Props {
     columns: TableColumn<Row>[];
@@ -82,6 +91,10 @@
     checkable?: (row: Row) => boolean;
     /** A row's checkbox, for assistive tech ("Select Globex"). */
     checkLabel?: (row: Row) => string;
+    /** A row's details, in a full-width row under it while `expanded` says so. */
+    detail?: Snippet<[Row]>;
+    /** Whether a row's details are open. */
+    expanded?: (row: Row) => boolean;
   }
 
   let {
@@ -96,6 +109,8 @@
     checked = $bindable(),
     checkable = () => true,
     checkLabel = () => "Select row",
+    detail,
+    expanded = () => false,
   }: Props = $props();
 
   let body = $state<HTMLTableSectionElement>();
@@ -175,10 +190,17 @@
           <th scope="col" class={[end && "end"]} aria-sort={ariaSort(column)}>
             {#if column.sortBy}
               {@const on = sort?.key === column.key}
-              <button type="button" class={["sort", end && "sort--end", on && "sort--on"]} onclick={() => sortOn(column)}>
+              <button
+                type="button"
+                class={["sort", end && "sort--end", on && "sort--on"]}
+                onclick={() => sortOn(column)}
+                {@attach tip(column.tip)}
+              >
                 {column.label}
                 <Icon icon={on && sort?.dir === "asc" ? ArrowUp : ArrowDown} size={12} weight="medium" class="arrow" />
               </button>
+            {:else if column.tip}
+              <span {@attach tip(column.tip)}>{column.label}</span>
             {:else}
               {column.label}
             {/if}
@@ -190,10 +212,11 @@
       {#each sorted as row (key(row))}
         {@const on = selected !== null && key(row) === selected}
         {@const picked = checked?.has(key(row)) ?? false}
+        {@const open = !!detail && expanded(row)}
         <!-- The screen's keys act on the selection; a row's own controls are its keyboard path. -->
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
         <tr
-          class={[on && "selected", picked && "checked"]}
+          class={[on && "selected", picked && "checked", open && "open"]}
           aria-current={on ? "true" : undefined}
           aria-selected={checked ? picked : undefined}
           onclick={onselect && (() => onselect(row))}
@@ -217,6 +240,11 @@
             </td>
           {/each}
         </tr>
+        {#if open}
+          <tr class="detail">
+            <td colspan={columns.length + (checked ? 1 : 0)}>{@render detail?.(row)}</td>
+          </tr>
+        {/if}
       {/each}
     </tbody>
   </table>
@@ -262,6 +290,17 @@
   .selected td,
   .checked td {
     background: var(--selected);
+  }
+  /* A row and its details read as one: the hairline goes under the details. */
+  .open td {
+    border-bottom-color: transparent;
+  }
+  .detail td {
+    height: auto;
+    padding-top: 0;
+    padding-bottom: var(--space-3);
+    overflow: visible;
+    white-space: normal;
   }
   /* The checkboxes' column: the table's 24px inset before it, 4px after (the next cell's own padding follows). */
   .pick-col {
@@ -321,7 +360,7 @@
     visibility: visible;
   }
   @media (hover: hover) {
-    tbody tr:not(.selected, .checked):hover td {
+    tbody tr:not(.selected, .checked, .detail):hover td {
       background: var(--hover);
     }
     .sort:hover {

@@ -82,7 +82,7 @@ impl Metered {
 }
 
 /// A unit enum's serde name (`feed-check`, `claude`).
-fn name<T: serde::Serialize>(v: &T) -> String {
+pub(crate) fn name<T: serde::Serialize>(v: &T) -> String {
     serde_json::to_value(v)
         .ok()
         .and_then(|v| v.as_str().map(str::to_owned))

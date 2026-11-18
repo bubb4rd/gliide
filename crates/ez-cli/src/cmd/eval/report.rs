@@ -13,9 +13,10 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use anyhow::Context;
+use resume_bench::{Fixtures, Outcome, Run, mean, percentile};
 use resume_llm::pricing::PRICES_AS_OF;
 
-use super::{Fixtures, Outcome, Run, mean, percentile, recorded};
+use super::recorded;
 
 /// A metric's pass bar.
 #[derive(Clone, Copy, Debug)]
@@ -282,7 +283,7 @@ pub fn errors<'a>(runs: impl IntoIterator<Item = &'a Run>) -> String {
             s,
             "- `{}` `{}` #{}: {}",
             r.route,
-            r.posting,
+            r.item,
             r.n,
             e.lines().next().unwrap_or("").replace('|', "\\|")
         );

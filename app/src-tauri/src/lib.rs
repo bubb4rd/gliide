@@ -3,6 +3,7 @@
 //! `commands` is the bridge; the modules under it hold the work and run without a webview (`App::open` with any
 //! [`state::Emit`]), which is how they're smoke-tested.
 
+pub mod benchmark;
 mod commands;
 pub mod cover;
 pub mod debrief;
@@ -64,6 +65,7 @@ pub fn run() {
                 let _ = match e {
                     Event::Progress(p) => handle.emit("progress", p),
                     Event::Feed(s) => handle.emit("feed", s),
+                    Event::Benchmark(s) => handle.emit("benchmark", s),
                 };
             });
             let state = match App::open(&dir, emit) {
@@ -180,6 +182,11 @@ pub fn run() {
             commands::usage,
             commands::export_usage,
             commands::route_latencies,
+            commands::benchmark,
+            commands::benchmark_estimate,
+            commands::benchmark_start,
+            commands::benchmark_resume,
+            commands::benchmark_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gliide");

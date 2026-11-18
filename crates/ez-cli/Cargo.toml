@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+resume-bench = { path = "../resume-bench" }
 resume-core = { path = "../resume-core" }
 resume-ingest = { path = "../resume-ingest" }
 resume-llm = { path = "../resume-llm" }

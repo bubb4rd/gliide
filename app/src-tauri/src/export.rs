@@ -2,17 +2,21 @@
 //! resume's text read back for the on-file score, the posting's application, and `applications.csv` mirrored from the
 //! store.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use resume_core::change::State;
 use resume_core::{PageFacts, score};
 use resume_pipeline::today;
-use resume_store::{AppStatus, Application, Store, applications_csv, parse_ats_fit_csv};
+use resume_store::{
+    AppStatus, Application, ChangeFate, ChangeOutcome, Store, applications_csv, parse_ats_fit_csv,
+};
 use resume_tailor::Tailored;
 
 use crate::cover;
 use crate::dto::{ApplicationRow, Exported, StatusSet};
 use crate::error::{AppError, Result};
-use crate::review::Review;
+use crate::review::{Last, Review};
 use crate::state::{App, lock};
 
 /// The log mirrored for spreadsheets, in the export folder.
@@ -33,8 +37,8 @@ const APP_COLUMNS: [&str; 10] = [
 ];
 
 /// Saves the open review's tailored resume as a PDF in the export folder, reads its text back for the on-file score,
-/// records the posting's application with the resume as sent and rewrites `applications.csv`. Refuses a resume over
-/// its page limit.
+/// records the posting's application with the resume as sent and what became of each change, and rewrites
+/// `applications.csv`. Refuses a resume over its page limit.
 pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
     let slot = lock(&app.review);
     let r = slot
@@ -90,6 +94,7 @@ pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
     };
     store.put_application(&a)?;
     store.put_sent(&a.id, &sent)?;
+    store.put_change_outcomes(&a.id, &outcomes(r, last))?;
     drop(store);
     recorded(app, r, a, &path, on_file)
 }
@@ -140,6 +145,49 @@ fn file_stem(r: &Review, kind: &str) -> String {
         slug(non_empty(&r.req.short_role).unwrap_or("role")),
         slug(surname)
     )
+}
+
+/// What became of each change of the exported resume, for the Benchmark's kept edits: a row per change of the last
+/// rebuild, in its state after the fit check. An analysis whose route isn't known (stored before its agent was kept)
+/// gives none, so a re-export clears what an earlier one recorded and its changes count for no route.
+fn outcomes(r: &Review, last: &Last) -> Vec<ChangeOutcome> {
+    if r.agent.is_empty() {
+        return Vec::new();
+    }
+    let mut seen = HashSet::new();
+    last.changes
+        .iter()
+        .filter(|c| seen.insert(c.key.as_str()))
+        .filter_map(|c| {
+            let outcome = match last.t.states.get(&c.key)? {
+                State::In => ChangeFate::In,
+                State::Off => ChangeFate::Off,
+                State::Forced { .. } => ChangeFate::Forced,
+                // The tailored change's flags: your wording clears them, so a reworded change left out is the fit's.
+                State::LeftOut { .. } if !c.flags.is_empty() => ChangeFate::LeftOutValidator,
+                State::LeftOut { .. } => ChangeFate::LeftOutFit,
+            };
+            // `draft_changes` turns a reworded suggestion into yours, often a `set`: its op and origin are the
+            // suggestion's, so rewording one still counts for the route that proposed it.
+            let suggested = r.changes.iter().find(|s| s.key == c.key).unwrap_or(c);
+            Some(ChangeOutcome {
+                analysis_id: Some(r.id.clone()),
+                key: c.key.clone(),
+                agent: r.agent.clone(),
+                model: r.model.clone(),
+                op: suggested.op.target().0.to_owned(),
+                origin: suggested.origin,
+                outcome,
+                explicit: last.draft.decisions.contains_key(&c.key),
+                // As `draft_changes` reads it: empty wording changes nothing.
+                edited: last
+                    .draft
+                    .wording
+                    .get(&c.key)
+                    .is_some_and(|t| !t.trim().is_empty()),
+            })
+        })
+        .collect()
 }
 
 /// A new application for the review's posting: dated today, `saved`, with the review's scores now and projected and
