@@ -191,12 +191,14 @@ updater permission. Its one endpoint is the newest GitHub release's `latest.json
 which names the version, its notes, and per platform the `gliide.app.tar.gz` bundle and its signature; a bundle
 installs only when that signature checks against `plugins.updater.pubkey` (minisign; the private key is the
 maintainer's, `~/.tauri/gliide-updater.key`, used by `app/scripts/release-macos.sh`, which also writes
-`latest.json`). Release builds check about a minute after launch and then whenever 24 hours have passed (looked at
-hourly, so sleep doesn't skip a day) while the `check_updates` setting is on (default on); dev builds never check on
-their own. Check now (Settings → About) checks at once. A newer version shows in the sidebar's foot and in About;
-Restart to update downloads the bundle (progress at each whole percent in the `update` event), checks it, swaps the
-app in place and relaunches. `UpdateStatus` is the state: `current`, `available`, `notes`, `state` (idle, checking,
-installing), `progress`, `checkedAt`, `error`.
+`latest.json`). Release builds check at launch (in the background, one small request) and then whenever 24 hours
+have passed (looked at hourly, so sleep doesn't skip a day) while the `check_updates` setting is on (default on); dev
+builds never check on their own. Check now (Settings → About) checks at once. A newer version shows on Overview (its
+notes and Restart to update, until installed or put off with Not now for that version, kept in the webview's
+`localStorage`), in the sidebar's foot and in About; Restart to update downloads the bundle (progress at each whole
+percent in the `update` event), checks it, swaps the app in place and relaunches. `UpdateStatus` is the state:
+`current`, `available`, `notes`, `released`, `state` (idle, checking, installing), `progress`, `checkedAt`, `error`.
+Builds before 0.10.0 checked a minute after launch and said so only in the sidebar's foot and About.
 
 ## 2. Data model: an experience bank and masters
 

@@ -1,8 +1,8 @@
 //! Updates (ARCHITECTURE.md §1, Updates): the newest GitHub release's `latest.json`, through the updater plugin, whose
 //! bundle must carry a signature from the key whose public half is `plugins.updater.pubkey` in `tauri.conf.json`.
-//! Checked about a minute after launch and then once a day while Settings → About says so (release builds only, so a
-//! dev build never offers to replace itself), and on Check now. Restart to update downloads the bundle, checks its
-//! signature, swaps the app in place and relaunches it. Every change goes to the UI as the `update` event.
+//! Checked at launch and then once a day while Settings → About says so (release builds only, so a dev build never
+//! offers to replace itself), and on Check now. Restart to update downloads the bundle, checks its signature, swaps the
+//! app in place and relaunches it. Every change goes to the UI as the `update` event.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -15,8 +15,6 @@ use crate::dto::{UpdateState, UpdateStatus};
 use crate::error::{AppError, Result};
 use crate::state::{App, lock};
 
-/// The first check waits this long after launch, so it never competes with the window's first screen.
-const FIRST: Duration = Duration::from_secs(60);
 /// How often the schedule looks at whether a check is due (so a Mac waking from sleep catches up within the hour).
 const TICK: Duration = Duration::from_secs(60 * 60);
 /// A check is due this long after the last one.
@@ -139,12 +137,12 @@ pub async fn install(app: &AppHandle) -> Result<()> {
     }
 }
 
-/// Checks at launch and once a day while `check_updates` is on; never in a dev build.
+/// Checks at launch and once a day while `check_updates` is on; never in a dev build. The launch check is one small
+/// request in the background, so Overview can say a release is out the first time you look.
 pub async fn schedule(app: AppHandle) {
     if cfg!(debug_assertions) {
         return;
     }
-    tokio::time::sleep(FIRST).await;
     loop {
         let on = app.state::<Arc<App>>().settings().check_updates;
         let due = lock(&app.state::<Updates>().last).is_none_or(|t| Utc::now() - t >= EVERY);

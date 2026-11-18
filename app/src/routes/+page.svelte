@@ -1,5 +1,6 @@
 <!--
-  `/` is the Overview: a greeting, your activity (postings added and applications sent: counts over a range, and the
+  `/` is the Overview: a greeting, a newer release once a check found one (its notes, Restart to update; Not now
+  hides it until the next version), your activity (postings added and applications sent: counts over a range, and the
   last 26 weeks by day), what's up next (applications with a round coming up, soonest first, then debriefs owed, then
   the rest in interviews, then applications with no word in a week, then postings not sent yet, best fit first; each
   application says why in a third line) and what's new for you (the feed's fits, newest posting first; hidden while
@@ -13,6 +14,7 @@
   import { goto } from "$app/navigation";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
+  import CircleArrowDown from "@lucide/svelte/icons/circle-arrow-down";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import Hourglass from "@lucide/svelte/icons/hourglass";
   import NotebookPen from "@lucide/svelte/icons/notebook-pen";
@@ -36,6 +38,7 @@
     Heatmap,
     Icon,
     Kbd,
+    ReleaseNotes,
     ScoreBar,
     Segmented,
     Toolbar,
@@ -75,6 +78,17 @@
   const backdrop = $derived(app.settings && app.settings.backdrop !== "none" ? app.settings.backdrop : null);
   /** The content has scrolled under the toolbar, which then needs its paper over the backdrop. */
   let scrolled = $state(false);
+
+  // ── A newer release: shown until it's installed, or until Not now for that version ──
+  const DISMISSED = "gliide-update-dismissed";
+  let dismissed = $state(localStorage.getItem(DISMISSED));
+  const release = $derived(app.update?.available && app.update.available !== dismissed ? app.update : null);
+  const installing = $derived(release?.state === "installing");
+  function notNow() {
+    if (!release?.available) return;
+    localStorage.setItem(DISMISSED, release.available);
+    dismissed = release.available;
+  }
 
   // ── Activity: postings by the day they were added, applications by the day they were sent ──
   const today = new Date();
@@ -290,6 +304,38 @@
   <div class="column">
     <h1 class="headline">What’s up next{name ? `, ${name}` : ""}?</h1>
 
+    {#if release}
+      <section class="section" aria-labelledby="release">
+        <header class="head">
+          <h2 class="heading" id="release">Update available</h2>
+          <Button size="sm" variant="ghost" disabled={installing} onclick={notNow}>Not now</Button>
+          <Button
+            size="sm"
+            variant="primary"
+            icon={CircleArrowDown}
+            disabled={release.state !== "idle"}
+            onclick={() => void app.installUpdate()}
+          >
+            {#if installing}
+              Downloading{release.progress === null ? "…" : ` ${Math.round(release.progress * 100)}%`}
+            {:else}
+              Restart to update
+            {/if}
+          </Button>
+        </header>
+        <Card pad>
+          <div class="release">
+            {#if release.notes}
+              <ReleaseNotes notes={release.notes} version={release.available} date={release.released} />
+            {:else}
+              <p class="note">gliide {release.available} is out. Restart to update installs it and opens it again.</p>
+            {/if}
+            {#if release.error}<p class="problem" role="alert">{release.error}</p>{/if}
+          </div>
+        </Card>
+      </section>
+    {/if}
+
     <div class="split">
       <section class="section" aria-labelledby="activity">
         <header class="head">
@@ -500,6 +546,20 @@
   }
   .note {
     margin: 0;
+  }
+
+  /* The release card: its notes, then why an install failed, as Settings → About says it. */
+  .release {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .problem {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    background: var(--danger-soft);
+    text-wrap: pretty;
   }
 
   /* Inside the card's 1px border: 12 - 1, so a row's hover wash follows the corners. */
