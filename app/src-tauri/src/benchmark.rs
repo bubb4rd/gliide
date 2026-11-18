@@ -918,9 +918,10 @@ fn this_mac(role: bench::Role, rows: &[&BenchRunRow]) -> (RouteResult, (String, 
             })
         })
         .collect();
+    // The whole timestamp (UTC): the pane shows its local day, which the UTC date isn't in the evening west of UTC.
     let at = rows
         .iter()
-        .map(|r| r.at.get(..10).unwrap_or(&r.at))
+        .map(|r| r.at.as_str())
         .max()
         .unwrap_or_default()
         .to_owned();
@@ -1193,7 +1194,8 @@ mod tests {
             (4, 3, 1, 4)
         );
         assert_eq!(mine.quality, Some(50.0));
-        assert_eq!(mine.at, "2026-11-18");
+        // The time, not its UTC day: the pane shows the local day.
+        assert_eq!(mine.at, "2026-11-18T09:00:00.000000Z");
         assert_eq!(mine.errors, ["timed out"]);
         // Quality 90 from the reference's 36 runs; reliability 75 and speed 100 (p50 4 s) from this Mac's 4, where
         // the reference's p50 of 20 s would give speed 50.

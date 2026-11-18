@@ -30,7 +30,7 @@ costUsd: number | null,
  */
 quality: number | null, parts: Array<BenchPart>, 
 /**
- * The day of the newest run (`YYYY-MM-DD`).
+ * When the newest run was: the reference's day (`YYYY-MM-DD`), this Mac's run's time (RFC 3339, UTC).
  */
 at: string, 
 /**
