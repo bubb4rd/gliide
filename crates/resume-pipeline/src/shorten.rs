@@ -43,8 +43,9 @@ impl Shorten {
     }
 }
 
-/// `s`'s bullet rewrites that wrap to more lines than the bullet they replace, as `renderer`'s template wraps them,
-/// in one measure pass. A rewrite of a bullet `resume` doesn't show is left alone (the fit check says why).
+/// `s`'s bullet rewrites that wrap to more lines than the bullet they replace on `resume` (the master's line, as the fit
+/// check measures it, not Suggest's copy of it), as `renderer`'s template wraps them, in one measure pass. A rewrite of
+/// a bullet `resume` doesn't show is left alone (the fit check says why).
 pub fn long_rewrites(
     s: &Suggestions,
     resume: &Resume,
@@ -52,19 +53,16 @@ pub fn long_rewrites(
     req: &Requirements,
     renderer: &mut Renderer,
 ) -> Result<Vec<Shorten>, RenderError> {
-    let rewrites: Vec<(usize, u32)> = s
+    let rewrites: Vec<(usize, u32, &str)> = s
         .bullets
         .iter()
         .enumerate()
         .filter(|(_, b)| b.op == BulletOp::Rewrite && !b.after.trim().is_empty())
-        .filter_map(|(i, b)| depth_of(resume, &b.id).map(|d| (i, d)))
+        .filter_map(|(i, b)| bullet_on(resume, &b.id).map(|(d, text)| (i, d, text)))
         .collect();
     let candidates: Vec<Candidate> = rewrites
         .iter()
-        .flat_map(|&(i, depth)| {
-            let b = &s.bullets[i];
-            [bullet(depth, &b.before), bullet(depth, &b.after)]
-        })
+        .flat_map(|&(i, depth, before)| [bullet(depth, before), bullet(depth, &s.bullets[i].after)])
         .collect();
     let counts = renderer.measure(&candidates)?;
     let terms: Vec<String> = req.skills.iter().map(|k| k.term.clone()).collect();
@@ -72,7 +70,7 @@ pub fn long_rewrites(
         .iter()
         .zip(counts.chunks(2))
         .filter(|(_, c)| c[1].1 > c[0].1)
-        .map(|(&(index, depth), c)| {
+        .map(|(&(index, depth, before), c)| {
             let (lines, now) = (c[0].1, c[1].1);
             let b = &s.bullets[index];
             Shorten {
@@ -88,7 +86,7 @@ pub fn long_rewrites(
                     "Shorter: it wraps to {now} lines and must fit in {lines}, as the line it replaces does. Keep its \
                      requirement terms and facts; cut words that carry neither."
                 ),
-                budget: rewrite::budget(&b.before),
+                budget: rewrite::budget(before),
             }
         })
         .collect())
@@ -129,15 +127,17 @@ fn bullet(depth: u32, text: &str) -> Candidate {
     }
 }
 
-/// The indent steps of bullet `id` on `resume` (1 under an entry with notes, as the template lays it out); `None` when
-/// `resume` doesn't show it.
-fn depth_of(resume: &Resume, id: &str) -> Option<u32> {
+/// Bullet `id` on `resume`: its indent steps (1 under an entry with notes, as the template lays it out) and its text;
+/// `None` when `resume` doesn't show it.
+fn bullet_on<'r>(resume: &'r Resume, id: &str) -> Option<(u32, &'r str)> {
     resume
         .sections
         .iter()
         .flat_map(|s| &s.entries)
-        .find(|e| e.bullets.iter().any(|b| b.id == id))
-        .map(|e| u32::from(!e.notes.is_empty()))
+        .find_map(|e| {
+            let b = e.bullets.iter().find(|b| b.id == id)?;
+            Some((u32::from(!e.notes.is_empty()), b.text.as_str()))
+        })
 }
 
 /// The bank entry holding bullet `id`.
@@ -206,5 +206,25 @@ mod tests {
         assert_eq!(b.after, short);
         assert_eq!(b.hits, ["GitHub Actions"]);
         assert_eq!(b.variant, None);
+    }
+
+    #[test]
+    fn the_line_a_rewrite_must_fit_is_the_masters_not_suggests_copy() {
+        let (bank, resume, req) = fixtures();
+        let b = resume.sections.iter().flat_map(|s| &s.entries).flat_map(|e| &e.bullets);
+        let a2 = b.clone().find(|b| b.id == "acme.2").unwrap().text.clone();
+        let long = format!("{a2}, and wired every Docker build into the same pipeline so releases shipped weekly");
+        // Suggest echoed the one-line bullet as two lines' worth; the master's line still takes one.
+        let echo = format!("{a2}, {a2}");
+        let s: Suggestions = serde_json::from_value(json!({
+            "verdict": "tailor", "headline": "", "evidence": [], "keywords": [], "skills": [], "bank": [],
+            "order": [], "summary": null, "gaps": [],
+            "bullets": [rewrite("acme.2", &echo, &long, &["Docker"])],
+        }))
+        .unwrap();
+        let mut renderer = Renderer::new(&Template::classic_serif(), FontOptions::default());
+        let jobs = long_rewrites(&s, &resume, &bank, &req, &mut renderer).unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].lines, 1);
     }
 }

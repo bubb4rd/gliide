@@ -21,7 +21,7 @@ use resume_llm::rewrite::{self, RewriteInput};
 use resume_llm::suggest::{self, SuggestInput};
 use resume_pipeline::shorten::{self, Shorten};
 use resume_pipeline::{suggest_key, today};
-use resume_store::{DraftLog, NewAnalysis, PostingRow};
+use resume_store::{AnalysisRow, DraftLog, NewAnalysis, PostingRow, Rev};
 use resume_tailor::{Tailored, tailor};
 
 use crate::dto::{
@@ -152,7 +152,7 @@ async fn make_review(
         };
         if let Some(a) = cached {
             lock(&app.store).touch_analysis(&a.id)?;
-            return Ok(a);
+            return refit(app, job, &route, a, &master_rev, &resume, &bank, &master, &req).await;
         }
         let llm = app.llm(&route, Feature::Suggestions).await?;
         let (p, rq, rs, bk, cs, m) = (
@@ -175,36 +175,43 @@ async fn make_review(
         })
         .await?;
         app.note_served(model, &out);
-        let s = fit_rewrites(app, job, &route, s, &resume, &bank, &master, &req).await?;
-        let store = lock(&app.store);
-        // Your draft carries over from this input's last answer, else from the review of this master you last opened,
-        // whichever mode it drew on: a changed setting or bank keeps your decisions and edits.
-        let previous = match store.analysis(&key, model)? {
-            Some(a) => Some(a),
-            None => store
-                .analyses(job)?
-                .into_iter()
-                .find(|a| a.master_id == master.id),
-        };
-        let a = store.put_analysis(&NewAnalysis {
-            posting_id: job,
-            bank_rev: &bank_rev,
-            master_id: &master.id,
-            master_rev: &master_rev,
-            mode,
-            key: &key,
-            model,
-            agent: &crate::usage::name(&crate::dto::Agent::from(route.agent)),
-            suggestions: &s,
-            latency_ms: out.latency().as_millis() as u64,
-        })?;
-        if let Some(prev) = previous {
-            let log = store.draft(&prev.id)?;
-            for e in &log.events[..log.cursor.min(log.events.len())] {
-                store.push_draft_event(&a.id, e)?;
+        let (s, stopped) = fit_rewrites(app, job, &route, s, &resume, &bank, &master, &req).await?;
+        let a = {
+            let store = lock(&app.store);
+            // Your draft carries over from this input's last answer, else from the review of this master you last
+            // opened, whichever mode it drew on: a changed setting or bank keeps your decisions and edits.
+            let previous = match store.analysis(&key, model)? {
+                Some(a) => Some(a),
+                None => store
+                    .analyses(job)?
+                    .into_iter()
+                    .find(|a| a.master_id == master.id),
+            };
+            let a = store.put_analysis(&NewAnalysis {
+                posting_id: job,
+                bank_rev: &bank_rev,
+                master_id: &master.id,
+                master_rev: &master_rev,
+                mode,
+                key: &key,
+                model,
+                agent: &crate::usage::name(&crate::dto::Agent::from(route.agent)),
+                suggestions: &s,
+                latency_ms: out.latency().as_millis() as u64,
+            })?;
+            if let Some(prev) = previous {
+                let log = store.draft(&prev.id)?;
+                for e in &log.events[..log.cursor.min(log.events.len())] {
+                    store.push_draft_event(&a.id, e)?;
+                }
             }
+            a
+        };
+        // Stopped while shortening: Suggest's answer is kept (paid for), the review isn't opened.
+        match stopped {
+            Some(e) => Err(e),
+            None => Ok(a),
         }
-        Ok(a)
     })
     .await?;
     blocking(app, move |app| {
@@ -234,9 +241,46 @@ async fn make_review(
     .await
 }
 
+/// `a` fitted to `master`'s template: Suggest's answer is keyed by the resume, not how its template sets it, so one
+/// measured on another template (the master switched since) has its long rewrites asked again ([`fit_rewrites`]). A
+/// Stop keeps the ones shortened so far and leaves the rest to fit on the next open.
+#[allow(clippy::too_many_arguments)]
+async fn refit(
+    app: &Arc<App>,
+    job: &str,
+    route: &resume_llm::Route,
+    a: AnalysisRow,
+    master_rev: &Rev,
+    resume: &Resume,
+    bank: &Bank,
+    master: &Master,
+    req: &Requirements,
+) -> Result<AnalysisRow> {
+    if a.master_rev == *master_rev || a.master_id != master.id {
+        return Ok(a);
+    }
+    let measured_on = lock(&app.store).master_at(&a.master_id, &a.master_rev)?;
+    if measured_on.is_none_or(|m| m.template == master.template) {
+        return Ok(a);
+    }
+    let (s, stopped) =
+        fit_rewrites(app, job, route, a.suggestions.clone(), resume, bank, master, req).await?;
+    if let Some(e) = stopped {
+        lock(&app.store).refit_analysis(&a.id, &a.master_rev, &s)?;
+        return Err(e);
+    }
+    lock(&app.store).refit_analysis(&a.id, master_rev, &s)?;
+    Ok(AnalysisRow {
+        master_rev: master_rev.clone(),
+        suggestions: s,
+        ..a
+    })
+}
+
 /// Suggest's rewrites that wrap to more lines than the bullets they replace, each asked once more to fit
 /// ([`shorten`]) on Suggest's route, one after another (most reviews have none). A line whose call fails keeps the
-/// rewrite Suggest wrote, which the fit check then leaves off the page; only a Stop ends the review.
+/// rewrite Suggest wrote, which the fit check then leaves off the page. A Stop ends the asking: the rewrites shortened
+/// so far come back with the cancel, for the caller to keep before it stops.
 #[allow(clippy::too_many_arguments)]
 async fn fit_rewrites(
     app: &Arc<App>,
@@ -247,7 +291,7 @@ async fn fit_rewrites(
     bank: &Bank,
     master: &Master,
     req: &Requirements,
-) -> Result<Suggestions> {
+) -> Result<(Suggestions, Option<AppError>)> {
     let long = {
         let (sg, r, b, m, q) = (
             s.clone(),
@@ -276,14 +320,14 @@ async fn fit_rewrites(
                 })
                 .await?;
             }
-            Err(e) if e.kind == ErrorKind::Cancelled => return Err(e),
+            Err(e) if e.kind == ErrorKind::Cancelled => return Ok((s, Some(e))),
             Err(e) => eprintln!(
                 "gliide: a long rewrite stays as Suggest wrote it: {}",
                 e.message
             ),
         }
     }
-    Ok(s)
+    Ok((s, None))
 }
 
 /// One Rewrite call: `long`'s rewrite, shorter, on `route`; usage counts it with Suggest's.
