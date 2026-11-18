@@ -555,6 +555,8 @@ pub struct UpdateStatus {
     pub available: Option<String>,
     /// Its release notes.
     pub notes: Option<String>,
+    /// When it was published (RFC 3339), as its `latest.json` says.
+    pub released: Option<String>,
     pub state: UpdateState,
     /// Share of the newer release downloaded (0–1), while installing and its size is known.
     pub progress: Option<f64>,

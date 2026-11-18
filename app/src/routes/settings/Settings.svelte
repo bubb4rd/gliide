@@ -78,6 +78,7 @@
     Menu,
     Nav,
     NavItem,
+    ReleaseNotes,
     Segmented,
     Sheet,
     Switch,
@@ -1441,7 +1442,7 @@
               </dd>
               <dd class="detail">
                 <p class="hint num" aria-live="polite">{updateLine}</p>
-                {#if update?.available && update.notes}<p class="notes">{update.notes}</p>{/if}
+                {#if update?.available && update.notes}<div class="notes"><ReleaseNotes notes={update.notes} /></div>{/if}
                 {#if update?.error}<p class="problem">{update.error}</p>{/if}
               </dd>
             </div>
@@ -1854,14 +1855,9 @@
   .toggle {
     display: flex;
   }
-  /* A release's notes, as written, under where updates stand. */
+  /* A release's notes, as a list of its changes, under where updates stand. */
   .notes {
-    margin: var(--space-1-5) 0 0;
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--ink-2);
-    white-space: pre-line;
-    text-wrap: pretty;
+    margin: var(--space-3) 0 0;
   }
   /* Notifications: Interviews (a 28px icon box in accent, its name over a meta line, Turn on or its checkbox at the
      end), its three kinds indented to its name, then a foot saying what macOS allows; hairlines between, as the

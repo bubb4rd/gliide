@@ -71,12 +71,23 @@ pub async fn check(app: &AppHandle) -> UpdateStatus {
     let checked_at = Some(now.to_rfc3339_opts(SecondsFormat::Secs, true));
     match found {
         Ok(update) => {
-            let (available, notes) = update
-                .as_ref()
-                .map_or((None, None), |u| (Some(u.version.clone()), u.body.clone().filter(|b| !b.trim().is_empty())));
+            let found = update.as_ref();
+            let available = found.map(|u| u.version.clone());
+            let notes = found.and_then(|u| u.body.clone()).filter(|b| !b.trim().is_empty());
+            let released = found
+                .and_then(|u| u.date)
+                .and_then(|d| DateTime::from_timestamp(d.unix_timestamp(), 0))
+                .map(|d| d.to_rfc3339_opts(SecondsFormat::Secs, true));
             *lock(&app.state::<Updates>().found) = update;
             put(app, |s| {
-                *s = UpdateStatus { current: s.current.clone(), available, notes, checked_at, ..UpdateStatus::default() };
+                *s = UpdateStatus {
+                    current: s.current.clone(),
+                    available,
+                    notes,
+                    released,
+                    checked_at,
+                    ..UpdateStatus::default()
+                };
             })
         }
         Err(e) => put(app, |s| {

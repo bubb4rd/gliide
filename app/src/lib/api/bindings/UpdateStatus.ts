@@ -16,7 +16,11 @@ available: string | null,
 /**
  * Its release notes.
  */
-notes: string | null, state: UpdateState, 
+notes: string | null, 
+/**
+ * When it was published (RFC 3339), as its `latest.json` says.
+ */
+released: string | null, state: UpdateState, 
 /**
  * Share of the newer release downloaded (0–1), while installing and its size is known.
  */

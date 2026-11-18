@@ -66,11 +66,13 @@
     PartRow,
     Popover,
     PlaceMap,
+    ReleaseNotes,
     ScoreBar,
     ScoreHeader,
     ScorePill,
     Segmented,
     Sheet,
+    Showcase,
     Sources,
     segmentStep,
     StackedBar,
@@ -126,6 +128,18 @@
   let replay = $state(0);
   /** The backdrop sample has scrolled under its toolbar. */
   let backdropScrolled = $state(false);
+  /** Release notes as published: one paragraph, a change a sentence, some with a lead before a colon. */
+  const RELEASE_PROSE =
+    "Choose who does what: reading postings, tailoring, cover letters and interview coaching can each run on their own agent and model (Settings → Agents), with Fastest and Best edits presets. Settings opens over any screen. Postings now list the industry they ask for, and rewrites that run a line long are shortened to fit.";
+  /** Release notes as lines, longer than a showcase's room, so its card scrolls. */
+  const RELEASE_LINES = [
+    "- Interview prep: your practice is kept between launches.",
+    "- The feed checks Wellfound and Otta as well as LinkedIn.",
+    "- Cover letters keep your edits when you write them again.",
+    "- Applications sorts by the next round, soonest first.",
+    "- Settings → Usage shows a day’s calls in its tooltip.",
+    "- Export names a cover letter after the posting.",
+  ].join("\n");
 
   // ── Setup steps: the bar in every state, and a sample that turns as the setup's steps do ──
   const SETUP = ["Welcome", "Experience", "What it says", "Agents", "Appearance", "Ready"];
@@ -1904,6 +1918,46 @@
       </div>
     </section>
 
+    <!-- ═══════════ Showcase ═══════════ -->
+    <section class="section">
+      <h2 class="title">Showcase</h2>
+      <p class="meta lede">
+        A picture as a panel beside a form (Startup): as painted, no veil or fade, its card at the foot letting it
+        through faintly. With a card; with notes longer than the room (the card scrolls); the picture alone. Forced
+        colors: the card alone.
+      </p>
+      <div class="showcases">
+        <div class="showcase-frame">
+          <Showcase name="meadow">
+            <ReleaseNotes notes="Add or change a posting’s link from the job header or Applications." version="0.9.0" date="2026-11-17T16:49:53Z" />
+          </Showcase>
+        </div>
+        <div class="showcase-frame">
+          <Showcase name="meadow">
+            <ReleaseNotes notes={RELEASE_LINES} version="0.9.0" date="2026-11-17T16:49:53Z" />
+          </Showcase>
+        </div>
+        <div class="showcase-frame"><Showcase name="meadow" /></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Release notes ═══════════ -->
+    <section class="section">
+      <h2 class="title">Release notes</h2>
+      <p class="meta lede">
+        A release’s notes as a changelog: the version and the day over its changes. One paragraph becomes a change a
+        sentence; lines stay lines; a short lead before a colon is the change’s title. Without a version, the list
+        alone (Settings → About).
+      </p>
+      <Card pad>
+        <div class="release-samples">
+          <ReleaseNotes notes={RELEASE_PROSE} version="0.8.0" date="2026-11-17T16:49:53Z" />
+          <ReleaseNotes notes={RELEASE_LINES} version="0.9.0" />
+          <ReleaseNotes notes={RELEASE_PROSE} />
+        </div>
+      </Card>
+    </section>
+
     <!-- ═══════════ Tooltips ═══════════ -->
     <section class="section">
       <h2 class="title">Tooltips</h2>
@@ -2547,6 +2601,20 @@
   }
   .backdrop-content .headline {
     margin: 0;
+  }
+  .showcases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-4);
+  }
+  .showcase-frame {
+    height: 360px;
+  }
+  .release-samples {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+    gap: var(--space-8);
   }
   .chrome {
     display: grid;
