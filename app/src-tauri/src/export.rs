@@ -93,7 +93,7 @@ pub fn export_pdf(app: &App, review: &str) -> Result<Exported> {
         ..base
     };
     store.put_application(&a)?;
-    store.put_sent(&a.id, &sent)?;
+    store.put_sent(&a.id, &sent, &r.master.template)?;
     store.put_change_outcomes(&a.id, &outcomes(r, last))?;
     drop(store);
     recorded(app, r, a, &path, on_file)

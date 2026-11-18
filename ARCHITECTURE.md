@@ -408,7 +408,8 @@ there; **Not on my resume** confirms it for that ask alone. The grounding valida
 confirmed skills as sources for that call's names and numbers. `cargo run -p resume-llm --example instruct` runs a
 list of asks against a bank and master through an agent (`--agent`, `claude -p` by default) to see what the prompt does.
 
-**Prep and Practice** read the resume you sent (`applications.sent`), not the master: what the interviewer holds. Their
+**Prep and Practice** read the resume you sent (`applications.sent`, rendered again in the template it was exported
+in, `applications.sent_template` since store schema 17), not the master: what the interviewer holds. Their
 honesty rules add to Suggest's. A gap answer never claims the skill: it says what you haven't done, then the nearest
 real thing from the page or a fact. Practice never scores; a mismatch is a number, name, title or date your answer
 states differently from a line or a fact ("You said 20 regressions; the resume you sent says 14"), and a new claim

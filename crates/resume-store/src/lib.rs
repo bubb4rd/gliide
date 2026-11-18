@@ -47,6 +47,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("usage.sql"),
     include_str!("latency.sql"),
     include_str!("bench.sql"),
+    include_str!("sent_template.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -496,6 +497,13 @@ pub struct DigAnswers {
     pub at: String,
 }
 
+/// The resume an application sent: the tailored `Resume` as JSON, as exported, and the template it was exported in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sent {
+    pub resume: String,
+    pub template: String,
+}
+
 /// An analysis's cover letter: its parts as last written or edited.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cover {
@@ -780,6 +788,19 @@ impl Store {
             .transpose()
     }
 
+    /// Master `id` at revision `rev`, current or not.
+    pub fn master_at(&self, id: &str, rev: &Rev) -> Result<Option<Master>, StoreError> {
+        let json: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT json FROM master_revs WHERE master_id = ?1 AND hash = ?2",
+                params![id, rev.0],
+                |r| r.get(0),
+            )
+            .optional()?;
+        json.map(|j| from_json(&j)).transpose()
+    }
+
     /// When master `id`'s current revision became current (RFC 3339).
     pub fn master_updated_at(&self, id: &str) -> Result<Option<String>, StoreError> {
         Ok(self
@@ -1013,6 +1034,21 @@ impl Store {
             id,
             "UPDATE analyses SET projected = ?2, updated_at = ?3 WHERE id = ?1",
             params![id, projected, now()],
+        )
+    }
+
+    /// Replaces the analysis's suggestions with `suggestions` as fitted to its master at `master_rev` (the master's
+    /// template changed since they were measured).
+    pub fn refit_analysis(
+        &self,
+        id: &str,
+        master_rev: &Rev,
+        suggestions: &Suggestions,
+    ) -> Result<(), StoreError> {
+        self.update_analysis(
+            id,
+            "UPDATE analyses SET master_rev = ?2, suggestions = ?3, updated_at = ?4 WHERE id = ?1",
+            params![id, master_rev.0, serde_json::to_string(suggestions)?, now()],
         )
     }
 
@@ -1391,11 +1427,17 @@ impl Store {
             .collect()
     }
 
-    /// Stores the tailored resume JSON as exported for the application, replacing any earlier one.
-    pub fn put_sent(&self, application_id: &str, resume_json: &str) -> Result<(), StoreError> {
+    /// Stores the tailored resume JSON as exported for the application and the template it was exported in, replacing
+    /// any earlier one.
+    pub fn put_sent(
+        &self,
+        application_id: &str,
+        resume_json: &str,
+        template: &str,
+    ) -> Result<(), StoreError> {
         let changed = self.conn.execute(
-            "UPDATE applications SET sent = ?2 WHERE id = ?1",
-            params![application_id, resume_json],
+            "UPDATE applications SET sent = ?2, sent_template = ?3 WHERE id = ?1",
+            params![application_id, resume_json, template],
         )?;
         if changed == 0 {
             return Err(not_found("application", application_id));
@@ -1403,18 +1445,24 @@ impl Store {
         Ok(())
     }
 
-    /// The tailored resume JSON as last exported for the application; `None` when it was never exported since
-    /// schema version 8 (or was imported from `applications.csv`).
-    pub fn sent(&self, application_id: &str) -> Result<Option<String>, StoreError> {
-        Ok(self
+    /// The tailored resume as last exported for the application; `None` when it was never exported since schema
+    /// version 8 (or was imported from `applications.csv`).
+    pub fn sent(&self, application_id: &str) -> Result<Option<Sent>, StoreError> {
+        let row: Option<(Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT sent FROM applications WHERE id = ?1",
+                "SELECT sent, sent_template FROM applications WHERE id = ?1",
                 [application_id],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
-            .optional()?
-            .flatten())
+            .optional()?;
+        // Version 17 named the template of every resume sent before it, and `put_sent` always does.
+        Ok(row.and_then(|(resume, template)| {
+            Some(Sent {
+                resume: resume?,
+                template: template?,
+            })
+        }))
     }
 
     // Rounds.

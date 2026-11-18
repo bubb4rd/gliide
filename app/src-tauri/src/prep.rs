@@ -57,7 +57,7 @@ fn context(app: &App, round: &str) -> Result<Context> {
         None => None,
     };
     let (_, bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
-    let json = store.sent(&a.id)?;
+    let json = store.sent(&a.id)?.map(|s| s.resume);
     let stories = store.stories()?;
     let debriefs = crate::debrief::earlier(&store, &r)?;
     drop(store);

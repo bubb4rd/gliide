@@ -14,7 +14,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use resume_core::{Bank, Master, PageFacts, Resume, resolve};
 use resume_llm::{Agent, LlmError, Route, Structured};
-use resume_render::{FontOptions, Renderer};
+use resume_pipeline::PipelineError;
+use resume_render::{FontOptions, Renderer, Template};
 use resume_store::{Rev, Store, StoreError};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::AbortHandle;
@@ -190,27 +191,30 @@ impl App {
         master: &Master,
         f: impl FnOnce(&mut Renderer) -> Result<T>,
     ) -> Result<T> {
+        self.with_template(&master.template, f)
+    }
+
+    /// Runs `f` with the warm renderer of built-in template `name`, making it on first use.
+    pub fn with_template<T>(
+        &self,
+        name: &str,
+        f: impl FnOnce(&mut Renderer) -> Result<T>,
+    ) -> Result<T> {
         let mut pool = lock(&self.renderers);
-        let renderer = match pool.entry(master.template.clone()) {
+        let renderer = match pool.entry(name.to_owned()) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-            std::collections::hash_map::Entry::Vacant(e) => e.insert(Renderer::new(
-                &resume_pipeline::template(master)?,
-                FontOptions::default(),
-            )),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let template = Template::built_in(name)
+                    .ok_or_else(|| PipelineError::UnknownTemplate(name.to_owned()))?;
+                e.insert(Renderer::new(&template, FontOptions::default()))
+            }
         };
         f(renderer)
     }
 
     /// Loads the default template's renderer (fonts, template parse) so the first review doesn't wait for it.
     pub fn warm(&self) {
-        let master = Master {
-            id: String::new(),
-            title: String::new(),
-            template: DEFAULT_TEMPLATE.to_owned(),
-            page_limit: 1,
-            sections: vec![],
-        };
-        let _ = self.with_renderer(&master, |_| Ok(()));
+        let _ = self.with_template(DEFAULT_TEMPLATE, |_| Ok(()));
     }
 
     /// `master` resolved against `bank` and rendered once per revision pair: the score's inputs for its page now (page

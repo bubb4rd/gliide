@@ -518,7 +518,7 @@ fn imported_applications_log_their_status() {
 fn sent_resumes_round_trip() {
     let store = Store::open_in_memory().unwrap();
     assert!(matches!(
-        store.put_sent("a", "{}"),
+        store.put_sent("a", "{}", "classic-serif"),
         Err(StoreError::NotFound { .. })
     ));
     assert_eq!(store.sent("a").unwrap(), None);
@@ -526,17 +526,22 @@ fn sent_resumes_round_trip() {
         .put_application(&app("a", "2026-10-01", "Acme"))
         .unwrap();
     assert_eq!(store.sent("a").unwrap(), None);
-    store.put_sent("a", r#"{"name":"Jane"}"#).unwrap();
-    store.put_sent("a", r#"{"name":"Jane Doe"}"#).unwrap();
+    store
+        .put_sent("a", r#"{"name":"Jane"}"#, "classic-serif")
+        .unwrap();
+    store
+        .put_sent("a", r#"{"name":"Jane Doe"}"#, "modern-sans")
+        .unwrap();
+    let sent = store.sent("a").unwrap().unwrap();
     assert_eq!(
-        store.sent("a").unwrap().as_deref(),
-        Some(r#"{"name":"Jane Doe"}"#)
+        (sent.resume.as_str(), sent.template.as_str()),
+        (r#"{"name":"Jane Doe"}"#, "modern-sans")
     );
     // Saving the application again keeps it.
     store
         .put_application(&app("a", "2026-10-01", "Acme"))
         .unwrap();
-    assert!(store.sent("a").unwrap().is_some());
+    assert_eq!(store.sent("a").unwrap(), Some(sent));
 }
 
 /// Synthetic legacy applications.csv rows, oldest first: quoted commas, an escaped quote, empty scores and files.
@@ -681,7 +686,8 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
@@ -735,7 +741,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -844,7 +850,8 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent;
@@ -876,7 +883,8 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
          ALTER TABLE applications DROP COLUMN sent; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
@@ -1093,7 +1101,8 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; ALTER TABLE postings DROP COLUMN url;
          DROP TABLE usage; PRAGMA user_version = 8;",
@@ -1111,7 +1120,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1212,7 +1221,8 @@ fn migrating_to_practice_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
          PRAGMA user_version = 9;",
@@ -1230,7 +1240,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1361,7 +1371,8 @@ fn migrating_to_stories_keeps_the_practice() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice;
          CREATE TABLE practice (
@@ -1405,7 +1416,7 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1618,7 +1629,8 @@ fn migrating_to_debriefs_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
          PRAGMA user_version = 11;",
     )
@@ -1637,7 +1649,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1800,7 +1812,8 @@ fn migrating_to_latency_keeps_the_usage() {
     drop(Store::open(&path).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          ALTER TABLE usage DROP COLUMN latency_ms;
          INSERT INTO usage (at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens,
              cache_read_tokens, cost_usd)
@@ -1825,7 +1838,7 @@ fn migrating_to_latency_keeps_the_usage() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1903,7 +1916,8 @@ fn migrating_to_bench_keeps_the_analyses() {
     };
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
+        "ALTER TABLE applications DROP COLUMN sent_template;
+         DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          PRAGMA user_version = 15;",
     )
     .unwrap();
@@ -1942,8 +1956,90 @@ fn migrating_to_bench_keeps_the_analyses() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    assert_eq!(version, 17);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn migrating_to_sent_template_names_classic_serif_for_resumes_sent_before() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v16-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    {
+        let store = Store::open(&path).unwrap();
+        store
+            .put_application(&app("a", "2026-10-01", "Acme"))
+            .unwrap();
+        store
+            .put_application(&app("b", "2026-10-02", "Widgets"))
+            .unwrap();
+        store
+            .put_sent("a", r#"{"name":"Jane"}"#, "classic-serif")
+            .unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "ALTER TABLE applications DROP COLUMN sent_template; PRAGMA user_version = 16;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    let sent = store.sent("a").unwrap().unwrap();
+    assert_eq!(
+        (sent.resume.as_str(), sent.template.as_str()),
+        (r#"{"name":"Jane"}"#, "classic-serif")
+    );
+    assert_eq!(store.sent("b").unwrap(), None);
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 17);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_refit_analysis_moves_to_the_masters_new_revision() {
+    let store = Store::open_in_memory().unwrap();
+    let (bank, master) = jane();
+    let bank_rev = store.put_bank(&bank).unwrap();
+    let old_rev = store.put_master(&master).unwrap();
+    let posting_id = store.put_posting(&posting("Backend engineer.")).unwrap();
+    let a = store
+        .put_analysis(&NewAnalysis {
+            posting_id: &posting_id,
+            bank_rev: &bank_rev,
+            master_id: &master.id,
+            master_rev: &old_rev,
+            mode: Mode::MasterOnly,
+            key: "k",
+            model: "sonnet",
+            agent: "claude",
+            suggestions: &suggestions(),
+            latency_ms: 15_000,
+        })
+        .unwrap();
+    let switched = Master {
+        template: "modern-sans".into(),
+        ..master.clone()
+    };
+    let new_rev = store.put_master(&switched).unwrap();
+    // The revision it was measured on is still there to read its template from.
+    assert_eq!(
+        store.master_at(&master.id, &old_rev).unwrap().unwrap().template,
+        master.template
+    );
+    assert_eq!(store.master_at(&master.id, &new_rev).unwrap(), Some(switched));
+
+    let mut fitted = suggestions();
+    fitted.headline = "Fitted".into();
+    store.refit_analysis(&a.id, &new_rev, &fitted).unwrap();
+    let got = store.analysis("k", "sonnet").unwrap().unwrap();
+    assert_eq!(
+        (got.id.as_str(), &got.master_rev, &got.suggestions),
+        (a.id.as_str(), &new_rev, &fitted)
+    );
 }
 
 fn outcome(key: &str, route: (&str, &str), origin: Origin, fate: ChangeFate) -> ChangeOutcome {

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Local, SecondsFormat};
 use resume_core::resume::SectionKind;
-use resume_core::{Master, Resume};
+use resume_core::Resume;
 use resume_llm::invite::{self, Invite, InviteInput};
 use resume_llm::prep;
 use resume_store::{self as store, Application, RoundState as StoreState};
@@ -19,7 +19,7 @@ use crate::dto::{
 use crate::error::{AppError, Result};
 use crate::export;
 use crate::ics;
-use crate::state::{App, DEFAULT_TEMPLATE, blocking, lock, model_call};
+use crate::state::{App, blocking, lock, model_call};
 
 /// The longest a round may be, in minutes (a full onsite).
 const MAX_MINUTES: u32 = 600;
@@ -176,23 +176,15 @@ pub fn read_invite_file(path: &str) -> Result<RoundDraft> {
         .ok_or_else(|| AppError::other("This file holds no calendar event"))
 }
 
-/// The resume the application sent: the tagged resume as exported, rendered again with its master's template (the
-/// default when the master is gone), with its lines; else the exported PDF itself. `marked` lines (`SentLine.id`s)
-/// are highlighted as the review highlights a change, and only they.
+/// The resume the application sent: the tagged resume as exported, rendered again with the template it was exported
+/// in, with its lines; else the exported PDF itself. `marked` lines (`SentLine.id`s) are highlighted as the review
+/// highlights a change, and only they.
 pub fn sent_resume(app: &App, application: &str, marked: &[String]) -> Result<SentView> {
     let store = lock(&app.store);
     let a = application_of(&store, application)?;
-    if let Some(json) = store.sent(&a.id)? {
-        let master = match a.analysis_id.as_deref() {
-            Some(id) => match store.analysis_by_id(id)? {
-                Some(analysis) => store.master(&analysis.master_id)?.map(|(_, m)| m),
-                None => None,
-            },
-            None => None,
-        };
+    if let Some(sent) = store.sent(&a.id)? {
         drop(store);
-        let master = master.unwrap_or_else(default_master);
-        let mut resume: Resume = serde_json::from_str(&json)?;
+        let mut resume: Resume = serde_json::from_str(&sent.resume)?;
         let lines = prep::sent_lines(&resume)
             .into_iter()
             .map(|l| SentLine {
@@ -202,11 +194,11 @@ pub fn sent_resume(app: &App, application: &str, marked: &[String]) -> Result<Se
             })
             .collect();
         let pages = if marked.is_empty() {
-            app.with_renderer(&master, |r| Ok(r.render(&json, false)?.svgs()))?
+            app.with_template(&sent.template, |r| Ok(r.render(&sent.resume, false)?.svgs()))?
         } else {
             mark(&mut resume, marked);
             let json = serde_json::to_string(&resume)?;
-            app.with_renderer(&master, |r| Ok(r.render(&json, true)?.svgs()))?
+            app.with_template(&sent.template, |r| Ok(r.render(&json, true)?.svgs()))?
         };
         return Ok(SentView {
             pages,
@@ -270,16 +262,6 @@ fn mark(resume: &mut Resume, ids: &[String]) {
                 };
             }
         }
-    }
-}
-
-fn default_master() -> Master {
-    Master {
-        id: String::new(),
-        title: String::new(),
-        template: DEFAULT_TEMPLATE.to_owned(),
-        page_limit: 1,
-        sections: vec![],
     }
 }
 

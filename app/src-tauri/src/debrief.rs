@@ -131,7 +131,7 @@ pub async fn read_debrief(app: &Arc<App>, round: &str) -> Result<DebriefView> {
             None => None,
         };
         let (_, bank) = store.bank()?.ok_or_else(AppError::no_bank)?;
-        let json = store.sent(&a.id)?;
+        let json = store.sent(&a.id)?.map(|s| s.resume);
         drop(store);
         let (sent, _) = sent_of(&a, json, &bank)?;
         Ok((r, a, row, d, requirements, bank, sent))
