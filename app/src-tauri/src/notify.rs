@@ -298,7 +298,6 @@ pub use mac::{bundled, permission, request, setup};
 #[cfg(target_os = "macos")]
 mod mac {
     use std::ptr::NonNull;
-    use std::sync::Mutex;
     use std::time::Duration;
 
     use block2::{DynBlock, RcBlock};
@@ -317,6 +316,7 @@ mod mac {
 
     use super::Banner;
     use crate::dto::NotificationPermission;
+    use crate::state::once;
 
     /// How long macOS may take to say what it allows (asking waits for your answer instead).
     const READ_TIMEOUT: Duration = Duration::from_secs(5);
@@ -332,16 +332,6 @@ mod mac {
     /// in a bare binary.
     fn center() -> Option<Retained<UNUserNotificationCenter>> {
         bundled().then(UNUserNotificationCenter::currentNotificationCenter)
-    }
-
-    /// A one-shot sender a completion block can own: the block is `Fn`, so the sender is taken once.
-    fn once<T>(tx: oneshot::Sender<T>) -> impl Fn(T) {
-        let tx = Mutex::new(Some(tx));
-        move |v| {
-            if let Some(tx) = tx.lock().ok().and_then(|mut t| t.take()) {
-                let _ = tx.send(v);
-            }
-        }
     }
 
     fn read() -> Option<oneshot::Receiver<UNAuthorizationStatus>> {

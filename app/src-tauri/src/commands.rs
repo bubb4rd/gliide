@@ -517,6 +517,12 @@ pub async fn speech_status() -> Res<crate::dto::SpeechStatus> {
     Ok(crate::speech::status())
 }
 
+/// Words Speak may hear in a round's answers: the company and the posting's terms.
+#[tauri::command]
+pub async fn practice_hints(app: St<'_>, round: String) -> Res<Vec<String>> {
+    blocking(&app, move |app| prep::speech_hints(app, &round)).await
+}
+
 /// Opens the microphone and hears your answer on this Mac, asking macOS first if it never has; what's heard comes as
 /// `speech` events. `hints`: words it may hear (the company, the posting's terms).
 #[tauri::command]

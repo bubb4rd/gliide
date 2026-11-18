@@ -39,9 +39,9 @@ network requests are these (links you open, such as a posting or Maps, go to you
 
 | Request | When | What is sent |
 |---|---|---|
-| Your agent CLI (`claude -p`, `codex exec` or `agy -p`) | Extract, Suggest, Rewrite, Instruct, import, cover letters | The prompt (posting text, the resume being tailored, your notes) goes to the model through the CLI you installed, under your own account with its maker |
+| Your agent CLI (`claude -p`, `codex exec` or `agy -p`) | Extract, Suggest, Rewrite, Instruct, import, cover letters, interview prep and practice; feed checks (up to the daily cap, also while gliide is closed if you turn that on) | The prompt (posting text, the resume being tailored, your notes) goes to the model through the CLI you installed, under your own account with its maker |
 | A posting's page or its board's API (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee…) | You paste a link; a feed job is read | The link |
-| [freehire](https://freehire.me) public API and `logo.freehire.me` | Feed pulls and searches (when the feed is on); company logos | Your feed filters and search words; company names |
+| [freehire](https://freehire.me) public API and `logo.freehire.me` | Feed pulls and searches (when the feed is on, and every 3 hours while gliide is closed if you turn on Settings → Feed → Pull while gliide is closed); company logos | Your feed filters and search words; company names |
 | Company websites | A feed company's logo freehire doesn't have | A request for the site's icon |
 | Watchlist boards | Feed pulls, for the companies you add | The board's public job list request |
 | LinkedIn's guest job search | **Only if you turn it on** (Settings → Feed; off by default). LinkedIn's User Agreement doesn't allow automated access; the choice and its consequences are yours | Master titles, countries, seniority, your search words |
@@ -49,8 +49,10 @@ network requests are these (links you open, such as a posting or Maps, go to you
 | OpenStreetMap [Nominatim](https://nominatim.org) | The review's map, once per place | The job's place name |
 | [OpenFreeMap](https://openfreemap.org) tiles | The review's map | Tile requests for the map area |
 | [GitHub](https://github.com/bubb4rd/gliide/releases) releases | At launch and once a day, unless Settings → About → Check for updates is off; Check now; Restart to update | A request for `latest.json` (and, when you update, the release's bundle). Nothing about you or your data |
+| GitHub's API (`api.github.com`) | The first launch on a new version, until its notes have shown once | A request for that version's release (its notes and picture). Nothing about you or your data |
 
-No telemetry, analytics or crash reporting: the app sends nothing about you or your usage to the project. The webview
+No telemetry, analytics or crash reporting: the app sends nothing about you or your usage to the project. Spoken
+practice is heard by macOS's speech recognition on this Mac only: the audio never leaves it. The webview
 runs under a Content Security Policy (`app.security.csp` in `app/src-tauri/tauri.conf.json`): scripts only from the
 app itself, and the only remote host it may reach is the map tiles'; everything else goes through the Rust side.
 

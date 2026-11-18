@@ -26,6 +26,7 @@
     keepClaim,
     nudge,
     practice,
+    practiceHints,
     saveStory,
     type NewClaim,
     type Nudge,
@@ -99,9 +100,21 @@
   const shown = $derived(nudges && nudges.question === asked?.id ? nudges.items : null);
   /** Speak: the answer said out loud into the box. */
   const speech = new Speech({ get: () => answer, set: (text) => (answer = text) });
-  /** Words macOS may hear that it wouldn't guess: the company and the posting's terms. */
-  const hints = $derived([company, ...prep.gaps.map((g) => g.term)]);
+  /** The posting's terms for the round, once read. */
+  let terms = $state<string[] | null>(null);
+  /** Words macOS may hear that it wouldn't guess: the company and the posting's terms (until they're read, the
+   *  company and the prep's gaps). */
+  const hints = $derived(terms ?? [company, ...prep.gaps.map((g) => g.term)]);
   const speak = () => void speech.toggle(hints);
+  $effect(() => {
+    const id = round.id;
+    terms = null;
+    void practiceHints(id)
+      .then((h) => {
+        if (round.id === id) terms = h;
+      })
+      .catch(() => undefined);
+  });
   onMount(() => {
     void speech.refresh();
     return () => speech.cancel();
@@ -116,7 +129,9 @@
   });
 
   async function send() {
-    if (speech.listening) await speech.stop();
+    // Opening: nothing heard yet to send. Listening or closing: send once the last words land.
+    if (speech.opening) return;
+    await speech.stop();
     const text = answer.trim();
     if (!text || !asked || busy) return;
     reading = performance.now();
@@ -219,6 +234,7 @@
       void send();
     } else if (e.key === "Escape") {
       e.stopPropagation();
+      if (speech.listening) return void speech.stop();
       (e.currentTarget as HTMLElement).blur();
     }
   }
@@ -227,7 +243,12 @@
     target instanceof HTMLElement && target.closest("button, a, input, textarea, select") !== null;
 
   const KEYS: KeyCommand[] = $derived([
-    { keys: ["⏎"], label: "Send your answer", run: () => void send(), disabled: !answer.trim() || busy },
+    {
+      keys: ["⏎"],
+      label: "Send your answer",
+      run: () => void send(),
+      disabled: !answer.trim() || busy || speech.opening,
+    },
     {
       keys: ["⌘D"],
       label: speech.listening ? "Stop speaking" : "Speak your answer",
@@ -387,7 +408,7 @@
           icon={ArrowUp}
           aria-label="Send your answer"
           {@attach tip("Send your answer (⏎)")}
-          disabled={!answer.trim() || busy || speech.busy}
+          disabled={!answer.trim() || busy || speech.opening}
           onclick={() => void send()}
         />
       </div>

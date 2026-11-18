@@ -107,6 +107,16 @@ pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// A one-shot sender a callback can own (a macOS completion block is `Fn`): the sender is taken on the first call.
+pub fn once<T>(tx: tokio::sync::oneshot::Sender<T>) -> impl Fn(T) {
+    let tx = Mutex::new(Some(tx));
+    move |v| {
+        if let Some(tx) = lock(&tx).take() {
+            let _ = tx.send(v);
+        }
+    }
+}
+
 /// What went wrong opening the data at launch, if anything (`tauri::State<Startup>`): set before the window opens.
 pub struct Startup(pub Option<StartupProblem>);
 

@@ -463,6 +463,8 @@ export const storyTurns = (story: string) => invoke<PracticeTurn[]>("story_turns
 // ── Spoken practice ──
 /** Whether gliide can hear a spoken answer, without asking macOS. */
 export const speechStatus = () => invoke<SpeechStatus>("speech_status");
+/** Words Speak may hear in a round's answers: the company and the posting's terms. */
+export const practiceHints = (round: string) => invoke<string[]>("practice_hints", { round });
 /** Opens the microphone (asking macOS the first time); what's heard comes as `speech` events. `hints`: words it may
  *  hear (the company, the posting's terms). Rejects with why it can't. */
 export const startListening = (hints: string[]) => invoke<void>("start_listening", { hints });

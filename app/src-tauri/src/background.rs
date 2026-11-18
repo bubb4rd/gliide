@@ -29,7 +29,10 @@ pub fn headless() -> i32 {
     let app = match App::open(&dir, Box::new(|_| {})) {
         Ok(app) => Arc::new(app),
         Err(problem) => {
-            say(&format!("couldn't open {}: {}", problem.path, problem.detail));
+            say(&format!(
+                "couldn't open {}: {}",
+                problem.path, problem.detail
+            ));
             return 1;
         }
     };

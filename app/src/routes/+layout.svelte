@@ -103,7 +103,8 @@
         void app
           .load()
           .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
-          .then(() => void (app.setupDue ? undefined : showWhatsNew()))
+          // Also during setup: a fresh install records its version there, so its next launch shows nothing.
+          .then(() => void showWhatsNew())
           .finally(() => (ready = true));
         void feed.refresh();
         // A round's banner clicked: its job (or its debrief). A benchmark run's status: the rail's count.

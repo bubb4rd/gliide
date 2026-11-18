@@ -160,6 +160,7 @@ pub fn run() {
             commands::tell_story,
             commands::story_turns,
             commands::speech_status,
+            commands::practice_hints,
             commands::start_listening,
             commands::stop_listening,
             commands::cancel_listening,

@@ -417,6 +417,20 @@ pub fn practice_turns(app: &App, round: &str) -> Result<Vec<PracticeTurn>> {
         .collect()
 }
 
+/// Words Speak may hear in the round's answers that a recognizer wouldn't guess: the company, then the posting's terms.
+pub fn speech_hints(app: &App, round: &str) -> Result<Vec<String>> {
+    let cx = context(app, round)?;
+    let company = cx.application.company.trim().to_owned();
+    let terms = cx
+        .requirements
+        .iter()
+        .flat_map(|r| r.skills.iter().map(|k| k.term.clone()));
+    Ok(std::iter::once(company)
+        .filter(|c| !c.is_empty())
+        .chain(terms)
+        .collect())
+}
+
 /// A stored practice row as the thread shows it; its story draft is drawn from this turn (`from` its id).
 pub(crate) fn turn(p: PracticeRow) -> Result<PracticeTurn> {
     let f: practice::Feedback = serde_json::from_str(&p.feedback)?;

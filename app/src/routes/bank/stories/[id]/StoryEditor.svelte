@@ -401,7 +401,9 @@
   }
 
   async function send() {
-    if (speech.listening) await speech.stop();
+    // Opening: nothing heard yet to send. Listening or closing: send once the last words land.
+    if (speech.opening) return;
+    await speech.stop();
     const text = answer.trim();
     if (!text || !view?.id || reading !== null) return;
     const story = view.id;
@@ -451,6 +453,7 @@
       void send();
     } else if (e.key === "Escape") {
       e.stopPropagation();
+      if (speech.listening) return void speech.stop();
       (e.currentTarget as HTMLElement).blur();
     }
   }
@@ -468,7 +471,12 @@
     target instanceof Element && target.closest("button, a, input, textarea, select") !== null;
 
   const TELL_KEYS: KeyCommand[] = $derived([
-    { keys: ["⏎"], label: "Send your telling", run: () => void send(), disabled: !answer.trim() || reading !== null },
+    {
+      keys: ["⏎"],
+      label: "Send your telling",
+      run: () => void send(),
+      disabled: !answer.trim() || reading !== null || speech.opening,
+    },
     {
       keys: ["⌘D"],
       label: speech.listening ? "Stop speaking" : "Speak your telling",
@@ -667,7 +675,7 @@
                 icon={ArrowUp}
                 aria-label="Send your telling"
                 {@attach tip("Send your telling (⏎)")}
-                disabled={!answer.trim() || reading !== null || speech.busy}
+                disabled={!answer.trim() || reading !== null || speech.opening}
                 onclick={() => void send()}
               />
             </div>

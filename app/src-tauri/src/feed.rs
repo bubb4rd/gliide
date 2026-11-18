@@ -243,13 +243,17 @@ enum Pulled {
 }
 
 /// Pulls new jobs from every source that's on, then checks the queue up to the day's cap; the feed after both. A pull
-/// already running (here, or in `gliide --pull-feed`) isn't joined: this returns the feed as it is at once (here:
-/// `status.pulling`, and `feed` events as it goes on). Failures go to the status's `error`, a sentence per source, not
-/// to the caller. The scheduler runs the same.
+/// already running here isn't joined: this returns the feed as it is at once (`status.pulling`, and `feed` events as
+/// it goes on). One running in `gliide --pull-feed` errs, saying so. Failures go to the status's `error`, a sentence
+/// per source, not to the caller. The scheduler runs the same.
 pub async fn pull_feed(app: &Arc<App>) -> Result<FeedView> {
     let run = Arc::clone(app);
     // Its own task: the pull goes on to the end should the caller stop waiting.
-    tokio::spawn(async move { run_pull(&run).await }).await?;
+    if let Pulled::Elsewhere = tokio::spawn(async move { run_pull(&run).await }).await? {
+        return Err(AppError::other(
+            "a background pull is running; its jobs show here when it’s done",
+        ));
+    }
     blocking(app, feed).await
 }
 
@@ -1468,6 +1472,28 @@ mod tests {
 
     fn at(s: &str) -> DateTime<Utc> {
         parse_time(s).unwrap()
+    }
+
+    /// One pull at a time across every gliide on the data: the app and `gliide --pull-feed` each open the store
+    /// themselves, as two `App`s over one folder do here.
+    #[test]
+    fn one_pull_at_a_time_across_gliides() {
+        let dir = std::env::temp_dir().join(format!("gliide-feed-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let window = Arc::new(App::open(&dir, Box::new(|_| {})).unwrap());
+        let closed = Arc::new(App::open(&dir, Box::new(|_| {})).unwrap());
+        let Ok(Claim::Got(running)) = claim(&window) else {
+            panic!("the first claim gets the run");
+        };
+        assert!(matches!(claim(&window), Ok(Claim::Busy)));
+        assert!(matches!(claim(&closed), Ok(Claim::Elsewhere)));
+        // Turned away, the other gliide isn't left marked busy.
+        assert!(!lock(&closed.feed).busy);
+        drop(running);
+        assert!(!lock(&window.feed).busy);
+        assert!(matches!(claim(&closed), Ok(Claim::Got(_))));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A rate limit leaves LinkedIn alone for at least an hour (longer when it asks), and says until when rather than

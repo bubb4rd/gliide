@@ -133,7 +133,7 @@ mod mac {
     use std::ptr::NonNull;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::{self, RecvTimeoutError};
-    use std::sync::{Arc, Mutex, MutexGuard};
+    use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
     use block2::RcBlock;
@@ -154,6 +154,7 @@ mod mac {
     use super::{Hear, Transcript, denied, unavailable, words};
     use crate::dto::{Heard, Hearing, PrivacyPane, SpeechState, SpeechStatus, Spoken};
     use crate::error::{AppError, Result};
+    use crate::state::{lock, once};
 
     /// The longest answer heard in one go; the microphone closes after it, keeping what was heard.
     const MAX: Duration = Duration::from_secs(10 * 60);
@@ -176,10 +177,6 @@ mod mac {
     }
 
     static SESSION: Mutex<Option<Session>> = Mutex::new(None);
-
-    fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-        m.lock().unwrap_or_else(|e| e.into_inner())
-    }
 
     /// Asking macOS aborts the process without these in the main bundle's Info.plist.
     fn described() -> bool {
@@ -251,16 +248,6 @@ mod mac {
                 pane: None,
             }
         })
-    }
-
-    /// A one-shot sender a completion block can own: the block is `Fn`, so the sender is taken once.
-    fn once<T>(tx: oneshot::Sender<T>) -> impl Fn(T) {
-        let tx = Mutex::new(Some(tx));
-        move |v| {
-            if let Some(tx) = tx.lock().ok().and_then(|mut t| t.take()) {
-                let _ = tx.send(v);
-            }
-        }
     }
 
     /// Asks macOS for what it hasn't been asked yet (its prompts wait for your answer). The blocks aren't `Send`, so
@@ -369,26 +356,28 @@ mod mac {
                 }
             };
             let started = Instant::now();
-            let how = if ready.send(Ok(())).is_err() {
-                End::Cancel
+            let first = if ready.send(Ok(())).is_err() {
+                Err(RecvTimeoutError::Disconnected)
             } else {
-                match end.recv_timeout(MAX) {
-                    Ok(how) => how,
-                    Err(RecvTimeoutError::Timeout) => {
-                        let text = lock(&shared.transcript).text();
-                        hear(Hearing {
-                            text,
-                            stopped: true,
-                        });
-                        // The UI collects it (stop) or drops it.
-                        end.recv().unwrap_or(End::Cancel)
-                    }
-                    Err(RecvTimeoutError::Disconnected) => End::Cancel,
-                }
+                end.recv_timeout(MAX)
             };
             let ms = u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX);
             shared.closing.store(true, Ordering::SeqCst);
             open.close();
+            let how = match first {
+                Ok(how) => how,
+                // The time limit: the microphone is closed; the UI collects what was heard (stop) or drops it, and
+                // without an answer the session ends after as long again.
+                Err(RecvTimeoutError::Timeout) => {
+                    let text = lock(&shared.transcript).text();
+                    hear(Hearing {
+                        text,
+                        stopped: true,
+                    });
+                    end.recv_timeout(MAX).unwrap_or(End::Cancel)
+                }
+                Err(RecvTimeoutError::Disconnected) => End::Cancel,
+            };
             match how {
                 // SAFETY: a plain call on an object this thread owns.
                 End::Cancel => unsafe { open.task.cancel() },

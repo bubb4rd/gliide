@@ -54,6 +54,10 @@ export class Speech {
   /** The draft as it was when the microphone opened: heard words go after it. */
   #base = "";
   #unlisten: (() => void) | null = null;
+  /** The stop under way, so a send waits for its last words. */
+  #stopping: Promise<void> | null = null;
+  /** Cancelled while opening: what opens is closed again at once. */
+  #dropped = false;
 
   constructor(draft: { get: () => string; set: (text: string) => void }) {
     this.#draft = draft;
@@ -80,11 +84,17 @@ export class Speech {
   /** Speak: opens the microphone, else closes it. */
   toggle = (hints: string[] = []) => (this.listening ? this.stop() : this.start(hints));
 
+  /** The microphone is opening (macOS may be asking): ⏎ waits for it to open or fail. */
+  get opening(): boolean {
+    return this.busy && this.#stopping === null;
+  }
+
   async start(hints: string[]) {
     if (this.listening || this.busy) return;
     if (this.status?.state === "denied") return this.#denied(this.status);
     if (this.off) return;
     this.busy = true;
+    this.#dropped = false;
     this.#base = this.#draft.get().trimEnd();
     const unlisten = await onSpeech((h) => {
       if (this.openedAt === null) return;
@@ -93,10 +103,17 @@ export class Speech {
     });
     try {
       await startListening(hints);
+      // Left (cancel) while macOS was asking: close what just opened.
+      if (this.#dropped) {
+        unlisten();
+        void cancelListening();
+        return;
+      }
       this.#unlisten = unlisten;
       this.openedAt = performance.now();
     } catch (e) {
       unlisten();
+      if (this.#dropped) return;
       const now = await this.refresh();
       if (now?.state === "denied") this.#denied(now);
       else toast(appError(e).message, { tone: "danger" });
@@ -105,12 +122,23 @@ export class Speech {
     }
   }
 
-  /** Closes the microphone; the last words land in the draft. */
-  async stop() {
-    if (!this.listening || this.busy) return;
+  /** Closes the microphone; the last words land in the draft. Resolves once they have (a stop already under way
+   *  included), so a send right after it sends them. */
+  stop(): Promise<void> {
+    if (this.#stopping) return this.#stopping;
+    if (!this.listening || this.busy) return Promise.resolve();
     this.busy = true;
     this.#unlisten?.();
     this.#unlisten = null;
+    this.#stopping = this.#close().finally(() => {
+      this.#stopping = null;
+      this.openedAt = null;
+      this.busy = false;
+    });
+    return this.#stopping;
+  }
+
+  async #close() {
     try {
       const heard = await stopListening();
       this.#draft.set(joined(this.#base, heard.text));
@@ -122,17 +150,15 @@ export class Speech {
       }
     } catch (e) {
       toast(appError(e).message, { tone: "danger" });
-    } finally {
-      this.openedAt = null;
-      this.busy = false;
     }
   }
 
-  /** Closes the microphone and drops what it heard (leaving the screen). */
+  /** Closes the microphone and drops what it heard (leaving the screen), also while it's still opening. */
   cancel() {
     this.#unlisten?.();
     this.#unlisten = null;
     if (this.listening) void cancelListening();
+    else if (this.opening) this.#dropped = true;
     this.openedAt = null;
   }
 
