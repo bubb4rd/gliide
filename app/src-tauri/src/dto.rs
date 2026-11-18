@@ -1594,6 +1594,68 @@ pub enum NotificationPermission {
     Unknown,
 }
 
+/// Whether gliide can hear a spoken answer (spoken practice), by macOS's own speech recognition on this Mac.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SpeechStatus {
+    pub state: SpeechState,
+    /// Why it can't (`denied`, `unavailable`), as a sentence.
+    pub reason: Option<String>,
+    /// The System Settings pane that turns it on (`denied`), for Open Settings.
+    pub pane: Option<PrivacyPane>,
+}
+
+/// System Settings → Privacy & Security: Microphone, or Speech Recognition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum PrivacyPane {
+    Microphone,
+    Speech,
+}
+
+/// `ask`: macOS hasn't asked yet (the first Speak does); `denied`: the microphone or speech recognition is turned off
+/// for gliide in System Settings; `unavailable`: this Mac or this build can't (no on-device recognition for your
+/// language, no microphone, `tauri dev`'s binary without the usage descriptions).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum SpeechState {
+    Ready,
+    Ask,
+    Denied,
+    Unavailable,
+}
+
+/// What's been heard so far while you speak (the `speech` event); `stopped` once recognition ended on its own (a long
+/// silence, the time limit, an error), so the UI closes the microphone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Hearing {
+    pub text: String,
+    pub stopped: bool,
+}
+
+/// The answer heard once you stop: its words, and how long you spoke and how many words that was.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Heard {
+    pub text: String,
+    pub spoken: Spoken,
+}
+
+/// An answer said out loud: how long you spoke (the microphone open, pauses included) and the words heard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Spoken {
+    pub ms: u32,
+    pub words: u32,
+}
+
 /// The resume an application sent, for the Interview tab's desk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -1699,6 +1761,8 @@ pub struct PracticeTurn {
     pub asked: String,
     pub answer: String,
     pub feedback: Feedback,
+    /// Said out loud (spoken practice): how long and how many words; `None` when typed.
+    pub spoken: Option<Spoken>,
     /// RFC 3339.
     pub at: String,
 }

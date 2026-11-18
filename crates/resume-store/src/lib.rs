@@ -48,6 +48,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("latency.sql"),
     include_str!("bench.sql"),
     include_str!("sent_template.sql"),
+    include_str!("spoken.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -471,8 +472,18 @@ pub struct PracticeRow {
     pub answer: String,
     /// The feedback, JSON.
     pub feedback: String,
+    /// Said out loud: how long and how many words; `None` when typed.
+    pub spoken: Option<Spoken>,
     /// Set by the store when added (the one given is ignored).
     pub at: String,
+}
+
+/// An answer said out loud: how long you spoke, from the microphone opening to its closing (pauses included), and
+/// how many words were heard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Spoken {
+    pub ms: u32,
+    pub words: u32,
 }
 
 /// An entry's Dig questions as written: keyed by what they were written from (the caller's hash).
@@ -2089,9 +2100,20 @@ impl Store {
         }
         let at = now();
         self.conn.execute(
-            "INSERT INTO practice (id, round_id, story_id, question, asked, answer, feedback, at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![p.id, p.round_id, p.story_id, p.question, p.asked, p.answer, p.feedback, at],
+            "INSERT INTO practice (id, round_id, story_id, question, asked, answer, feedback, spoken_ms, spoken_words, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                p.id,
+                p.round_id,
+                p.story_id,
+                p.question,
+                p.asked,
+                p.answer,
+                p.feedback,
+                p.spoken.map(|s| s.ms),
+                p.spoken.map(|s| s.words),
+                at
+            ],
         )?;
         Ok(PracticeRow { at, ..p.clone() })
     }
@@ -2122,9 +2144,11 @@ impl Store {
         arg: Option<&str>,
     ) -> Result<Vec<PracticeRow>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT id, round_id, story_id, question, asked, answer, feedback, at FROM practice WHERE {clause}"
+            "SELECT id, round_id, story_id, question, asked, answer, feedback, spoken_ms, spoken_words, at
+             FROM practice WHERE {clause}"
         ))?;
         let row = |r: &Row| {
+            let (ms, words): (Option<u32>, Option<u32>) = (r.get(7)?, r.get(8)?);
             Ok(PracticeRow {
                 id: r.get(0)?,
                 round_id: r.get(1)?,
@@ -2133,7 +2157,8 @@ impl Store {
                 asked: r.get(4)?,
                 answer: r.get(5)?,
                 feedback: r.get(6)?,
-                at: r.get(7)?,
+                spoken: ms.zip(words).map(|(ms, words)| Spoken { ms, words }),
+                at: r.get(9)?,
             })
         };
         let rows = match arg {

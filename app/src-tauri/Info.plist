@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the app's Info.plist by Tauri (and embedded in `tauri dev`'s binary). Spoken practice: macOS shows
+     these when it asks for the microphone and speech recognition, and aborts the process if they're missing. -->
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>gliide hears your interview answers when you practice out loud.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>gliide turns your spoken answers into text on this Mac; the audio never leaves it.</string>
+</dict>
+</plist>

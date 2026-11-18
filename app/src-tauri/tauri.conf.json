@@ -54,6 +54,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
+      "entitlements": "Entitlements.plist",
       "files": {
         "Library/LaunchAgents/dev.bubb4rd.gliide.feed.plist": "launchd/dev.bubb4rd.gliide.feed.plist"
       }

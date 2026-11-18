@@ -446,14 +446,16 @@ pub async fn prep(app: St<'_>, round: String, again: bool) -> Res<PrepView> {
     prep::prep(&app, &round, again).await
 }
 
+/// `spoken`: the answer was said out loud (spoken practice), and how long and how many words it took.
 #[tauri::command]
 pub async fn practice(
     app: St<'_>,
     round: String,
     question: String,
     answer: String,
+    spoken: Option<crate::dto::Spoken>,
 ) -> Res<PracticeTurn> {
-    prep::practice(&app, &round, question, answer).await
+    prep::practice(&app, &round, question, answer, spoken).await
 }
 
 #[tauri::command]
@@ -490,8 +492,48 @@ pub async fn tell_story(
     story: String,
     asked: String,
     answer: String,
+    spoken: Option<crate::dto::Spoken>,
 ) -> Res<PracticeTurn> {
-    stories::tell_story(&app, &story, asked, answer).await
+    stories::tell_story(&app, &story, asked, answer, spoken).await
+}
+
+// ── Spoken practice ──
+
+/// Whether gliide can hear a spoken answer, without asking macOS.
+#[tauri::command]
+pub async fn speech_status() -> Res<crate::dto::SpeechStatus> {
+    Ok(crate::speech::status())
+}
+
+/// Opens the microphone and hears your answer on this Mac, asking macOS first if it never has; what's heard comes as
+/// `speech` events. `hints`: words it may hear (the company, the posting's terms).
+#[tauri::command]
+pub async fn start_listening(app: AppHandle, hints: Vec<String>) -> Res<()> {
+    use tauri::Emitter;
+
+    let hear = move |h: crate::dto::Hearing| {
+        let _ = app.emit("speech", h);
+    };
+    crate::speech::start(Arc::new(hear), hints).await
+}
+
+/// Closes the microphone and returns the answer heard, with how long you spoke.
+#[tauri::command]
+pub async fn stop_listening() -> Res<crate::dto::Heard> {
+    crate::speech::stop().await
+}
+
+/// Closes the microphone and drops what was heard.
+#[tauri::command]
+pub async fn cancel_listening() -> Res<()> {
+    crate::speech::cancel();
+    Ok(())
+}
+
+/// System Settings → Privacy & Security, on the microphone or speech recognition.
+#[tauri::command]
+pub async fn open_speech_settings(app: AppHandle, pane: crate::dto::PrivacyPane) -> Res<()> {
+    crate::speech::open_settings(&app, pane)
 }
 
 #[tauri::command]

@@ -73,6 +73,7 @@
     Segmented,
     Sheet,
     Showcase,
+    SpeakButton,
     Sources,
     segmentStep,
     StackedBar,
@@ -382,6 +383,8 @@
   let seg = $state("light");
   let check = $state({ off: false, on: true });
   let switches = $state({ off: false, on: true });
+  // SpeakButton: off, listening (opened 42 s ago; pressing it toggles), busy, unavailable.
+  let speakOpenedAt = $state<number | null>(performance.now() - 42_000);
   let specimenAgent = $state<string>("claude");
   let text = $state("");
   let filled = $state("Globex · Junior Software Engineer");
@@ -1174,6 +1177,21 @@
               <Switch bind:checked={switches.on} label="On example" />
               <Switch checked={false} locked label="Locked off" {@attach tip("Sign in to Codex to turn it on.")} />
               <Switch checked locked label="Locked on" {@attach tip("Model calls run on Claude Code.")} />
+            </div>
+            <p class="label">SpeakButton · off · listening (ticks) · closing · unavailable (focusable, its tooltip says why)</p>
+            <div class="row">
+              <SpeakButton openedAt={null} kbd="⌘D" onclick={() => (speakOpenedAt = performance.now())} />
+              <SpeakButton
+                openedAt={speakOpenedAt}
+                kbd="⌘D"
+                onclick={() => (speakOpenedAt = speakOpenedAt === null ? performance.now() : null)}
+              />
+              <SpeakButton openedAt={performance.now() - 95_000} busy onclick={() => {}} />
+              <SpeakButton
+                openedAt={null}
+                off="macOS can’t hear your language on this Mac without sending it to Apple. Turn on Dictation in System Settings → Keyboard to add it."
+                onclick={() => {}}
+              />
             </div>
           </div>
         </Card>

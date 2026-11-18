@@ -10,7 +10,7 @@ use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
     AppStatus, Application, BenchRunRow, ChangeFate, ChangeOutcome, DEBRIEF_DAYS, Dig, DigAnswers,
     FeedState, KeptRow, Latency, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Notified,
-    PracticeRow, Prep, Rev, Round, RoundState, RouteTimes, StatusChange, Store, StoreError,
+    PracticeRow, Prep, Rev, Round, RoundState, RouteTimes, Spoken, StatusChange, Store, StoreError,
     UsageRow, applications_csv, parse_ats_fit_csv,
 };
 
@@ -686,7 +686,8 @@ fn migrating_to_covers_keeps_the_data() {
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
@@ -741,7 +742,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -850,7 +851,8 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
@@ -883,7 +885,8 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; DROP TABLE status_changes;
@@ -1101,7 +1104,8 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; DROP TABLE rounds; ALTER TABLE postings DROP COLUMN url;
@@ -1120,7 +1124,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1133,6 +1137,7 @@ fn practice_row(id: &str, round: &str, question: &str) -> PracticeRow {
         asked: "Walk me through the regression suite.".into(),
         answer: "I wrote 14 tests.".into(),
         feedback: r#"{"lines":[]}"#.into(),
+        spoken: None,
         at: String::new(),
     }
 }
@@ -1183,7 +1188,17 @@ fn preps_replace_by_key_and_practice_lists_oldest_first() {
 
     store.add_practice(&practice_row("p1", "r", "q1")).unwrap();
     store.add_practice(&practice_row("p2", "s", "q1")).unwrap();
-    store.add_practice(&practice_row("p3", "r", "q2")).unwrap();
+    // Said out loud: its time and words come back as given; typed, none.
+    let spoken = Spoken {
+        ms: 102_400,
+        words: 251,
+    };
+    store
+        .add_practice(&PracticeRow {
+            spoken: Some(spoken),
+            ..practice_row("p3", "r", "q2")
+        })
+        .unwrap();
     let ids = |round: &str| -> Vec<String> {
         store
             .practice(round)
@@ -1194,6 +1209,8 @@ fn preps_replace_by_key_and_practice_lists_oldest_first() {
     };
     assert_eq!(ids("r"), ["p1", "p3"]);
     assert_eq!(store.practice("r").unwrap()[1].question, "q2");
+    assert_eq!(store.practice("r").unwrap()[1].spoken, Some(spoken));
+    assert_eq!(store.practice("r").unwrap()[0].spoken, None);
     assert!(
         store
             .add_practice(&practice_row("p4", "gone", "q1"))
@@ -1221,7 +1238,8 @@ fn migrating_to_practice_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice; DROP TABLE preps; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
@@ -1240,7 +1258,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1371,7 +1389,8 @@ fn migrating_to_stories_keeps_the_practice() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; DROP TABLE dig_answers; DROP TABLE digs; DROP TABLE stories;
          DROP TABLE practice;
@@ -1416,7 +1435,7 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1629,7 +1648,8 @@ fn migrating_to_debriefs_keeps_the_rounds() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          DROP TABLE notified; DROP TABLE debriefs; ALTER TABLE postings DROP COLUMN url; DROP TABLE usage;
          PRAGMA user_version = 11;",
@@ -1649,7 +1669,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1812,7 +1832,8 @@ fn migrating_to_latency_keeps_the_usage() {
     drop(Store::open(&path).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          ALTER TABLE usage DROP COLUMN latency_ms;
          INSERT INTO usage (at, day, feature, agent, model, input_tokens, output_tokens, cache_write_tokens,
@@ -1838,7 +1859,7 @@ fn migrating_to_latency_keeps_the_usage() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1916,7 +1937,8 @@ fn migrating_to_bench_keeps_the_analyses() {
     };
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template;
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template;
          DROP TABLE bench_runs; DROP TABLE change_outcomes; ALTER TABLE analyses DROP COLUMN agent;
          PRAGMA user_version = 15;",
     )
@@ -1956,7 +1978,7 @@ fn migrating_to_bench_keeps_the_analyses() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1978,7 +2000,8 @@ fn migrating_to_sent_template_names_classic_serif_for_resumes_sent_before() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE applications DROP COLUMN sent_template; PRAGMA user_version = 16;",
+        "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
+         ALTER TABLE applications DROP COLUMN sent_template; PRAGMA user_version = 16;",
     )
     .unwrap();
     drop(conn);
@@ -1995,7 +2018,7 @@ fn migrating_to_sent_template_names_classic_serif_for_resumes_sent_before() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 17);
+    assert_eq!(version, 18);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

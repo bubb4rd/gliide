@@ -38,6 +38,7 @@ export { default as ScorePill } from "./ScorePill.svelte";
 export { default as Segmented } from "./Segmented.svelte";
 export { default as Sheet } from "./Sheet.svelte";
 export { default as Showcase } from "./Showcase.svelte";
+export { default as SpeakButton } from "./SpeakButton.svelte";
 export { default as Sources, type Source } from "./Sources.svelte";
 export { default as StackedBar, segmentStep } from "./StackedBar.svelte";
 export { default as StepKey } from "./StepKey.svelte";

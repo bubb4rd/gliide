@@ -1,15 +1,17 @@
 <!--
-  Typed practice for one round (DESIGN.md, Job → Interview → Practice): the interviewer asks the prep's questions one
-  at a time; you answer in the box at the foot; each answer comes back (one model call) as a feedback card
-  (`FeedbackCard`): the lines it drew on, which of situation, task, action and result it has, what it says differently
-  from the resume you sent (amber), what it says the bank doesn't hold yet (Keep as fact), a tighter telling and the
-  likely follow-up. Never a grade. An answer that tells a story offers Save as story (`S`). Stuck, **Nudge** (`⌘J`, one
-  call) reads your draft and your last answer to the question for a few small suggestions (`NudgeCard`); Add to answer
-  puts one's example at the end of your draft, its first `…` selected. The strip at the top pins the question, with
-  how many you've practiced. `N` next question, `R` again, `Esc` back to the prep.
+  Practice for one round (DESIGN.md, Job → Interview → Practice): the interviewer asks the prep's questions one
+  at a time; you answer in the box at the foot, typed or out loud (**Speak**, `⌘D`: macOS hears it on this Mac and
+  the words land in the box to fix before sending; the turn keeps how long you spoke); each answer comes back (one
+  model call) as a feedback card (`FeedbackCard`): the lines it drew on, which of situation, task, action and result
+  it has, what it says differently from the resume you sent (amber), what it says the bank doesn't hold yet (Keep as
+  fact), a tighter telling and the likely follow-up. Never a grade. An answer that tells a story offers Save as story
+  (`S`). Stuck, **Nudge** (`⌘J`, one call) reads your draft and your last answer to the question for a few small
+  suggestions (`NudgeCard`); Add to answer puts one's example at the end of your draft, its first `…` selected. The
+  strip at the top pins the question, with how many you've practiced. `N` next question, `R` again, `Esc` back to
+  the prep (while the microphone is open, `Esc` closes it).
 -->
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import { goto } from "$app/navigation";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import BookOpen from "@lucide/svelte/icons/book-open";
@@ -35,7 +37,18 @@
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { kindLabel } from "$lib/rounds";
-  import { Button, Icon, KeyFooter, type KeyCommand, Textarea, Thinking, tip, toast } from "$lib/ui";
+  import { Speech, spokenLine } from "$lib/speech.svelte";
+  import {
+    Button,
+    Icon,
+    KeyFooter,
+    type KeyCommand,
+    SpeakButton,
+    Textarea,
+    Thinking,
+    tip,
+    toast,
+  } from "$lib/ui";
   import FeedbackCard from "./FeedbackCard.svelte";
   import NudgeCard from "./NudgeCard.svelte";
 
@@ -84,17 +97,32 @@
   /** A call is running: answers and nudges wait for it. */
   const busy = $derived(reading !== null || nudging !== null);
   const shown = $derived(nudges && nudges.question === asked?.id ? nudges.items : null);
+  /** Speak: the answer said out loud into the box. */
+  const speech = new Speech({ get: () => answer, set: (text) => (answer = text) });
+  /** Words macOS may hear that it wouldn't guess: the company and the posting's terms. */
+  const hints = $derived([company, ...prep.gaps.map((g) => g.term)]);
+  const speak = () => void speech.toggle(hints);
+  onMount(() => {
+    void speech.refresh();
+    return () => speech.cancel();
+  });
+  // A box emptied (or a new question) starts unspoken.
+  $effect(() => {
+    if (!answer.trim() && !speech.listening) speech.reset();
+  });
   // Practice starts in the answer box.
   $effect(() => {
     field?.focus();
   });
 
   async function send() {
+    if (speech.listening) await speech.stop();
     const text = answer.trim();
     if (!text || !asked || busy) return;
     reading = performance.now();
     try {
-      const turn = await practice(round.id, asked.id, text);
+      const turn = await practice(round.id, asked.id, text, speech.spoken);
+      speech.reset();
       turns = [...turns, turn];
       answer = "";
       nudges = null;
@@ -143,6 +171,7 @@
 
   async function ask(q: PrepQuestion | undefined, same = false) {
     if (!q || busy) return;
+    speech.cancel();
     question = q.id;
     again = same;
     answer = "";
@@ -199,6 +228,12 @@
 
   const KEYS: KeyCommand[] = $derived([
     { keys: ["⏎"], label: "Send your answer", run: () => void send(), disabled: !answer.trim() || busy },
+    {
+      keys: ["⌘D"],
+      label: speech.listening ? "Stop speaking" : "Speak your answer",
+      run: speak,
+      disabled: busy || speech.busy || !!speech.off,
+    },
     { keys: ["⌘J"], label: "Nudge", run: () => void askNudge(), disabled: busy },
     { keys: ["N"], label: "Next question", run: () => void ask(next), disabled: busy },
     { keys: ["R"], label: "Ask it again", run: () => void ask(asked, true), disabled: busy },
@@ -213,8 +248,10 @@
       r: (e) => (interactive(e.target) ? false : void ask(asked, true)),
       s: (e) => (interactive(e.target) || !saveable ? false : void saveAsStory(saveable)),
       "mod+j": () => void askNudge(),
+      "mod+d": () => (busy || speech.off ? undefined : speak()),
       Escape: (e) => {
         if (busy) return void cancel(job);
+        if (speech.listening) return void speech.stop();
         if (interactive(e.target)) return false;
         onback();
       },
@@ -243,6 +280,9 @@
       <p class="asked">{turn.asked}</p>
     </article>
     <p class="bubble">{turn.answer}</p>
+    {#if turn.spoken}
+      <p class="meta said num">{spokenLine(turn.spoken)}</p>
+    {/if}
     {#snippet story()}
       {@const id = saved.get(turn.id)}
       {#if id}
@@ -302,7 +342,7 @@
     {#if answered && next}
       <span class="meta next">Next: “{next.text}”</span>
     {:else}
-      <span class="meta next">Answer as you would out loud</span>
+      <span class="meta next">{speech.off ? "Answer as you would out loud" : "Say it with ⌘D, or type it"}</span>
     {/if}
     <Button variant="ghost" size="sm" icon={Lightbulb} kbd="⌘J" disabled={busy || !asked} onclick={() => askNudge()}
       >Nudge</Button
@@ -323,24 +363,34 @@
     <Textarea
       bind:this={field}
       bind:value={answer}
-      placeholder={answered ? "Answer again, or go on with N" : "Your answer…"}
+      placeholder={speech.listening ? "Listening…" : answered ? "Answer again, or go on with N" : "Your answer…"}
       rows={3}
       aria-label="Your answer"
       disabled={reading !== null}
+      readonly={speech.listening}
       onkeydown={onFieldKey}
     />
     <div class="composer__bar">
       <KeyFooter keys={KEYS} bare />
-      <Button
-        variant="primary"
-        size="sm"
-        square
-        icon={ArrowUp}
-        aria-label="Send your answer"
-        {@attach tip("Send your answer (⏎)")}
-        disabled={!answer.trim() || busy}
-        onclick={() => void send()}
-      />
+      <div class="composer__send">
+        <SpeakButton
+          openedAt={speech.openedAt}
+          busy={busy || speech.busy}
+          off={speech.off}
+          kbd="⌘D"
+          onclick={speak}
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          square
+          icon={ArrowUp}
+          aria-label="Send your answer"
+          {@attach tip("Send your answer (⏎)")}
+          disabled={!answer.trim() || busy || speech.busy}
+          onclick={() => void send()}
+        />
+      </div>
     </div>
   </div>
 </div>
@@ -444,6 +494,12 @@
     white-space: pre-wrap;
     text-wrap: pretty;
   }
+  /* Said out loud: how long it took, under the bubble at its edge. */
+  .said {
+    align-self: flex-end;
+    margin: calc(var(--space-3) * -1) 0 0;
+    color: var(--ink-3);
+  }
   /* Saved as a story: the row says so, a gain check, and opens it. */
   .saved {
     display: inline-flex;
@@ -506,5 +562,10 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
+  }
+  .composer__send {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
   }
 </style>

@@ -33,6 +33,8 @@ import type { FeedStatus } from "./bindings/FeedStatus";
 import type { FeedView } from "./bindings/FeedView";
 import type { FolderPdf } from "./bindings/FolderPdf";
 import type { FolderView } from "./bindings/FolderView";
+import type { Heard } from "./bindings/Heard";
+import type { Hearing } from "./bindings/Hearing";
 import type { ImportChoices } from "./bindings/ImportChoices";
 import type { ImportView } from "./bindings/ImportView";
 import type { Instructed } from "./bindings/Instructed";
@@ -47,6 +49,7 @@ import type { Nudge } from "./bindings/Nudge";
 import type { Place } from "./bindings/Place";
 import type { PracticeTurn } from "./bindings/PracticeTurn";
 import type { PrepView } from "./bindings/PrepView";
+import type { PrivacyPane } from "./bindings/PrivacyPane";
 import type { Progress } from "./bindings/Progress";
 import type { ReviewView } from "./bindings/ReviewView";
 import type { Rewritten } from "./bindings/Rewritten";
@@ -59,6 +62,8 @@ import type { SearchCursor } from "./bindings/SearchCursor";
 import type { SearchResults } from "./bindings/SearchResults";
 import type { SentView } from "./bindings/SentView";
 import type { Settings } from "./bindings/Settings";
+import type { SpeechStatus } from "./bindings/SpeechStatus";
+import type { Spoken } from "./bindings/Spoken";
 import type { StartupProblem } from "./bindings/StartupProblem";
 import type { StatusSet } from "./bindings/StatusSet";
 import type { StoriesView } from "./bindings/StoriesView";
@@ -136,6 +141,8 @@ export type * from "./bindings/FolderFile";
 export type * from "./bindings/FolderPdf";
 export type * from "./bindings/FolderView";
 export type * from "./bindings/GapView";
+export type * from "./bindings/Heard";
+export type * from "./bindings/Hearing";
 export type * from "./bindings/ImportChoices";
 export type * from "./bindings/ImportContact";
 export type * from "./bindings/ImportEntry";
@@ -169,6 +176,7 @@ export type * from "./bindings/PracticeTurn";
 export type * from "./bindings/PrepGap";
 export type * from "./bindings/PrepQuestion";
 export type * from "./bindings/PrepView";
+export type * from "./bindings/PrivacyPane";
 export type * from "./bindings/Proposal";
 export type * from "./bindings/Progress";
 export type * from "./bindings/QuestionGroup";
@@ -196,6 +204,9 @@ export type * from "./bindings/SentView";
 export type * from "./bindings/Settings";
 export type * from "./bindings/SkillChip";
 export type * from "./bindings/Skipped";
+export type * from "./bindings/SpeechState";
+export type * from "./bindings/SpeechStatus";
+export type * from "./bindings/Spoken";
 export type * from "./bindings/Stage";
 export type * from "./bindings/StarPart";
 export type * from "./bindings/StartupKind";
@@ -422,9 +433,10 @@ export const sentResume = (application: string, marked: string[] = []) =>
 export const prep = (round: string, again = false) => invoke<PrepView>("prep", { round, again });
 /** A round's practiced answers, oldest first. */
 export const practiceTurns = (round: string) => invoke<PracticeTurn[]>("practice_turns", { round });
-/** One model call: your answer to prep question `question` read (emits `progress`, `practicing`), kept with it. */
-export const practice = (round: string, question: string, answer: string) =>
-  invoke<PracticeTurn>("practice", { round, question, answer });
+/** One model call: your answer to prep question `question` read (emits `progress`, `practicing`), kept with it;
+ *  `spoken` when it was said out loud (how long, how many words). */
+export const practice = (round: string, question: string, answer: string, spoken: Spoken | null = null) =>
+  invoke<PracticeTurn>("practice", { round, question, answer, spoken });
 /** One model call (emits `progress`, `nudging`): nudges for prep question `question` while you answer it, read
  *  with `draft` (what you've typed; may be empty) and your last answer to it. Not kept. */
 export const nudge = (round: string, question: string, draft: string) =>
@@ -434,11 +446,24 @@ export const nudge = (round: string, question: string, draft: string) =>
 export const keepClaim = (round: string | null, entry: string, text: string) =>
   invoke<void>("keep_claim", { round, entry, text });
 /** One model call (emits `progress`, `practicing`): `answer` to `asked` (a question the story answers, from
- *  `$lib/stories`), telling story `story` alone, read back and kept. */
-export const tellStory = (story: string, asked: string, answer: string) =>
-  invoke<PracticeTurn>("tell_story", { story, asked, answer });
+ *  `$lib/stories`), telling story `story` alone, read back and kept; `spoken` when it was said out loud. */
+export const tellStory = (story: string, asked: string, answer: string, spoken: Spoken | null = null) =>
+  invoke<PracticeTurn>("tell_story", { story, asked, answer, spoken });
 /** The story's practiced tellings (Tell it), oldest first. */
 export const storyTurns = (story: string) => invoke<PracticeTurn[]>("story_turns", { story });
+
+// ── Spoken practice ──
+/** Whether gliide can hear a spoken answer, without asking macOS. */
+export const speechStatus = () => invoke<SpeechStatus>("speech_status");
+/** Opens the microphone (asking macOS the first time); what's heard comes as `speech` events. `hints`: words it may
+ *  hear (the company, the posting's terms). Rejects with why it can't. */
+export const startListening = (hints: string[]) => invoke<void>("start_listening", { hints });
+/** Closes the microphone: the answer heard, how long you spoke and its words. */
+export const stopListening = () => invoke<Heard>("stop_listening");
+/** Closes the microphone and drops what was heard. */
+export const cancelListening = () => invoke<void>("cancel_listening");
+/** System Settings → Privacy & Security, on the microphone or speech recognition. */
+export const openSpeechSettings = (pane: PrivacyPane) => invoke<void>("open_speech_settings", { pane });
 
 // ── Stories ──
 export const stories = () => invoke<StoriesView>("stories");
@@ -516,3 +541,6 @@ export const onUpdate = (handler: (s: UpdateStatus) => void): Promise<UnlistenFn
 /** Event `notification`: a round's macOS banner was clicked; the page it opens (`/jobs/<id>`, `?debrief=<round>`). */
 export const onNotification = (handler: (path: string) => void): Promise<UnlistenFn> =>
   listen<string>("notification", (e) => handler(e.payload));
+/** Event `speech`: what's been heard while the microphone is open; `stopped` once it ended on its own. */
+export const onSpeech = (handler: (h: Hearing) => void): Promise<UnlistenFn> =>
+  listen<Hearing>("speech", (e) => handler(e.payload));

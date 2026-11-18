@@ -19,7 +19,7 @@ use resume_store::{self as store, Application, PracticeRow};
 
 use crate::dto::{
     Feature, Feedback, Mismatch, NewClaim, Nudge, PracticeTurn, PrepGap, PrepQuestion, PrepView,
-    QuestionGroup, Stage, StarPart, StorySource,
+    QuestionGroup, Spoken, Stage, StarPart, StorySource,
 };
 use crate::error::{AppError, Result};
 use crate::rounds::{application_of, sent_pdf};
@@ -230,12 +230,14 @@ fn view(p: &store::Prep, stories: &[Story]) -> Result<PrepView> {
 }
 
 /// One model call: `answer` to the round's prep question `question` read back (with the story the question links,
-/// when it links one), checked against the resume as sent, the bank and the answer, and kept as a practice turn.
+/// when it links one), checked against the resume as sent, the bank and the answer, and kept as a practice turn
+/// (with how long it took to say and its words, when `spoken`).
 pub async fn practice(
     app: &Arc<App>,
     round: &str,
     question: String,
     answer: String,
+    spoken: Option<Spoken>,
 ) -> Result<PracticeTurn> {
     let answer = answer.trim().to_owned();
     if answer.is_empty() {
@@ -305,6 +307,10 @@ pub async fn practice(
         asked: q.text,
         answer,
         feedback: serde_json::to_string(&f)?,
+        spoken: spoken.map(|s| store::Spoken {
+            ms: s.ms,
+            words: s.words,
+        }),
         at: String::new(),
     };
     let stored = blocking(app, move |app| Ok(lock(&app.store).add_practice(&row)?)).await?;
@@ -455,6 +461,10 @@ pub(crate) fn turn(p: PracticeRow) -> Result<PracticeTurn> {
             follow_up: f.follow_up,
             story,
         },
+        spoken: p.spoken.map(|s| Spoken {
+            ms: s.ms,
+            words: s.words,
+        }),
         id: p.id,
         at: p.at,
     })

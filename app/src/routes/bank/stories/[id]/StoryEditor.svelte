@@ -4,8 +4,8 @@
   or off the resume) with the bullets and facts it draws on; its themes as toggles; where it was used. Every edit
   saves at once and the story comes back; a new one (`new`) is saved on its first edit. The desk shows the entry in a
   master that shows it, highlighted. Tell it (`P`) turns the column into a small practice thread for this story
-  alone: one question from its themes, your telling, the feedback card. Delete (`⌘⌫`) goes back to Experience with
-  Undo.
+  alone: one question from its themes, your telling (typed, or out loud with Speak `⌘D`, which keeps how long you
+  took), the feedback card. Delete (`⌘⌫`) goes back to Experience with Undo.
 -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
@@ -41,6 +41,7 @@
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { shell } from "$lib/stores/shell.svelte";
+  import { Speech, spokenLine } from "$lib/speech.svelte";
   import { askFor, tellTime, THEMES } from "$lib/stories";
   import {
     Badge,
@@ -57,6 +58,7 @@
     Menu,
     PartRow,
     Segmented,
+    SpeakButton,
     Textarea,
     Thinking,
     Toolbar,
@@ -126,6 +128,7 @@
     void open();
     return () => {
       alive = false;
+      speech.cancel();
     };
   });
 
@@ -354,6 +357,18 @@
   const asked = $derived(view ? askFor(view) : "");
   const answered = $derived(turns.length > 0 && !again);
   const canTell = $derived(saved && !!view && [view.situation, view.task, view.action, view.result].some(Boolean));
+  /** Speak: the telling said out loud into the box. */
+  const speech = new Speech({ get: () => answer, set: (text) => (answer = text) });
+  /** Words macOS may hear that it wouldn't guess: the entry's name and the story's skills. */
+  const hints = $derived(view ? [view.entryName ?? "", ...view.skills] : []);
+  const speak = () => void speech.toggle(hints);
+  // Leaving Tell it closes the microphone; a box emptied starts unspoken.
+  $effect(() => {
+    if (!telling) speech.cancel();
+  });
+  $effect(() => {
+    if (!answer.trim() && !speech.listening) speech.reset();
+  });
 
   async function loadTurns(story: string) {
     try {
@@ -369,6 +384,7 @@
     editing = null;
     telling = true;
     pane = "story";
+    void speech.refresh();
     await tick();
     thread?.scrollTo({ top: thread.scrollHeight });
     field?.focus();
@@ -376,6 +392,7 @@
 
   async function tellAgain() {
     if (reading !== null) return;
+    speech.cancel();
     again = true;
     answer = "";
     await tick();
@@ -384,12 +401,14 @@
   }
 
   async function send() {
+    if (speech.listening) await speech.stop();
     const text = answer.trim();
     if (!text || !view?.id || reading !== null) return;
     const story = view.id;
     reading = performance.now();
     try {
-      const turn = await tellStory(story, asked, text);
+      const turn = await tellStory(story, asked, text, speech.spoken);
+      speech.reset();
       if (!alive) return;
       turns = [...turns, turn];
       answer = "";
@@ -450,6 +469,12 @@
 
   const TELL_KEYS: KeyCommand[] = $derived([
     { keys: ["⏎"], label: "Send your telling", run: () => void send(), disabled: !answer.trim() || reading !== null },
+    {
+      keys: ["⌘D"],
+      label: speech.listening ? "Stop speaking" : "Speak your telling",
+      run: speak,
+      disabled: reading !== null || speech.busy || !!speech.off,
+    },
     { keys: ["R"], label: "Tell it again", run: () => void tellAgain(), disabled: reading !== null },
     { keys: ["Esc"], label: "Back to the story", run: () => (telling = false) },
     { keys: ["⌘⌫"], label: "Delete story", run: () => void remove() },
@@ -468,8 +493,10 @@
       telling
         ? {
             r: (e) => (interactive(e.target) ? false : void tellAgain()),
+            "mod+d": () => (reading !== null || speech.off ? undefined : speak()),
             Escape: (e) => {
               if (reading !== null && view) return void cancel(`story:${view.id}`);
+              if (speech.listening) return void speech.stop();
               if (interactive(e.target)) return false;
               telling = false;
             },
@@ -566,6 +593,9 @@
             <p class="asked">{turn.asked}</p>
           </article>
           <p class="bubble">{turn.answer}</p>
+          {#if turn.spoken}
+            <p class="meta said num">{spokenLine(turn.spoken)}</p>
+          {/if}
           <FeedbackCard
             feedback={turn.feedback}
             {line}
@@ -597,7 +627,9 @@
       </div>
       <div class="foot">
         <div class="foot__row">
-          <span class="meta next">{answered ? "Tell it again with R" : "Tell it as you would out loud"}</span>
+          <span class="meta next"
+            >{answered ? "Tell it again with R" : speech.off ? "Tell it as you would out loud" : "Say it with ⌘D, or type it"}</span
+          >
           <Button
             variant={answered ? "primary" : "ghost"}
             size="sm"
@@ -611,24 +643,34 @@
           <Textarea
             bind:this={field}
             bind:value={answer}
-            placeholder={answered ? "Tell it again, or go back with Esc" : "Your telling…"}
+            placeholder={speech.listening ? "Listening…" : answered ? "Tell it again, or go back with Esc" : "Your telling…"}
             rows={3}
             aria-label="Your telling"
             disabled={reading !== null}
+            readonly={speech.listening}
             onkeydown={onFieldKey}
           />
           <div class="composer__bar">
             <KeyFooter keys={TELL_KEYS} bare />
-            <Button
-              variant="primary"
-              size="sm"
-              square
-              icon={ArrowUp}
-              aria-label="Send your telling"
-              {@attach tip("Send your telling (⏎)")}
-              disabled={!answer.trim() || reading !== null}
-              onclick={() => void send()}
-            />
+            <div class="composer__send">
+              <SpeakButton
+                openedAt={speech.openedAt}
+                busy={reading !== null || speech.busy}
+                off={speech.off}
+                kbd="⌘D"
+                onclick={speak}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                square
+                icon={ArrowUp}
+                aria-label="Send your telling"
+                {@attach tip("Send your telling (⏎)")}
+                disabled={!answer.trim() || reading !== null || speech.busy}
+                onclick={() => void send()}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1041,6 +1083,12 @@
     white-space: pre-wrap;
     text-wrap: pretty;
   }
+  /* Said out loud: how long it took, under the bubble at its edge. */
+  .said {
+    align-self: flex-end;
+    margin: calc(var(--space-3) * -1) 0 0;
+    color: var(--ink-3);
+  }
   .reading {
     padding-inline: var(--space-1);
   }
@@ -1087,6 +1135,11 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
+  }
+  .composer__send {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
   }
 
   /* Placeholders while the story loads: static, no shimmer. */

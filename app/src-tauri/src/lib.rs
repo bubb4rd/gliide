@@ -26,6 +26,7 @@ pub mod prep;
 pub mod review;
 pub mod rounds;
 pub mod settings;
+pub mod speech;
 pub mod state;
 pub mod stories;
 pub mod update;
@@ -155,6 +156,11 @@ pub fn run() {
             commands::keep_claim,
             commands::tell_story,
             commands::story_turns,
+            commands::speech_status,
+            commands::start_listening,
+            commands::stop_listening,
+            commands::cancel_listening,
+            commands::open_speech_settings,
             commands::stories,
             commands::story,
             commands::save_story,

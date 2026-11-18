@@ -54,8 +54,40 @@ window-vibrancy = "0.8"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSString", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSArray",
+    "NSBundle",
+    "NSError",
+    "NSOperation",
+    "NSString",
+    "NSURL",
+] }
 objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument"] }
+# Spoken practice: the microphone (AVFAudio's engine and its permission) heard by Speech on this Mac.
+objc2-avf-audio = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "AVAudioApplication",
+    "AVAudioBuffer",
+    "AVAudioEngine",
+    "AVAudioFormat",
+    "AVAudioIONode",
+    "AVAudioNode",
+    "AVAudioTime",
+    "AVAudioTypes",
+] }
+objc2-speech = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-avf-audio",
+    "SFSpeechRecognitionRequest",
+    "SFSpeechRecognitionResult",
+    "SFSpeechRecognitionTask",
+    "SFSpeechRecognitionTaskHint",
+    "SFSpeechRecognizer",
+    "SFTranscription",
+] }
 # The feed's launchd agent (Settings → Feed, Pull while gliide is closed): registered with SMAppService.
 objc2-service-management = { version = "0.3", default-features = false, features = [
     "std",

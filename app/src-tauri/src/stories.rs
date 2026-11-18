@@ -16,7 +16,7 @@ use resume_llm::prep::SentResume;
 use resume_store::PracticeRow;
 
 use crate::dto::{
-    Feature, PracticeTurn, Stage, StoriesView, StoryDraft, StoryLink, StorySource, StoryTheme,
+    Feature, PracticeTurn, Spoken, Stage, StoriesView, StoryDraft, StoryLink, StorySource, StoryTheme,
     StoryUse, StoryView,
 };
 use crate::error::{AppError, Result};
@@ -139,12 +139,14 @@ pub fn remove_story(app: &App, id: &str) -> Result<()> {
 }
 
 /// One model call: `answer` to `asked` (a question the story answers), telling story `story` alone, read back against
-/// its entry as the bank holds it, and kept as a practice turn with no round.
+/// its entry as the bank holds it, and kept as a practice turn with no round (with how long it took to say and its
+/// words, when `spoken`).
 pub async fn tell_story(
     app: &Arc<App>,
     story: &str,
     asked: String,
     answer: String,
+    spoken: Option<Spoken>,
 ) -> Result<PracticeTurn> {
     let answer = answer.trim().to_owned();
     if answer.is_empty() {
@@ -208,6 +210,10 @@ pub async fn tell_story(
         asked,
         answer,
         feedback: serde_json::to_string(&f)?,
+        spoken: spoken.map(|s| resume_store::Spoken {
+            ms: s.ms,
+            words: s.words,
+        }),
         at: String::new(),
     };
     let stored = blocking(app, move |app| Ok(lock(&app.store).add_practice(&row)?)).await?;
