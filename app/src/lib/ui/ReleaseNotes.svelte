@@ -21,7 +21,9 @@
       .split(/\n+/)
       .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim())
       .filter(Boolean);
-    const items = lines.length > 1 ? lines : lines.flatMap((l) => l.split(/(?<=[.!?])\s+(?=[A-Z0-9“"(])/));
+    // No lookbehind: WebKit before Safari 16.4 rejects it, and with it the whole chunk this sits in.
+    const sentences = (l: string) => l.replace(/([.!?])\s+(?=[A-Z0-9“"(])/g, "$1\n").split("\n");
+    const items = lines.length > 1 ? lines : lines.flatMap(sentences);
     return items.map((item) => {
       const at = item.indexOf(": ");
       if (at <= 0 || at > LEAD_MAX) return { lead: null, text: item };

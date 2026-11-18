@@ -37,9 +37,20 @@
   let body = $state<HTMLElement>();
   /** A press that started on the scrim: only then does its click close the sheet (not a drag out of a field). */
   let fromScrim = false;
+  /** What had focus before the sheet opened. */
+  let opener: HTMLElement | null = null;
 
   $effect(() => {
-    if (dialog && !dialog.open) dialog.showModal();
+    if (dialog && !dialog.open) {
+      opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      dialog.showModal();
+    }
+  });
+
+  // However it closes, focus goes back where it was. `close()` does that natively; unmounted while open (⌘, again,
+  // leaving the screen) the dialog is gone before it can, so the sheet does it.
+  $effect(() => () => {
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
   });
 
   $effect(() => {

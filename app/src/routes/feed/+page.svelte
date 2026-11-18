@@ -331,7 +331,7 @@
       body="Turn it on in Settings to pull new postings from freehire and your other sources several times a day."
     >
       {#snippet action()}
-        <Button variant="primary" size="lg" kbd="⌘," onclick={() => shell.openSettings("feed")}>Open Settings</Button>
+        <Button variant="primary" size="lg" onclick={() => shell.openSettings("feed")}>Open Settings</Button>
       {/snippet}
     </Empty>
   </div>
