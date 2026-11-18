@@ -1,21 +1,8 @@
-//! The cover letter's template (`templates/cover-letter`) and the data it reads. It renders
-//! through a [`Renderer`](crate::Renderer) like a resume: `render(json, false)`, then `metrics.pages`, SVG pages and
-//! the PDF.
+//! The data a cover letter template (a built-in's `letter.typ`, [`Template::built_in_letter`](crate::Template)) reads.
+//! It renders through a [`Renderer`](crate::Renderer) like a resume: `render(json, false)`, then `metrics.pages`, SVG
+//! pages and the PDF.
 
 use serde::Serialize;
-
-use crate::{Manifest, Template};
-
-/// `templates/cover-letter`, built in.
-pub fn template() -> Template {
-    Template {
-        source: include_str!("../../../templates/cover-letter/letter.typ").to_owned(),
-        manifest: serde_json::from_str::<Manifest>(include_str!(
-            "../../../templates/cover-letter/manifest.json"
-        ))
-        .expect("cover-letter manifest is valid"),
-    }
-}
 
 /// What the letter template reads (`sys.inputs.data`, as JSON).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -41,20 +28,26 @@ pub struct LetterContact<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{LetterContact, LetterData, template};
-    use crate::{FontOptions, Renderer};
+    use super::{LetterContact, LetterData};
+    use crate::{FontOptions, Renderer, Template};
 
     #[test]
-    fn a_long_letter_reports_its_pages() {
-        let mut renderer = Renderer::new(&template(), FontOptions::default());
+    fn every_built_in_letter_renders_and_reports_its_pages() {
         let short = vec!["One paragraph.".to_owned(); 3];
+        let long = vec!["A sentence that runs on and on. ".repeat(40); 4];
         let data = |paragraphs: &[String]| {
             serde_json::to_string(&LetterData {
                 name: "Jane Doe",
-                contact: vec![LetterContact {
-                    text: "jane@example.com",
-                    url: "mailto:jane@example.com",
-                }],
+                contact: vec![
+                    LetterContact {
+                        text: "jane@example.com",
+                        url: "mailto:jane@example.com",
+                    },
+                    LetterContact {
+                        text: "github.com/jane",
+                        url: "https://github.com/jane",
+                    },
+                ],
                 date: "October 13, 2026",
                 company: "Acme",
                 role: "Software Engineer",
@@ -64,12 +57,22 @@ mod tests {
             })
             .unwrap()
         };
-        let one = renderer.render(&data(&short), false).unwrap();
-        assert_eq!(one.metrics.pages, 1);
-        let long = vec!["A sentence that runs on and on. ".repeat(40); 4];
-        assert_eq!(
-            renderer.render(&data(&long), false).unwrap().metrics.pages,
-            2
-        );
+        for name in Template::BUILT_IN {
+            let letter = Template::built_in_letter(name).unwrap();
+            let mut renderer = Renderer::new(&letter, FontOptions::default());
+            let one = renderer.render(&data(&short), false).unwrap();
+            assert_eq!(one.metrics.pages, 1, "{name}");
+            let text = one.pdf_text().unwrap();
+            for part in [
+                "Jane Doe",
+                "github.com/jane",
+                "Re: Software Engineer",
+                "Sincerely,",
+            ] {
+                assert!(text.contains(part), "{name}: {part:?} not in {text}");
+            }
+            let pages = renderer.render(&data(&long), false).unwrap().metrics.pages;
+            assert_eq!(pages, 2, "{name}");
+        }
     }
 }

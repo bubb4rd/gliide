@@ -1,22 +1,21 @@
 //! The open review's cover letter: written by the model from the tailored resume as the
 //! draft has it now (your toggles and edits included) and the posting; each part yours to edit; one paragraph
-//! rewritten with a note; rendered under the resume's letterhead by one warm renderer. Stored per analysis.
+//! rewritten with a note; rendered under the resume's letterhead (its master's template's `letter.typ`) by a warm
+//! renderer per template. Stored per analysis.
 
+use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
 use resume_core::Resume;
 use resume_llm::cover::{self, CoverInput};
 use resume_render::cover::{LetterContact, LetterData};
-use resume_render::{FontOptions, Renderer};
+use resume_render::{FontOptions, Renderer, Template};
 use resume_store::Cover;
 
 use crate::dto::{CoverPart, CoverView, Feature, Letter, Stage};
 use crate::error::{AppError, Result};
 use crate::review::Review;
 use crate::state::{App, blocking, lock, model_call};
-
-/// The letter's renderer's key in [`App::renderers`] (beside the resume templates').
-const TEMPLATE: &str = "cover-letter";
 
 /// What a model call reads, copied out of the open review so no lock is held across it.
 struct Job {
@@ -85,7 +84,8 @@ fn job(app: &App, review: &str) -> Result<Job> {
     })
 }
 
-/// `letter` compiled under the review's letterhead, dated today, through the warm letter renderer.
+/// `letter` compiled under the review's letterhead (its master's template's letter), dated today, through that
+/// template's warm letter renderer.
 pub fn render<T>(
     app: &App,
     r: &Review,
@@ -112,10 +112,17 @@ pub fn render<T>(
         closing: &letter.closing,
     };
     let json = serde_json::to_string(&data)?;
+    let template = &r.master.template;
     let mut pool = lock(&app.renderers);
-    let renderer = pool.entry(TEMPLATE.to_owned()).or_insert_with(|| {
-        Renderer::new(&resume_render::cover::template(), FontOptions::default())
-    });
+    // Keyed beside the resume templates' renderers in [`App::renderers`].
+    let renderer = match pool.entry(format!("{template}/letter")) {
+        Entry::Occupied(e) => e.into_mut(),
+        Entry::Vacant(e) => {
+            let letter = Template::built_in_letter(template)
+                .ok_or_else(|| AppError::other(format!("There's no template “{template}”")))?;
+            e.insert(Renderer::new(&letter, FontOptions::default()))
+        }
+    };
     f(&renderer.render(&json, false)?)
 }
 
