@@ -12,6 +12,9 @@ is fine on the machine that built it.
    the `.dmg`, `gliide.app.tar.gz` (with its `.sig`) and `latest.json`.
 3. Attach all three to the GitHub release `vX.Y.Z`, marked latest (the script prints the `gh release create`
    line). Installed copies read `releases/latest/download/latest.json`, so a release without it updates no one.
+   The release's notes are also what the first launch on the new version shows (What's new); attach its picture as
+   `whats-new.webp` (or `.png`, `.jpg`): 640×336, nothing that matters in its lower 40%, which fades into the card.
+   Without one, the card shows the app icon.
 
 ## The update key
 

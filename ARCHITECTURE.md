@@ -200,6 +200,13 @@ percent in the `update` event), checks it, swaps the app in place and relaunches
 `current`, `available`, `notes`, `released`, `state` (idle, checking, installing), `progress`, `checkedAt`, `error`.
 Builds before 0.10.0 checked a minute after launch and said so only in the sidebar's foot and About.
 
+**What's new** (`app/src-tauri/src/whats_new.rs`): the first launch on a version newer than the store's
+`whats_new_seen` setting asks GitHub's API for that version's release (`releases/tags/vX.Y.Z`: its body, date,
+link, and a `whats-new.webp`/`.png`/`.jpg` asset as its picture, read as bytes and shown as a blob URL) and shows
+it as the `WhatsNew` card on the Overview; Got it records the version. Nothing is cached: offline or rate-limited,
+the next launch asks again. A fresh install (setup not done) records its version without showing it; a release with
+no notes is recorded too; versions skipped between launches aren't shown.
+
 ## 2. Data model: an experience bank and masters
 
 ### The bank

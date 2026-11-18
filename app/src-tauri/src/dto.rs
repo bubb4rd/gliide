@@ -544,6 +544,31 @@ pub enum UpdateState {
     Installing,
 }
 
+/// The running version's release, shown once on its first launch (`whats_new.rs`, the `WhatsNew` card).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WhatsNew {
+    pub version: String,
+    /// When it was published, RFC 3339.
+    pub date: Option<String>,
+    /// The release's notes, as `ReleaseNotes` reads them.
+    pub notes: String,
+    /// The release on GitHub.
+    pub url: String,
+    /// The release's picture, when it carries one.
+    pub picture: Option<Picture>,
+}
+
+/// An image's bytes and media type, for the UI to show as a blob.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Picture {
+    pub bytes: Vec<u8>,
+    pub media_type: String,
+}
+
 /// What Settings → About and the sidebar show about updates (`update.rs`); the `update` event carries it.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, TS)]
 #[serde(rename_all = "camelCase")]

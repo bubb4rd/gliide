@@ -92,19 +92,45 @@ impl HttpFetcher {
         {
             return Ok(None);
         }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = resp
-            .chunk()
-            .await
-            .map_err(|e| network_message(&e, TIMEOUT))?
-        {
-            if bytes.len() + chunk.len() > max_bytes {
-                return Ok(None);
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        Ok(Some((bytes, media_type)))
+        Ok(read_capped(&mut resp, max_bytes)
+            .await?
+            .map(|bytes| (bytes, media_type)))
     }
+
+    /// GETs a file whatever type it's served as (a GitHub release asset comes as `application/octet-stream`): its
+    /// bytes. `None` for any status but 200 or a body over `max_bytes`; `Err` is a network failure, as a message.
+    pub async fn get_file(&self, url: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, String> {
+        let mut resp = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| network_message(&e, TIMEOUT))?;
+        let too_long = resp.content_length().is_some_and(|n| n > max_bytes as u64);
+        if resp.status() != reqwest::StatusCode::OK || too_long {
+            return Ok(None);
+        }
+        read_capped(&mut resp, max_bytes).await
+    }
+}
+
+/// The body, or `None` once it passes `max_bytes`.
+async fn read_capped(
+    resp: &mut reqwest::Response,
+    max_bytes: usize,
+) -> Result<Option<Vec<u8>>, String> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| network_message(&e, TIMEOUT))?
+    {
+        if bytes.len() + chunk.len() > max_bytes {
+            return Ok(None);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(Some(bytes))
 }
 
 impl Default for HttpFetcher {

@@ -3,7 +3,8 @@
   over its changes as a dotted list: the notes' lines when there are several (a leading -, * or • dropped), else their
   sentences. A change that opens with a short lead before a colon ("See what your model calls cost: Settings → Usage
   shows…") is a title (500, ink) over the rest (ink 2); any other is a line in ink 2. Without a version, the list
-  alone (Settings → About, under where updates stand).
+  alone (Settings → About, under where updates stand). `limit` folds it to its first changes (the rest hidden, for a
+  toggle elsewhere that names the list by `id`: `WhatsNew`).
 -->
 <script module lang="ts">
   interface ReleaseChange {
@@ -16,7 +17,7 @@
   const LEAD_MAX = 48;
 
   /** The changes in a release's notes: each line when there are several, else each sentence. */
-  function releaseChanges(notes: string): ReleaseChange[] {
+  export function releaseChanges(notes: string): ReleaseChange[] {
     const lines = notes
       .split(/\n+/)
       .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim())
@@ -40,9 +41,13 @@
     version?: string | null;
     /** When it was published (RFC 3339). */
     date?: string | null;
+    /** Show only the first this many changes; the rest stay in the list, hidden. */
+    limit?: number | null;
+    /** The list's id, for the toggle that unfolds it (`aria-controls`). */
+    id?: string;
   }
 
-  let { notes, version = null, date = null }: Props = $props();
+  let { notes, version = null, date = null, limit = null, id }: Props = $props();
 
   const changes = $derived(releaseChanges(notes));
   const day = $derived(
@@ -57,9 +62,9 @@
       {#if day && date}<time class="meta num" datetime={date}>{day}</time>{/if}
     </header>
   {/if}
-  <ul class="changes">
+  <ul class="changes" {id}>
     {#each changes as change, i (i)}
-      <li>
+      <li hidden={limit !== null && i >= limit}>
         {#if change.lead}<span class="lead">{change.lead}</span>{/if}
         <span class="text">{change.text}</span>
       </li>
@@ -105,6 +110,9 @@
     font-size: var(--text-base);
     line-height: var(--leading-base);
     text-wrap: pretty;
+  }
+  li[hidden] {
+    display: none;
   }
   li::before {
     content: "";

@@ -4,11 +4,14 @@
   opens on the first-run setup (`/welcome`), which has no sidebar, nor has the import review it opens; until settings
   and the library are in (and with them whether the setup is due), the window is paper. When gliide couldn't open its
   data at launch, the window shows `Startup` alone, without the sidebar. Settings is a modal sheet over whichever
-  screen is showing (`shell.settings`), opened by ⌘, and the sidebar's Settings, update and agent rows.
+  screen is showing (`shell.settings`), opened by ⌘, and the sidebar's Settings, update and agent rows. The first
+  launch on a new version shows that release's `WhatsNew` in the main area's lower right, on the Overview (elsewhere
+  it would cover a composer), until Got it, × or Esc.
 -->
 <script lang="ts">
   import "../app.css";
   import { onMount, type Snippet } from "svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { dev } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -20,7 +23,16 @@
   import Palette from "@lucide/svelte/icons/palette";
   import Rss from "@lucide/svelte/icons/rss";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import { onNotification, startupProblem, type AgentStatus, type Stage, type StartupProblem } from "$lib/api";
+  import {
+    dismissWhatsNew,
+    onNotification,
+    startupProblem,
+    whatsNew,
+    type AgentStatus,
+    type Stage,
+    type StartupProblem,
+    type WhatsNew as Release,
+  } from "$lib/api";
   import { bindKeys } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { benchmark } from "$lib/stores/benchmark.svelte";
@@ -29,7 +41,7 @@
   import { jobFit } from "$lib/fit";
   import { STATUS } from "$lib/status";
   import { when } from "$lib/rounds";
-  import { AgentMark, CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, tip } from "$lib/ui";
+  import { AgentMark, CompanyMark, Nav, NavItem, ScoreBar, Toaster, Tooltips, WhatsNew, tip } from "$lib/ui";
   import Startup from "./Startup.svelte";
   import Settings from "./settings/Settings.svelte";
 
@@ -91,6 +103,7 @@
         void app
           .load()
           .then(() => (app.setupDue && path !== SETUP ? goto(SETUP, { replaceState: true }) : undefined))
+          .then(() => void (app.setupDue ? undefined : showWhatsNew()))
           .finally(() => (ready = true));
         void feed.refresh();
         // A round's banner clicked: its job (or its debrief). A benchmark run's status: the rail's count.
@@ -101,8 +114,30 @@
           onNotification((to) => void goto(to)),
         ]);
       });
-    return () => void stops?.then((all) => all.forEach((stop) => stop()));
+    return () => {
+      void stops?.then((all) => all.forEach((stop) => stop()));
+      if (release?.picture) URL.revokeObjectURL(release.picture);
+    };
   });
+
+  /** The running version's release, while its notes are due; `picture` as a blob URL. */
+  let release = $state<(Omit<Release, "picture"> & { picture: string | null }) | null>(null);
+  async function showWhatsNew() {
+    const r = await whatsNew().catch(() => null);
+    if (!r) return;
+    const picture = r.picture
+      ? URL.createObjectURL(new Blob([new Uint8Array(r.picture.bytes)], { type: r.picture.mediaType }))
+      : null;
+    release = { ...r, picture };
+  }
+  function dismissRelease() {
+    if (!release) return;
+    void dismissWhatsNew(release.version);
+    const picture = release.picture;
+    release = null;
+    // After its exit, so the picture shows until the card is gone.
+    if (picture) setTimeout(() => URL.revokeObjectURL(picture), 1000);
+  }
 
   // Leaving a screen closes the compact sheet, and Settings (a banner's click goes to a job).
   $effect(() => {
@@ -123,6 +158,9 @@
 
   const SETUP = "/welcome";
   const path = $derived<string>(page.url.pathname);
+  const releaseShown = $derived(release !== null && path === "/");
+  // Esc closes it, after anything newer that takes Esc first (a field, a menu, the Settings sheet).
+  $effect(() => (releaseShown ? bindKeys({ Escape: dismissRelease }) : undefined));
   const within = (href: string) => path === href || path.startsWith(`${href}/`);
   const count = (n: number | undefined) => (n ? n : null);
   const bare = $derived(
@@ -283,10 +321,30 @@
     {#if ready && !problem && shell.settings}<Settings />{/if}
     <Toaster />
     <Tooltips />
+    {#if release && releaseShown}
+      <div class="whats-new">
+        <WhatsNew
+          version={release.version}
+          date={release.date}
+          notes={release.notes}
+          picture={release.picture}
+          onrelease={() => void openUrl(release!.url)}
+          ondismiss={dismissRelease}
+        />
+      </div>
+    {/if}
   </main>
 </div>
 
 <style>
+  /* What's new: 12px in from the main area's lower right, growing up to 12px under the toolbar at most. */
+  .whats-new {
+    position: absolute;
+    z-index: 20;
+    inset-inline-end: var(--space-3);
+    inset-block-end: var(--space-3);
+    --wn-room: calc(100vh - var(--toolbar-height) - var(--space-3) * 2);
+  }
   .window {
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);

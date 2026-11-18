@@ -100,6 +100,18 @@ pub async fn install_update(app: AppHandle) -> Res<()> {
     update::install(&app).await
 }
 
+/// The running version's release when its notes are due (the first launch on it), else `None`.
+#[tauri::command]
+pub async fn whats_new(app: St<'_>) -> Res<Option<crate::dto::WhatsNew>> {
+    crate::whats_new::whats_new(&app).await
+}
+
+/// Got it: `version`'s notes don't show again.
+#[tauri::command]
+pub async fn dismiss_whats_new(app: St<'_>, version: String) -> Res<()> {
+    crate::whats_new::dismiss(&app, version).await
+}
+
 // ── Bank and masters ──
 
 #[tauri::command]

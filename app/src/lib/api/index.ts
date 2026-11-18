@@ -71,6 +71,7 @@ import type { StoryDraft } from "./bindings/StoryDraft";
 import type { StoryView } from "./bindings/StoryView";
 import type { UpdateStatus } from "./bindings/UpdateStatus";
 import type { UsageView } from "./bindings/UsageView";
+import type { WhatsNew } from "./bindings/WhatsNew";
 
 export type * from "./bindings/Accepted";
 export type * from "./bindings/Agent";
@@ -171,6 +172,7 @@ export type * from "./bindings/NoteLine";
 export type * from "./bindings/NotificationPermission";
 export type * from "./bindings/Notifications";
 export type * from "./bindings/Nudge";
+export type * from "./bindings/Picture";
 export type * from "./bindings/Place";
 export type * from "./bindings/PracticeTurn";
 export type * from "./bindings/PrepGap";
@@ -226,6 +228,7 @@ export type * from "./bindings/UpdateState";
 export type * from "./bindings/UpdateStatus";
 export type * from "./bindings/UsageDay";
 export type * from "./bindings/UsageView";
+export type * from "./bindings/WhatsNew";
 export type * from "./bindings/Verdict";
 export type * from "./bindings/WatchBoard";
 export type * from "./bindings/WordingView";
@@ -274,6 +277,11 @@ export const updateStatus = () => invoke<UpdateStatus>("update_status");
 export const checkUpdate = () => invoke<UpdateStatus>("check_update");
 /** Downloads and installs the release the last check found, then relaunches; rejects only when that failed. */
 export const installUpdate = () => invoke<void>("install_update");
+/** The running version's release when its notes are due (its first launch; GitHub asked, so it may take a moment),
+ *  else `null`. */
+export const whatsNew = () => invoke<WhatsNew | null>("whats_new");
+/** Got it: `version`'s notes don't show again. */
+export const dismissWhatsNew = (version: string) => invoke<void>("dismiss_whats_new", { version });
 
 // ── Bank and masters ──
 export const library = () => invoke<Library>("library");

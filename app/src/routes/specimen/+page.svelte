@@ -91,6 +91,7 @@
     toast,
     exit,
     WorkingRing,
+    WhatsNew,
     type TableColumn,
     type TableSort,
   } from "$lib/ui";
@@ -132,6 +133,16 @@
   /** Release notes as published: one paragraph, a change a sentence, some with a lead before a colon. */
   const RELEASE_PROSE =
     "Choose who does what: reading postings, tailoring, cover letters and interview coaching can each run on their own agent and model (Settings → Agents), with Fastest and Best edits presets. Settings opens over any screen. Postings now list the industry they ask for, and rewrites that run a line long are shortened to fit.";
+  /** A release's notes for What's new: seven changes, two with leads, so it folds. */
+  const WHATS_NEW = [
+    "- Practice out loud: Speak (⌘D) hears your answer on this Mac and keeps how long you took.",
+    "- Pull while closed: the feed can pull every 3 hours while gliide is closed (Settings → Feed).",
+    "- Tell it hears a story out loud too, beside how long it should take.",
+    "- Release notes open once on a new version, with the release’s picture.",
+    "- The microphone and speech recognition are asked for only when you first press Speak.",
+    "- The feed skips a pull when one ran in the last 3 hours.",
+    "- Fixes: Settings → Feed reads its state again when the window comes back.",
+  ].join("\n");
   /** Release notes as lines, longer than a showcase's room, so its card scrolls. */
   const RELEASE_LINES = [
     "- Interview prep: your practice is kept between launches.",
@@ -1976,6 +1987,45 @@
       </Card>
     </section>
 
+    <!-- ═══════════ What's new ═══════════ -->
+    <section class="section">
+      <h2 class="title">What’s new</h2>
+      <p class="meta lede">
+        The first launch on a new version, once: the release’s picture fading into the card with the title on it, then
+        its notes folded to two (Show n more; three or fewer show whole). Unfolded, it grows to 560px (here capped at
+        320) and the notes scroll, hairlines where content runs under. Without a picture, the app icon. Floats in the
+        window’s lower right; Got it, × or Esc closes it.
+      </p>
+      <div class="whats-new">
+        <WhatsNew
+          version="0.11.0"
+          date="2026-11-17T16:49:53Z"
+          notes={WHATS_NEW}
+          picture="/backdrops/meadow.webp"
+          onrelease={() => toast("Opens the release on GitHub")}
+          ondismiss={() => toast("Got it")}
+        />
+        <div style:--wn-room="320px">
+          <WhatsNew
+            version="0.10.0"
+            date="2026-11-17T16:49:53Z"
+            notes={WHATS_NEW}
+            picture="/backdrops/sakura.webp"
+            onrelease={() => {}}
+            ondismiss={() => {}}
+          />
+        </div>
+        <WhatsNew
+          version="0.10.1"
+          date="2026-11-09T16:49:53Z"
+          notes={"- Modern sans keeps a role’s dates on one line when the company name is long.\n- Fixes: Benchmark’s chart no longer clips its tallest bar."}
+          picture={null}
+          onrelease={() => {}}
+          ondismiss={() => {}}
+        />
+      </div>
+    </section>
+
     <!-- ═══════════ Tooltips ═══════════ -->
     <section class="section">
       <h2 class="title">Tooltips</h2>
@@ -2627,6 +2677,12 @@
   }
   .showcase-frame {
     height: 360px;
+  }
+  .whats-new {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-6);
   }
   .release-samples {
     display: grid;

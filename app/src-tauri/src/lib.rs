@@ -31,6 +31,7 @@ pub mod state;
 pub mod stories;
 pub mod update;
 pub mod usage;
+pub mod whats_new;
 mod view;
 mod window;
 
@@ -96,6 +97,8 @@ pub fn run() {
             commands::open_notification_settings,
             commands::update_status,
             commands::check_update,
+            commands::whats_new,
+            commands::dismiss_whats_new,
             commands::install_update,
             commands::startup_problem,
             commands::relaunch,
