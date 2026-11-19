@@ -836,6 +836,9 @@
     pt("sonnet", "anthropic", "Sonnet", 2.04, 78.1),
     pt("hydrogen", "google", "Gemini 4 Hydrogen", 14.6, 75.8, true),
     pt("luna", "openai", "GPT-6 Luna", 0.11, 61.4),
+    pt("argon-medium", "google", "Gemini 4 Argon (Medium)", 4.25, 80.6),
+    pt("argon-low", "google", "Gemini 4 Argon (Low)", 3.85, 73.4),
+    pt("neon-low", "google", "Gemini 4 Neon (Low)", 3.6, 77.6),
   ];
   const scY = { min: 50, max: 90, ticks: [50, 60, 70, 80, 90], format: (v: number) => String(v) };
   const scCost = {
@@ -2074,7 +2077,7 @@
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">Scatter: log x, quadrant, frontier, hollow, crowded labels</p>
+            <p class="label">Scatter: log x, quadrant, frontier, hollow, crowded labels, one left off</p>
             <Scatter
               points={scatterPoints}
               x={scCost}

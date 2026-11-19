@@ -3,7 +3,8 @@
   Hairline grid rows at the y ticks with their values in ink 3 at the start, the baseline in `--line-strong`, the x
   ticks under it and the x axis's title under those (ink 3, centered). A point is a 9px dot in its series color
   (`hollow`: a ring, for one with a stand-in in it) on a 20px hit area, its label (11px, ink 2) beside it wherever it
-  hits no other label, point or edge (right, left, above, below, then the corners). Optional: a `quadrant` from the
+  hits no other label, point or edge (right, left, above, below, then the corners; none where every spot does, its
+  tip still naming it). Optional: a `quadrant` from the
   start to `x` and from the top to `y`, washed in `--hover`, its label in ink 3 (where "better on both" is); a
   `frontier`, the points no other beats on both, joined by a dashed `--ink-3` line; a `target`, a dashed rule up from
   the x axis, "target" by its foot. Hovering a point opens its `tip`; one tab stop: arrows, Home and End move between
@@ -94,7 +95,10 @@
 
   type Placed = { anchor: "start" | "end" | "middle"; lx: number; ly: number };
 
-  /** Each point's label where it hits nothing: greedy, in the order given (the first gets the first pick). */
+  /**
+   * Each point's label where it hits nothing: greedy, in the order given (the first gets the first pick). A point with
+   * no free spot goes unlabeled; its tip and accessible name still say what it is.
+   */
   const placed = $derived.by((): Map<string, Placed> => {
     const out = new Map<string, Placed>();
     if (!width) return out;
@@ -124,16 +128,14 @@
         ["end", px - 8, py - 8],
         ["end", px - 8, py + 16],
       ];
-      let pick = spots[0];
-      let box: [number, number, number, number] = [0, 0, 0, 0];
       for (const s of spots) {
         const left = s[0] === "start" ? s[1] : s[0] === "end" ? s[1] - w : s[1] - w / 2;
-        box = [left, s[2] - 10, left + w, s[2] + 3];
-        pick = s;
-        if (!clash(box)) break;
+        const box: [number, number, number, number] = [left, s[2] - 10, left + w, s[2] + 3];
+        if (clash(box)) continue;
+        boxes.push(box);
+        out.set(p.key, { anchor: s[0], lx: s[1], ly: s[2] });
+        break;
       }
-      boxes.push(box);
-      out.set(p.key, { anchor: pick[0], lx: pick[1], ly: pick[2] });
     }
     return out;
   });
