@@ -987,6 +987,22 @@ seconds, 3 runs a posting for Reading and Tailoring, Hydrogen on 4 postings):
 
 Only sonnet and Flash Low meet Reading's 8 s; opus and Hydrogen miss Tailoring's 30 s.
 
+On 2026-11-19 (`local/eval/2026-11-19-gemini`), the other Gemini 4 models on Hydrogen High's plan: 4 postings × 3 for
+Reading and Tailoring, the 12 once for Writing and Coaching prep, Dig not run. The routes ran side by side, so their
+times may run a little long. XHigh and Flash High timed out on Reading's 180 s.
+
+| Route | Reading | Tailoring (bank-aware) | Writing | Coaching: prep |
+|---|---|---|---|---|
+| `antigravity:gemini-4-neon-low` | 24.4 / 27.6 | 38.4 / 50.3 | 22.3 / 31.2 | 28.7 / 50.0 |
+| `antigravity:gemini-4-neon-medium` | 46.7 / 63.7 | 76.6 / 113.3 | 43.2 / 51.0 | 51.9 / 71.2 |
+| `antigravity:gemini-4-neon-high` | 103.9 / 166.8 | 195.7 / 255.7 | 91.1 / 120.3 | 110.4 / 139.7 |
+| `antigravity:gemini-4-argon-low` | 12.8 / 14.4 | 16.6 / 24.5 | 11.5 / 12.5 | 28.5 / 49.8 |
+| `antigravity:gemini-4-argon-medium` | 18.4 / 26.7 | 22.6 / 40.4 | 20.1 / 24.4 | 30.2 / 48.7 |
+| `antigravity:gemini-4-hydrogen-low` | 10.7 / 12.5 | 15.1 / 20.3 | 10.8 / 12.3 | 16.0 / 21.8 |
+| `antigravity:gemini-4-hydrogen-medium` | 23.5 / 28.4 | 34.6 / 44.3 | 22.3 / 24.2 | 22.4 / 37.2 |
+
+None meets Reading's 8 s. Hydrogen Low, Argon Low and Argon Medium meet Tailoring's 30 s.
+
 ### Benchmark (Settings → Benchmark)
 
 The same suite, in the app: a leaderboard per role of every route (an agent and model), so you can see which does
