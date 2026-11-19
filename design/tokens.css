@@ -80,6 +80,12 @@
   --accent-step-4: var(--accent);
   /* A chart's other marks while one is in hand (BarChart): they step back, still read. */
   --data-dim: 0.45;
+  /* A model's maker as a chart's series (Settings → Benchmark): its logo's own hue, so a mark matches the logo beside
+     its name (the logo exception, carried into the mark). OpenAI's is graphite, as its mark is; never green, which
+     means gain. Each ≥3:1 on --surface and --paper, and apart from the others in hue or lightness. */
+  --maker-anthropic: oklch(0.6 0.15 40);
+  --maker-google: oklch(0.56 0.18 258);
+  --maker-openai: oklch(0.38 0.01 85);
 
   /* ── Meaning ── */
   --gain: oklch(0.52 0.13 150);            /* score gain, "you have it", applied */
@@ -228,6 +234,9 @@
   --accent-step-3: color-mix(in oklab, var(--accent) 85%, var(--sunken));
   /* On charcoal the steps start darker, so dimmed marks keep more of their light. */
   --data-dim: 0.6;
+  --maker-anthropic: oklch(0.72 0.14 40);
+  --maker-google: oklch(0.7 0.15 258);
+  --maker-openai: oklch(0.86 0.005 85);
   --gain: oklch(0.76 0.15 150);
   --gain-text: oklch(0.76 0.15 150);
   --gain-soft: oklch(0.26 0.05 150);
@@ -255,7 +264,8 @@
 }
 
 /*
- * Forced colors: the data steps become Highlight at stepped opacity over Canvas. An element painted with them sets
+ * Forced colors: the data steps become Highlight at stepped opacity over Canvas; the makers' series CanvasText (their
+ * labels and logos tell them apart). An element painted with them sets
  * `forced-color-adjust: none`.
  */
 @media (forced-colors: active) {
@@ -265,5 +275,8 @@
     --accent-step-2: color-mix(in srgb, Highlight 60%, Canvas);
     --accent-step-3: color-mix(in srgb, Highlight 80%, Canvas);
     --accent-step-4: Highlight;
+    --maker-anthropic: CanvasText;
+    --maker-google: CanvasText;
+    --maker-openai: CanvasText;
   }
 }

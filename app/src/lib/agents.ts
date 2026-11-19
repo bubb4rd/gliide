@@ -103,9 +103,21 @@ export const PRESETS: Preset[] = [
  * and o-series ones, Gemini's for Gemini; null for any other, so the caller shows the agent's own icon.
  */
 export function makerIcon(model: string): string | null {
+  return makerOf(model)?.icon ?? null;
+}
+
+/** A model's maker: its name, its icon, and the `--maker-*` token its marks are drawn in on a chart. */
+export interface Maker {
+  id: "anthropic" | "openai" | "google";
+  name: string;
+  icon: string;
+}
+
+/** The company that made `model` (an id, alias or name), as `makerIcon` reads it; null for any other. */
+export function makerOf(model: string): Maker | null {
   const id = model.trim().toLowerCase();
-  if (/^(claude|sonnet|opus|haiku)\b/.test(id)) return "/agents/claude.png";
-  if (/^(gpt|o\d)/.test(id)) return "/agents/openai.png";
-  if (/^gemini/.test(id)) return "/agents/gemini.png";
+  if (/^(claude|sonnet|opus|haiku)\b/.test(id)) return { id: "anthropic", name: "Anthropic", icon: "/agents/claude.png" };
+  if (/^(gpt|o\d)/.test(id)) return { id: "openai", name: "OpenAI", icon: "/agents/openai.png" };
+  if (/^gemini/.test(id)) return { id: "google", name: "Google", icon: "/agents/gemini.png" };
   return null;
 }

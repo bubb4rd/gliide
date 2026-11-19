@@ -910,7 +910,7 @@ composed Review screen.
 | Job | Posting input; requirements as chips; master picker with each master's score; score header |
 | Review | Score header; changes grouped by section, then **From your bank**; then **Other lines**: every master line no change touches, each with Edit and Rewrite with a note (either makes it your edit); live preview beside them |
 | Applications | Table with status, scores, files, posting link; CSV export. Statuses set many at once (checked rows, one `set_status` call: all or none, one CSV rewrite, Undo); an export starts as Saved, and the job's **Mark applied** moves it to Applied |
-| Settings | A modal sheet over any screen (⌘,), a pane at a time from a searchable rail: Agents (found, signed in or not, model per call, suggestions from), Benchmark (each role's leaderboard of routes, a run on this Mac, Use the best per role; §12), Usage, Feed, Sources, Notifications, Export folder, Appearance, About |
+| Settings | A modal sheet over any screen (⌘,), a pane at a time from a searchable rail: Agents (found, signed in or not, model per call, suggestions from), Benchmark (the gliide Index, cost and time per route, each role's leaderboard of routes, a run on this Mac, Use the best per role; §12), Usage, Feed, Sources, Notifications, Export folder, Appearance, About |
 
 **Score header:** `Now 53%` → `Projected 78%` (large, live) with `Ceiling 85%` beside it; a bar showing now, the gain
 from your selections, and the headroom left; components on hover.
@@ -1014,6 +1014,17 @@ presets' path too, with Undo).
   edits and the validator's and fit check's left-outs aside. Each route's share is pulled toward your average over
   every route by 10 decisions' worth of it, and the code checks are scaled by 0.75 + 0.25 × (its share ÷ your
   average): ×1.00 at your average. With nothing decided, kept carries no weight.
+- **Overview** (`benchmark()`'s `index` and `history`, above the leaderboards), after Artificial Analysis's
+  Intelligence Index. The *gliide Index*: one quality number per route, Reading, Tailoring and Coaching a third each
+  (Writing has no quality), each role's component 0 for an empty answer: Reading and Coaching their quality, Tailoring
+  its code checks rebased as `3 × quality − 200` (an empty suggestion's 66.7 becomes 0), kept edits left out; each ×
+  the share of runs that came back valid, so a failed run scores 0. Quality comes from the source the role's board
+  judges it on. A role a route hasn't run stands in as the median of the routes that have, and the route is *partial*,
+  listed after the complete ones. *Cost to run*: a Full suite (36 Reading, 36 Tailoring, 12 Coaching calls) × each
+  role's cost a call; *time per posting*: the sum of each role's typical call, against the targets' sum (58 s); a role
+  not run stands in as the median scaled by how the route compares on the roles it ran, and a role it ran without a
+  price leaves the cost unknown. *History*: each role's quality per route at the reference and at each day (UTC) this
+  Mac ran it.
 - **Runs stay off Usage.** Benchmark calls are built as `App::llm` builds a role's, without `Metered`, so they never
   land in `usage`, Settings → Usage or a route's pace in Settings → Agents. The `benchmark` event carries the run's
   status after every call; the layout follows it, so the rail counts the calls while a run goes.

@@ -4,7 +4,8 @@
   rounds and lays them out. Its actions lead the pane (the sheet's head holds only its title and Close): Use the best
   per role, and Run benchmark. Then the lede naming the best route per role; the run going on this Mac (its stage, how
   far it is, Stop), or a stopped one (Resume); the run's setup (length, roles, routes, the estimate; ⏎ starts, Esc
-  closes), which leads the pane until something has run; then the leaderboard: a role at a time, its winner as the
+  closes), which leads the pane until something has run; then the overview (`BenchOverview`: the gliide Index, cost
+  and time, the scatters and quality over time); then By role, the leaderboard: a role at a time, its winner as the
   caption (with Use for …), every route as a row (score, quality, reliability, speed, typical time, cost), each
   opening onto its three sources side by side. Tooltips say what every number is made of. Writing has no quality
   check, so it's timed and never ranked.
@@ -33,6 +34,7 @@
   import type { KeyBindings } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
   import { benchmark } from "$lib/stores/benchmark.svelte";
+  import BenchOverview from "./BenchOverview.svelte";
   import {
     Button,
     Card,
@@ -883,6 +885,11 @@
   {#if benchmark.failed && !view}
     <p class="problem" role="alert">Couldn’t read the benchmark: {benchmark.failed}</p>
   {:else if view && board}
+    <BenchOverview {view} />
+    <div class="by-role">
+      <h3>By role</h3>
+      <p>Each role’s routes ranked by its own score, and the route to run it on. Open a route for its sources.</p>
+    </div>
     <Card as="section" aria-label="Leaderboard">
       <div class="board" bind:clientWidth={boardWidth}>
         <div class="board__top">
@@ -1315,6 +1322,27 @@
   .stack {
     display: grid;
     gap: var(--space-4);
+  }
+  /* The overview's sections and By role sit further apart than the cards within one. */
+  .stack > :global(.section),
+  .by-role {
+    margin-top: var(--space-4);
+  }
+  .by-role {
+    display: grid;
+    gap: var(--space-1);
+    margin-bottom: calc(var(--space-1) * -1);
+  }
+  .by-role h3 {
+    margin: 0;
+    font-size: var(--text-lg);
+    line-height: var(--leading-lg);
+    letter-spacing: var(--tracking-lg);
+    font-weight: var(--weight-medium);
+  }
+  .by-role p {
+    color: var(--ink-2);
+    text-wrap: pretty;
   }
   p {
     margin: 0;
