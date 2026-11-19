@@ -2572,6 +2572,95 @@ pub struct BenchmarkView {
     pub run: Option<BenchRunStatus>,
     /// What you kept of every Tailoring route's suggestions at export, pooled; `None` before any decision.
     pub kept_average: Option<KeptShare>,
+    /// The overview above the roles: one quality number per route, with what a suite costs and a posting takes.
+    pub index: BenchIndex,
+    /// Each scored role's quality per route at every snapshot: the reference's, then each day this Mac ran it.
+    pub history: Vec<BenchHistory>,
+}
+
+/// The gliide Index: one quality number per route across the roles `resume-bench` scores (Reading, Tailoring and
+/// Coaching, a third each), like Artificial Analysis's Intelligence Index. Each role's component is 0–100, 0 for an
+/// empty answer: Reading and Coaching their quality, Tailoring its code checks rebased so an empty suggestion scores 0
+/// (`3 × quality − 200`), each × the share of runs that came back valid (a failed run scores 0). A role a route hasn't
+/// run is filled with the median of the routes that have (a stand-in until it runs, not an estimate).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchIndex {
+    /// The roles it counts, in order: Read, Tailor, Coach.
+    pub roles: Vec<Role>,
+    /// One posting through those roles with each at its target (8 + 30 + 20 s).
+    pub target_s: f64,
+    /// The routes that ran every role, best first, then the rest, best first.
+    pub routes: Vec<IndexRoute>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct IndexRoute {
+    pub agent: Agent,
+    /// As Settings names it.
+    pub model: String,
+    /// 0–100: the mean of `parts`.
+    pub index: f64,
+    /// In [`BenchIndex::roles`]' order.
+    pub parts: Vec<IndexPart>,
+    /// Every role was measured: no part is a stand-in.
+    pub complete: bool,
+    /// One full suite (Reading and Tailoring 36 calls each, Coaching 12) at API prices: each role's cost a call × its
+    /// calls. A role it hasn't run stands in as the median of the routes that have, scaled by how this route's prices
+    /// compare with the medians on the roles it has. `None` when a role it ran has no price.
+    pub cost_usd: Option<f64>,
+    /// Some role's cost stands in.
+    pub cost_estimated: bool,
+    /// One posting through every role: the sum of each role's typical (p50) call, a role it hasn't run standing in as
+    /// the cost does.
+    pub seconds: Option<f64>,
+    /// Some role's time stands in.
+    pub seconds_estimated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct IndexPart {
+    pub role: Role,
+    /// 0–100.
+    pub value: f64,
+    /// The median of the routes that ran this role, standing in for one this route hasn't.
+    pub placeholder: bool,
+}
+
+/// A role's quality (`resume-bench`'s, 0–100; Tailoring's code checks) per route over time.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchHistory {
+    pub role: Role,
+    /// Oldest first: the reference, then each day this Mac ran the role.
+    pub snapshots: Vec<BenchSnapshot>,
+    /// Every route with a quality at some snapshot.
+    pub routes: Vec<HistoryRoute>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BenchSnapshot {
+    /// The reference's day (`YYYY-MM-DD`), or the newest run of this Mac's day (RFC 3339 UTC).
+    pub at: String,
+    pub source: BenchSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistoryRoute {
+    pub agent: Agent,
+    pub model: String,
+    /// One per snapshot, in order; `None` where the route didn't run.
+    pub values: Vec<Option<f64>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]

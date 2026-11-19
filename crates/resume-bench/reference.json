@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-17",
+  "date": "2026-11-19",
   "roles": {
     "read": {
       "antigravity:gemini-3.8-flash-low": {
@@ -29,6 +29,60 @@
           ]
         }
       },
+      "antigravity:gemini-4-argon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 12.754,
+        "p90_s": 14.397,
+        "cost_usd": 0.03805733333333333,
+        "quality": {
+          "value": 90.76121794871796,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.9038194444444446
+            },
+            {
+              "id": "precision",
+              "value": 0.8916666666666666
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9273504273504276
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-argon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 18.404,
+        "p90_s": 26.695,
+        "cost_usd": 0.04572466666666666,
+        "quality": {
+          "value": 90.94017094017094,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.9041666666666668
+            },
+            {
+              "id": "precision",
+              "value": 0.8958333333333331
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9282051282051285
+            }
+          ]
+        }
+      },
       "antigravity:gemini-4-hydrogen-high": {
         "runs": 12,
         "valid": 12,
@@ -52,6 +106,141 @@
             {
               "id": "must_recall",
               "value": 0.9307692307692309
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 10.728,
+        "p90_s": 12.464,
+        "cost_usd": null,
+        "quality": {
+          "value": 90.78105475583548,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.8670138888888891
+            },
+            {
+              "id": "precision",
+              "value": 0.935477582846004
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9209401709401712
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 23.485,
+        "p90_s": 28.372,
+        "cost_usd": null,
+        "quality": {
+          "value": 93.10925551057132,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.920138888888889
+            },
+            {
+              "id": "precision",
+              "value": 0.9274122807017545
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9457264957264959
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 103.858,
+        "p90_s": 166.788,
+        "cost_usd": null,
+        "quality": {
+          "value": 92.03258547008546,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.9052083333333334
+            },
+            {
+              "id": "precision",
+              "value": 0.9083333333333333
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9474358974358976
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 24.384,
+        "p90_s": 27.616,
+        "cost_usd": null,
+        "quality": {
+          "value": 92.34638189133803,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.904513888888889
+            },
+            {
+              "id": "precision",
+              "value": 0.9201510721247562
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9457264957264959
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 46.714,
+        "p90_s": 63.74,
+        "cost_usd": null,
+        "quality": {
+          "value": 92.80804843304844,
+          "parts": [
+            {
+              "id": "recall",
+              "value": 0.9104166666666668
+            },
+            {
+              "id": "precision",
+              "value": 0.9208333333333334
+            },
+            {
+              "id": "must_recall",
+              "value": 0.9529914529914532
             }
           ]
         }
@@ -182,6 +371,92 @@
           ]
         }
       },
+      "antigravity:gemini-4-argon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 16.647,
+        "p90_s": 24.494,
+        "cost_usd": 0.05530616666666668,
+        "quality": {
+          "value": 76.97222222222224,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.875
+            },
+            {
+              "id": "fits",
+              "value": 0.9583333333333334
+            },
+            {
+              "id": "lift",
+              "value": 0.4758333333333334
+            },
+            {
+              "id": "lift_pts",
+              "value": 9.516666666666667
+            },
+            {
+              "id": "changes",
+              "value": 48.0
+            },
+            {
+              "id": "flagged",
+              "value": 6.0
+            },
+            {
+              "id": "left_fit",
+              "value": 2.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-argon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 22.552,
+        "p90_s": 40.439,
+        "cost_usd": 0.058056833333333335,
+        "quality": {
+          "value": 83.87056737588654,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9361702127659575
+            },
+            {
+              "id": "fits",
+              "value": 0.9574468085106383
+            },
+            {
+              "id": "lift",
+              "value": 0.6225
+            },
+            {
+              "id": "lift_pts",
+              "value": 12.450000000000001
+            },
+            {
+              "id": "changes",
+              "value": 47.0
+            },
+            {
+              "id": "flagged",
+              "value": 3.0
+            },
+            {
+              "id": "left_fit",
+              "value": 2.0
+            }
+          ]
+        }
+      },
       "antigravity:gemini-4-hydrogen-high": {
         "runs": 12,
         "valid": 11,
@@ -221,6 +496,221 @@
             {
               "id": "left_fit",
               "value": 1.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 15.081,
+        "p90_s": 20.261,
+        "cost_usd": null,
+        "quality": {
+          "value": 73.70120120120121,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.8108108108108107
+            },
+            {
+              "id": "fits",
+              "value": 0.8918918918918919
+            },
+            {
+              "id": "lift",
+              "value": 0.5083333333333335
+            },
+            {
+              "id": "lift_pts",
+              "value": 10.16666666666667
+            },
+            {
+              "id": "changes",
+              "value": 37.0
+            },
+            {
+              "id": "flagged",
+              "value": 7.0
+            },
+            {
+              "id": "left_fit",
+              "value": 4.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 34.605,
+        "p90_s": 44.348,
+        "cost_usd": null,
+        "quality": {
+          "value": 79.73611111111113,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.875
+            },
+            {
+              "id": "fits",
+              "value": 0.9375
+            },
+            {
+              "id": "lift",
+              "value": 0.5795833333333336
+            },
+            {
+              "id": "lift_pts",
+              "value": 11.59166666666667
+            },
+            {
+              "id": "changes",
+              "value": 48.0
+            },
+            {
+              "id": "flagged",
+              "value": 6.0
+            },
+            {
+              "id": "left_fit",
+              "value": 3.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 195.744,
+        "p90_s": 255.652,
+        "cost_usd": null,
+        "quality": {
+          "value": 79.48453878406708,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.8679245283018868
+            },
+            {
+              "id": "fits",
+              "value": 0.9245283018867925
+            },
+            {
+              "id": "lift",
+              "value": 0.5920833333333334
+            },
+            {
+              "id": "lift_pts",
+              "value": 11.841666666666669
+            },
+            {
+              "id": "changes",
+              "value": 53.0
+            },
+            {
+              "id": "flagged",
+              "value": 7.0
+            },
+            {
+              "id": "left_fit",
+              "value": 4.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 38.449,
+        "p90_s": 50.3,
+        "cost_usd": null,
+        "quality": {
+          "value": 80.55808080808082,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9090909090909091
+            },
+            {
+              "id": "fits",
+              "value": 0.9318181818181819
+            },
+            {
+              "id": "lift",
+              "value": 0.5758333333333334
+            },
+            {
+              "id": "lift_pts",
+              "value": 11.516666666666667
+            },
+            {
+              "id": "changes",
+              "value": 44.0
+            },
+            {
+              "id": "flagged",
+              "value": 4.0
+            },
+            {
+              "id": "left_fit",
+              "value": 3.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 4,
+        "p50_s": 76.641,
+        "p90_s": 113.324,
+        "cost_usd": null,
+        "quality": {
+          "value": 77.65277777777776,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.84
+            },
+            {
+              "id": "fits",
+              "value": 0.96
+            },
+            {
+              "id": "lift",
+              "value": 0.5295833333333333
+            },
+            {
+              "id": "lift_pts",
+              "value": 10.591666666666667
+            },
+            {
+              "id": "changes",
+              "value": 50.0
+            },
+            {
+              "id": "flagged",
+              "value": 8.0
+            },
+            {
+              "id": "left_fit",
+              "value": 2.0
             }
           ]
         }
@@ -356,6 +846,34 @@
       }
     },
     "write": {
+      "antigravity:gemini-4-argon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 11.546,
+        "p90_s": 12.48,
+        "cost_usd": 0.030494000000000004,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "antigravity:gemini-4-argon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 20.065,
+        "p90_s": 24.352,
+        "cost_usd": 0.037456500000000004,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
       "antigravity:gemini-4-hydrogen-high": {
         "runs": 12,
         "valid": 12,
@@ -364,6 +882,76 @@
         "items": 12,
         "p50_s": 37.006,
         "p90_s": 45.402,
+        "cost_usd": null,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "antigravity:gemini-4-hydrogen-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 10.75,
+        "p90_s": 12.327,
+        "cost_usd": null,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "antigravity:gemini-4-hydrogen-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 22.315,
+        "p90_s": 24.236,
+        "cost_usd": null,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "antigravity:gemini-4-neon-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 91.117,
+        "p90_s": 120.268,
+        "cost_usd": null,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "antigravity:gemini-4-neon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 22.3,
+        "p90_s": 31.22,
+        "cost_usd": null,
+        "quality": {
+          "value": null,
+          "parts": []
+        }
+      },
+      "antigravity:gemini-4-neon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 43.198,
+        "p90_s": 50.976,
         "cost_usd": null,
         "quality": {
           "value": null,
@@ -414,6 +1002,60 @@
       }
     },
     "coach": {
+      "antigravity:gemini-4-argon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 28.472,
+        "p90_s": 49.752,
+        "cost_usd": 0.04089841666666666,
+        "quality": {
+          "value": 98.65319865319864,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9865319865319865
+            },
+            {
+              "id": "kept_items",
+              "value": 293.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 4.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-argon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 30.244,
+        "p90_s": 48.697,
+        "cost_usd": 0.04309648333333333,
+        "quality": {
+          "value": 99.33993399339934,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9933993399339934
+            },
+            {
+              "id": "kept_items",
+              "value": 301.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 2.0
+            }
+          ]
+        }
+      },
       "antigravity:gemini-4-hydrogen-high": {
         "runs": 12,
         "valid": 12,
@@ -437,6 +1079,141 @@
             {
               "id": "dropped_items",
               "value": 4.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 16.035,
+        "p90_s": 21.848,
+        "cost_usd": null,
+        "quality": {
+          "value": 98.84615384615385,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9884615384615385
+            },
+            {
+              "id": "kept_items",
+              "value": 257.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 3.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-hydrogen-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 22.363,
+        "p90_s": 37.173,
+        "cost_usd": null,
+        "quality": {
+          "value": 98.94366197183099,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9894366197183099
+            },
+            {
+              "id": "kept_items",
+              "value": 281.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 3.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-high": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 110.43,
+        "p90_s": 139.653,
+        "cost_usd": null,
+        "quality": {
+          "value": 98.75389408099689,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9875389408099688
+            },
+            {
+              "id": "kept_items",
+              "value": 317.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 4.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-low": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 28.659,
+        "p90_s": 49.98,
+        "cost_usd": null,
+        "quality": {
+          "value": 98.88888888888889,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.9888888888888889
+            },
+            {
+              "id": "kept_items",
+              "value": 267.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 3.0
+            }
+          ]
+        }
+      },
+      "antigravity:gemini-4-neon-medium": {
+        "runs": 12,
+        "valid": 12,
+        "repaired": 0,
+        "failed": 0,
+        "items": 12,
+        "p50_s": 51.87,
+        "p90_s": 71.243,
+        "cost_usd": null,
+        "quality": {
+          "value": 99.2831541218638,
+          "parts": [
+            {
+              "id": "grounded",
+              "value": 0.992831541218638
+            },
+            {
+              "id": "kept_items",
+              "value": 277.0
+            },
+            {
+              "id": "dropped_items",
+              "value": 2.0
             }
           ]
         }

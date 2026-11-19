@@ -55,6 +55,7 @@
     Input,
     Kbd,
     KeyFooter,
+    LineTrend,
     type KeyCommand,
     LinkEdit,
     LogoDrop,
@@ -66,17 +67,24 @@
     PartRow,
     Popover,
     PlaceMap,
+    RankBars,
+    type RankItem,
     ReleaseNotes,
+    Scatter,
+    type ScatterPoint,
     ScoreBar,
     ScoreHeader,
     ScorePill,
     Segmented,
+    SeriesKey,
     Sheet,
     Showcase,
     SpeakButton,
     Sources,
     segmentStep,
     StackedBar,
+    StackRows,
+    type StackRow,
     StepKey,
     Steps,
     Switch,
@@ -98,6 +106,8 @@
   import { SEARCH_SOURCES_NOTE, searchSources } from "$lib/feed";
   import { RESUME_FORMATS } from "$lib/import";
   import { FITS, LOGO, MCLEAN, OVER, PLANO, RIVERWOODS, WIDE_LOGO } from "./sample";
+  import BenchOverview from "../settings/BenchOverview.svelte";
+  import { benchSample } from "./bench";
 
   // ── Company photo: the job header's mark opens the panel; Paste sets the square logo, Choose file the wide one ──
   let logoOpen = $state(false);
@@ -751,6 +761,108 @@
     ["Ink", [["Ink · 16.6:1", "--ink"], ["Ink 2 · 7.4:1", "--ink-2"], ["Ink 3 · ≥4.6:1", "--ink-3"], ["Ink 4 · disabled", "--ink-4"]]],
     ["Meaning", [["Accent · act, focus", "--accent"], ["Gain · points, have", "--gain"], ["Warn · left out", "--warn"], ["Danger · cut, error", "--danger"], ["Mark · inserted words", "--mark"]]],
   ] as const;
+
+  // ── Benchmark charts ──
+  const M = {
+    anthropic: { icon: "/agents/claude.png", color: "var(--maker-anthropic)" },
+    google: { icon: "/agents/gemini.png", color: "var(--maker-google)" },
+    openai: { icon: "/agents/openai.png", color: "var(--maker-openai)" },
+  };
+  const rank = (
+    key: string,
+    maker: keyof typeof M,
+    name: string,
+    value: number,
+    text: string,
+    more: Partial<RankItem> = {},
+  ): RankItem => ({ key, ...M[maker], name, value, text, tip: `${name}: ${text}`, ...more });
+  const rankQuality: RankItem[] = [
+    rank("sonnet", "anthropic", "Sonnet", 78.1, "78.1"),
+    rank("hydrogen", "google", "Gemini 4 Hydrogen (High)", 75.8, "75.8"),
+    rank("luna", "openai", "GPT-6 Luna", 61.4, "61.4"),
+    rank("flash", "google", "Gemini 3.8 Flash (Low)", 81.7, "81.7", { partial: true }),
+    rank("opus", "anthropic", "Opus", 79.9, "79.9", { partial: true }),
+  ];
+  const rankCost: RankItem[] = [
+    rank("luna", "openai", "GPT-6 Luna", 0.11, "$0.11"),
+    rank("sonnet", "anthropic", "Sonnet", 2.04, "$2.04"),
+    rank("hydrogen", "google", "Gemini 4 Hydrogen (High)", 14.63, "$14.63", { estimated: true }),
+    rank("haiku", "anthropic", "Haiku", 0.1, "$0.10", { partial: true, estimated: true }),
+  ];
+  const rankTime: RankItem[] = [
+    rank("sonnet", "anthropic", "Sonnet", 37, "37 s"),
+    rank("luna", "openai", "GPT-6 Luna", 60, "60 s"),
+    rank("hydrogen", "google", "Gemini 4 Hydrogen (High)", 174, "174 s"),
+  ];
+  const stack = (
+    key: string,
+    maker: keyof typeof M,
+    name: string,
+    parts: [number, number, number],
+    stand: number[] = [],
+  ): StackRow => ({
+    key,
+    icon: M[maker].icon,
+    name,
+    parts: ["Reading", "Tailoring", "Coaching"].map((label, i) => ({
+      label,
+      value: parts[i] / 3,
+      placeholder: stand.includes(i),
+      tip: `${label}: ${(parts[i] / 3).toFixed(1)} points`,
+    })),
+    text: ((parts[0] + parts[1] + parts[2]) / 3).toFixed(1),
+    partial: stand.length > 0,
+    aside: stand.length ? `needs ${stand.map((i) => ["Reading", "Tailoring", "Coaching"][i]).join(" and ")}` : undefined,
+    tip: name,
+  });
+  const stackRows: StackRow[] = [
+    stack("sonnet", "anthropic", "Sonnet", [90.3, 46.5, 97.6]),
+    stack("luna", "openai", "GPT-6 Luna (a part of 0)", [85.0, 0, 99.2]),
+    stack("haiku", "anthropic", "Haiku", [90.5, 46.5, 98.7], [1, 2]),
+  ];
+  const pt = (key: string, maker: keyof typeof M, label: string, x: number, y: number, hollow = false): ScatterPoint => ({
+    key,
+    x,
+    y,
+    label,
+    color: M[maker].color,
+    hollow,
+    tip: `${label}: ${y}, ${x}`,
+  });
+  const scatterPoints: ScatterPoint[] = [
+    pt("flash", "google", "Gemini 3.8 Flash", 1.04, 81.7, true),
+    pt("opus", "anthropic", "Opus", 3.84, 79.9, true),
+    pt("haiku", "anthropic", "Haiku", 0.1, 78.5, true),
+    pt("sonnet", "anthropic", "Sonnet", 2.04, 78.1),
+    pt("hydrogen", "google", "Gemini 4 Hydrogen", 14.6, 75.8, true),
+    pt("luna", "openai", "GPT-6 Luna", 0.11, 61.4),
+    pt("argon-medium", "google", "Gemini 4 Argon (Medium)", 4.25, 80.6),
+    pt("argon-low", "google", "Gemini 4 Argon (Low)", 3.85, 73.4),
+    pt("neon-low", "google", "Gemini 4 Neon (Low)", 3.6, 77.6),
+  ];
+  const scY = { min: 50, max: 90, ticks: [50, 60, 70, 80, 90], format: (v: number) => String(v) };
+  const scCost = {
+    min: 0.05,
+    max: 30,
+    log: true,
+    ticks: [0.1, 1, 10],
+    format: (v: number) => `$${v}`,
+    title: "Cost to run the suite (log)",
+  };
+  const trendTips = (name: string) => (i: number) => `${name} · snapshot ${i + 1}`;
+  const trendLines = [
+    { key: "flash", label: "Gemini 3.8 Flash", color: M.google.color, values: [85.5, 85.7, 87.9], tip: trendTips("Gemini 3.8 Flash") },
+    { key: "hydrogen", label: "Gemini 4 Hydrogen", color: M.google.color, dash: "dashed" as const, values: [80.9, null, null], tip: trendTips("Gemini 4 Hydrogen") },
+    { key: "opus", label: "Opus", color: M.anthropic.color, dash: "dashed" as const, values: [84.4, 83.7, null], tip: trendTips("Opus") },
+    { key: "sonnet", label: "Sonnet", color: M.anthropic.color, values: [78.6, 82.2, 80.0], tip: trendTips("Sonnet") },
+    { key: "luna", label: "GPT-6 Luna", color: M.openai.color, values: [65.8, null, 74.6], tip: trendTips("GPT-6 Luna") },
+  ];
+  const trendY = { min: 60, max: 90, ticks: [60, 70, 80, 90], format: (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1)) };
+  const longSnapshots = Array.from({ length: 8 }, (_, i) => `Nov ${10 + i}`);
+  const longLine = [
+    { key: "sonnet", label: "Sonnet", color: M.anthropic.color, values: [80, 81, 79, 82, 83, 82, 84, 85], tip: trendTips("Sonnet") },
+    { key: "haiku", label: "Haiku", color: M.anthropic.color, dash: "dotted" as const, values: [75, 76, 76, 78, 77, 79, 80, 80], tip: trendTips("Haiku") },
+  ];
 </script>
 
 <Toolbar>
@@ -1918,6 +2030,108 @@
       </div>
     </section>
 
+    <!-- ═══════════ Benchmark charts ═══════════ -->
+    <section class="section">
+      <h2 class="title">Benchmark charts</h2>
+      <p class="meta lede">
+        Settings → Benchmark's overview, composed at the sheet's widest (712px), then each chart in its states. A route is
+        drawn in its maker's color (<code>--maker-*</code>, the logo's own hue) beside its maker's mark; partial routes
+        follow under Partial, a stand-in is outlined or hollow. Hover any mark, or Tab in and use the arrows, Home and End.
+      </p>
+      <div class="pane-width">
+        <BenchOverview view={benchSample} />
+      </div>
+      <div class="grid cols-3">
+        <Card pad>
+          <div class="tile">
+            <p class="label">RankBars: linear, a leader, partial</p>
+            <RankBars items={rankQuality} scale={{ max: 100 }} label="Quality (specimen)" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Log scale, estimated (outlined)</p>
+            <RankBars items={rankCost} scale={{ log: true, min: 0.03, max: 18 }} label="Cost (specimen)" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">A target tick; empty</p>
+            <RankBars items={rankTime} scale={{ max: 183 }} target={{ value: 58, label: "target 58 s" }} label="Time (specimen)" />
+            <RankBars items={[]} scale={{ max: 1 }} label="Nothing ranked (specimen)" />
+          </div>
+        </Card>
+      </div>
+      <div class="grid cols-2">
+        <Card pad>
+          <div class="tile">
+            <p class="label">StackRows: parts, a part of 0, stand-ins with the aside</p>
+            <StackRows rows={stackRows} label="Index (specimen)" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Narrow (under 560px): the aside moves into the tooltip</p>
+            <div class="narrow-chart"><StackRows rows={stackRows} label="Index, narrow (specimen)" /></div>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Scatter: log x, quadrant, frontier, hollow, crowded labels, one left off</p>
+            <Scatter
+              points={scatterPoints}
+              x={scCost}
+              y={scY}
+              quadrant={{ x: 1.5, y: 78.9, label: "Most attractive" }}
+              frontier={["haiku", "flash"]}
+              label="Index against cost (specimen)"
+            />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">A target; one point</p>
+            <Scatter
+              points={[pt("sonnet", "anthropic", "Sonnet", 37, 78.1)]}
+              x={{ min: 10, max: 250, log: true, ticks: [10, 20, 50, 100, 200], format: (v) => `${v} s`, title: "Time per posting (log)" }}
+              y={scY}
+              target={{ x: 58, label: "target" }}
+              height={200}
+              label="Index against time (specimen)"
+            />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">LineTrend: a floor, gaps, dashes within a maker, end labels pushed apart</p>
+            <LineTrend
+              lines={trendLines}
+              snapshots={["Nov 16 · reference", "Nov 17 · this Mac", "Nov 18 · this Mac"]}
+              y={trendY}
+              floor={{ value: 200 / 3, label: "An empty suggestion scores 66.7" }}
+              label="Tailoring quality (specimen)"
+            />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Eight snapshots: every other label; dotted</p>
+            <LineTrend lines={longLine} snapshots={longSnapshots} y={{ min: 70, max: 90, ticks: [70, 80, 90], format: (v) => String(v) }} height={200} label="Quality over eight snapshots (specimen)" />
+          </div>
+        </Card>
+      </div>
+      <Card pad>
+        <div class="row">
+          {#each ["dot", "ring", "bar", "outline", "line", "dashed", "dotted"] as const as k (k)}
+            <span class="row nowrap meta"><SeriesKey kind={k} color={M.google.color} />{k}</span>
+          {/each}
+          <span class="row nowrap meta"><SeriesKey color={M.anthropic.color} />Anthropic</span>
+          <span class="row nowrap meta"><SeriesKey color={M.openai.color} />OpenAI</span>
+          <span class="row nowrap meta"><SeriesKey />No maker</span>
+        </div>
+      </Card>
+    </section>
+
     <!-- ═══════════ Backdrop ═══════════ -->
     <section class="section">
       <h2 class="title">Backdrop</h2>
@@ -2341,6 +2555,14 @@
   }
   .nowrap {
     flex-wrap: nowrap;
+  }
+  .pane-width {
+    display: grid;
+    gap: var(--space-8);
+    max-width: 712px;
+  }
+  .narrow-chart {
+    max-width: 480px;
   }
   .tile {
     display: grid;

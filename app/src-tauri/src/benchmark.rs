@@ -23,9 +23,9 @@ use serde_json::Value;
 use tokio::task::AbortHandle;
 
 use crate::dto::{
-    Agent, BenchEstimate, BenchPart, BenchPlan, BenchResult, BenchRole, BenchRoute, BenchRunStatus,
-    BenchScore, BenchSource, BenchState, BenchStep, BenchmarkView, KeptShare, Role, Settings,
-    YourUse,
+    Agent, BenchEstimate, BenchHistory, BenchIndex, BenchPart, BenchPlan, BenchResult, BenchRole,
+    BenchRoute, BenchRunStatus, BenchScore, BenchSnapshot, BenchSource, BenchState, BenchStep,
+    BenchmarkView, HistoryRoute, IndexPart, IndexRoute, KeptShare, Role, Settings, YourUse,
 };
 use crate::error::{AppError, Result};
 use crate::state::{App, Event, blocking, lock};
@@ -730,13 +730,288 @@ pub fn view(app: &App) -> Result<BenchmarkView> {
                 &(current.agent.to_string(), current.model),
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let fx = fixtures()?;
+    let calls = INDEX_ROLES.map(|role| {
+        bench::items(fx, bench_role(role), bench::Plan::Full)
+            .iter()
+            .map(|(_, runs)| *runs)
+            .sum::<u32>()
+    });
     Ok(BenchmarkView {
+        index: index(&roles, calls),
+        history: history(reference, &src.mac),
         roles,
         reference_date: reference.date.clone(),
         run: status(app)?,
         kept_average: kept_average(&src.kept),
     })
+}
+
+// ── The gliide Index ──
+
+/// The roles the Index counts, a third each (Writing has no quality to count).
+const INDEX_ROLES: [Role; 3] = [Role::Read, Role::Tailor, Role::Coach];
+
+/// What a route measured on each Index role, in [`INDEX_ROLES`]' order; `None` where it hasn't run.
+type Slots = [Option<Measured>; 3];
+
+/// What a route measured on one role, for the Index.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Measured {
+    component: f64,
+    cost_usd: Option<f64>,
+    p50_s: Option<f64>,
+}
+
+/// A role's 0–100 component from the result its quality is judged on: Reading and Coaching their quality, Tailoring
+/// its code checks rebased so an empty suggestion (66.7) scores 0, × the share of runs that came back valid, so a
+/// failed run scores 0. `None` without runs.
+fn component(role: Role, judged: &BenchResult) -> Option<f64> {
+    if judged.runs == 0 {
+        return None;
+    }
+    let valid = f64::from(judged.valid + judged.repaired) / f64::from(judged.runs);
+    let q = judged.quality.unwrap_or(0.0);
+    let base = if role == Role::Tailor {
+        3.0 * q - 200.0
+    } else {
+        q
+    };
+    Some(base.clamp(0.0, 100.0) * valid)
+}
+
+fn median(mut v: Vec<f64>) -> Option<f64> {
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(f64::total_cmp);
+    let mid = v.len() / 2;
+    Some(if v.len() % 2 == 1 {
+        v[mid]
+    } else {
+        (v[mid - 1] + v[mid]) / 2.0
+    })
+}
+
+/// Each counted role's value × its weight, summed, and whether anything stood in. A role the route hasn't run stands
+/// in as the median of the routes that have, scaled by how this route compares with the medians on the roles it has
+/// (a fast or cheap route's stand-in is fast or cheap too). `None` when a role it ran has no value (a price unknown),
+/// or there's nothing to scale from.
+fn total(
+    slots: &Slots,
+    counted: &[usize],
+    f: fn(&Measured) -> Option<f64>,
+    medians: &[Option<f64>; 3],
+    weight: impl Fn(usize) -> f64,
+) -> (Option<f64>, bool) {
+    let (mut own, mut typical) = (0.0, 0.0);
+    for &i in counted {
+        if let (Some(v), Some(m)) = (slots[i].as_ref().and_then(f), medians[i]) {
+            own += v;
+            typical += m;
+        }
+    }
+    let ratio = (typical > 0.0).then(|| own / typical);
+    let mut sum = 0.0;
+    let mut estimated = false;
+    for &i in counted {
+        let v = match slots[i].as_ref() {
+            Some(m) => match f(m) {
+                Some(v) => v,
+                None => return (None, estimated),
+            },
+            None => match (medians[i], ratio) {
+                (Some(m), Some(r)) => {
+                    estimated = true;
+                    m * r
+                }
+                _ => return (None, estimated),
+            },
+        };
+        sum += v * weight(i);
+    }
+    (Some(sum), estimated)
+}
+
+/// Every route's Index from the roles' boards (`roles`), its quality from the source each role judges it on and its
+/// cost and time from the one it's timed on, as the boards score it. `calls`: a full suite's calls per role, in
+/// [`INDEX_ROLES`]' order.
+fn index(roles: &[BenchRole], calls: [u32; 3]) -> BenchIndex {
+    let mut found: Vec<((Agent, String), Slots)> = Vec::new();
+    for (i, role) in INDEX_ROLES.into_iter().enumerate() {
+        let Some(board) = roles.iter().find(|b| b.role == role) else {
+            continue;
+        };
+        for r in &board.routes {
+            let of = |from: Option<BenchSource>| match from {
+                Some(BenchSource::ThisMac) => r.this_mac.as_ref(),
+                Some(BenchSource::Reference) => r.reference.as_ref(),
+                None => None,
+            };
+            let Some(component) = of(r.quality_from).and_then(|d| component(role, d)) else {
+                continue;
+            };
+            let timed = of(r.timing_from);
+            let m = Measured {
+                component,
+                cost_usd: timed.and_then(|t| t.cost_usd),
+                p50_s: timed.and_then(|t| t.p50_s),
+            };
+            let key = (r.agent, r.model.clone());
+            match found.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, slots)) => slots[i] = Some(m),
+                None => {
+                    let mut slots = [None; 3];
+                    slots[i] = Some(m);
+                    found.push((key, slots));
+                }
+            }
+        }
+    }
+    let medians = |f: fn(&Measured) -> Option<f64>| -> [Option<f64>; 3] {
+        std::array::from_fn(|i| {
+            median(
+                found
+                    .iter()
+                    .filter_map(|(_, s)| s[i].as_ref().and_then(f))
+                    .collect(),
+            )
+        })
+    };
+    let components = medians(|m| Some(m.component));
+    let costs = medians(|m| m.cost_usd);
+    let times = medians(|m| m.p50_s);
+    // A role no route has run isn't counted (its median is none).
+    let counted: Vec<usize> = (0..3).filter(|&i| components[i].is_some()).collect();
+
+    let mut routes: Vec<IndexRoute> = found
+        .iter()
+        .map(|((agent, model), slots)| {
+            let parts: Vec<IndexPart> = counted
+                .iter()
+                .map(|&i| IndexPart {
+                    role: INDEX_ROLES[i],
+                    value: slots[i].map_or(components[i].unwrap_or(0.0), |m| m.component),
+                    placeholder: slots[i].is_none(),
+                })
+                .collect();
+            let index = parts.iter().map(|p| p.value).sum::<f64>() / parts.len().max(1) as f64;
+            let (cost_usd, cost_estimated) =
+                total(slots, &counted, |m| m.cost_usd, &costs, |i| f64::from(calls[i]));
+            let (seconds, seconds_estimated) = total(slots, &counted, |m| m.p50_s, &times, |_| 1.0);
+            IndexRoute {
+                agent: *agent,
+                model: model.clone(),
+                index,
+                complete: parts.iter().all(|p| !p.placeholder),
+                parts,
+                cost_usd,
+                cost_estimated,
+                seconds,
+                seconds_estimated,
+            }
+        })
+        .collect();
+    routes.sort_by(|a, b| {
+        b.complete
+            .cmp(&a.complete)
+            .then(b.index.total_cmp(&a.index))
+            .then_with(|| a.model.cmp(&b.model))
+    });
+    BenchIndex {
+        roles: counted.iter().map(|&i| INDEX_ROLES[i]).collect(),
+        target_s: counted
+            .iter()
+            .map(|&i| bench::target_s(bench_role(INDEX_ROLES[i])))
+            .sum(),
+        routes,
+    }
+}
+
+/// A history snapshot while it's built: its day, 0 for the reference so it's first on a tie, the snapshot, and each
+/// route's quality there.
+type Shot = (String, u8, BenchSnapshot, BTreeMap<RouteKey, f64>);
+
+/// Each Index role's quality per route at every snapshot, oldest first: the reference's, and each day (UTC) this Mac
+/// ran the role, its runs that day summed. A snapshot nothing was scored at is left out.
+fn history(reference: &bench::Reference, mac: &[BenchRunRow]) -> Vec<BenchHistory> {
+    INDEX_ROLES
+        .into_iter()
+        .map(|role| {
+            let br = bench_role(role);
+            let mut shots: Vec<Shot> = Vec::new();
+            if let Some(routes) = reference.roles.get(&br) {
+                let values: BTreeMap<RouteKey, f64> = routes
+                    .iter()
+                    .filter_map(|(k, r)| Some((parsed(k)?, r.quality.value?)))
+                    .collect();
+                shots.push((
+                    reference.date.clone(),
+                    0,
+                    BenchSnapshot {
+                        at: reference.date.clone(),
+                        source: BenchSource::Reference,
+                    },
+                    values,
+                ));
+            }
+            let mut days: BTreeMap<&str, BTreeMap<RouteKey, Vec<&BenchRunRow>>> = BTreeMap::new();
+            for r in mac.iter().filter(|r| r.role == br.name()) {
+                days.entry(r.at.get(..10).unwrap_or(&r.at))
+                    .or_default()
+                    .entry((r.agent.clone(), r.model.clone()))
+                    .or_default()
+                    .push(r);
+            }
+            for (day, routes) in days {
+                let newest = routes
+                    .values()
+                    .flatten()
+                    .map(|r| r.at.as_str())
+                    .max()
+                    .unwrap_or(day)
+                    .to_owned();
+                let values: BTreeMap<RouteKey, f64> = routes
+                    .into_iter()
+                    .filter_map(|(key, rows)| Some((key, this_mac(br, &rows).0.quality.value?)))
+                    .collect();
+                shots.push((
+                    day.to_owned(),
+                    1,
+                    BenchSnapshot {
+                        at: newest,
+                        source: BenchSource::ThisMac,
+                    },
+                    values,
+                ));
+            }
+            shots.retain(|s| !s.3.is_empty());
+            shots.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+            let mut lines: BTreeMap<RouteKey, Vec<Option<f64>>> = BTreeMap::new();
+            for (i, (_, _, _, values)) in shots.iter().enumerate() {
+                for (key, q) in values {
+                    lines
+                        .entry(key.clone())
+                        .or_insert_with(|| vec![None; shots.len()])[i] = Some(*q);
+                }
+            }
+            BenchHistory {
+                role,
+                snapshots: shots.into_iter().map(|s| s.2).collect(),
+                routes: lines
+                    .into_iter()
+                    .filter_map(|((agent, model), values)| {
+                        Some(HistoryRoute {
+                            agent: AgentKind::from_str(&agent).ok()?.into(),
+                            model,
+                            values,
+                        })
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
 }
 
 /// One role's routes, ranked: every route the reference, this Mac's runs, your calls (and, for Tailoring, your kept
@@ -1333,5 +1608,147 @@ mod tests {
         assert_eq!((s.kept_factor, s.code_checks), (None, None));
         assert_eq!(s.composite, s.composite_without_kept);
         assert!(b.routes.iter().all(|r| r.yours.is_none()));
+    }
+
+    fn scored(role: Role, reference: &[(&str, RouteResult)]) -> BenchRole {
+        let reference: BTreeMap<String, RouteResult> =
+            reference.iter().map(|(k, r)| ((*k).to_owned(), r.clone())).collect();
+        board(
+            role,
+            Some(&reference),
+            "2026-11-17",
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &key("claude", "haiku"),
+        )
+    }
+
+    fn priced(mut r: RouteResult, cost: f64) -> RouteResult {
+        r.cost_usd = Some(cost);
+        r
+    }
+
+    #[test]
+    fn the_index_rebases_tailoring_counts_failures_and_fills_a_missing_role_with_the_median() {
+        let mut flaky = rr(10, Some(80.0), 10.0);
+        flaky.valid = 5;
+        flaky.failed = 5;
+        let roles = [
+            scored(
+                Role::Read,
+                &[
+                    ("claude:sonnet", priced(rr(36, Some(90.0), 8.0), 0.01)),
+                    ("claude:opus", priced(rr(36, Some(80.0), 10.0), 0.05)),
+                    ("codex:gpt-6-luna", flaky),
+                ],
+            ),
+            scored(
+                Role::Tailor,
+                &[
+                    // 3 × 80 − 200 = 40; an empty suggestion's 66.7 rebases to 0.
+                    ("claude:sonnet", priced(rr(36, Some(80.0), 30.0), 0.1)),
+                    ("claude:opus", priced(rr(36, Some(200.0 / 3.0), 40.0), 0.3)),
+                    ("codex:gpt-6-luna", rr(36, Some(90.0), 20.0)),
+                ],
+            ),
+            scored(
+                Role::Coach,
+                &[
+                    ("claude:sonnet", priced(rr(12, Some(100.0), 20.0), 0.2)),
+                    ("claude:opus", priced(rr(12, Some(90.0), 20.0), 0.4)),
+                ],
+            ),
+        ];
+        let ix = index(&roles, [36, 36, 12]);
+        assert_eq!(ix.roles, [Role::Read, Role::Tailor, Role::Coach]);
+        assert_eq!(ix.target_s, 8.0 + 30.0 + 20.0);
+        let models: Vec<&str> = ix.routes.iter().map(|r| r.model.as_str()).collect();
+        // The complete routes first, best first; then the partial one.
+        assert_eq!(models, ["sonnet", "opus", "gpt-6-luna"]);
+
+        let sonnet = &ix.routes[0];
+        assert!(sonnet.complete);
+        assert!((sonnet.index - (90.0 + 40.0 + 100.0) / 3.0).abs() < 1e-9);
+        assert!((sonnet.cost_usd.unwrap() - (36.0 * 0.01 + 36.0 * 0.1 + 12.0 * 0.2)).abs() < 1e-9);
+        assert!(!sonnet.cost_estimated);
+        assert_eq!(sonnet.seconds, Some(8.0 + 30.0 + 20.0));
+
+        let opus = &ix.routes[1];
+        assert!(opus.parts[1].value.abs() < 1e-9);
+
+        let luna = &ix.routes[2];
+        assert!(!luna.complete);
+        // Half its Reading runs failed: 80 × 0.5.
+        assert!((luna.parts[0].value - 40.0).abs() < 1e-9);
+        assert!(!luna.parts[0].placeholder);
+        assert!((luna.parts[1].value - 70.0).abs() < 1e-9);
+        // Coaching stands in: the median of 100 and 90.
+        assert!(luna.parts[2].placeholder);
+        assert!((luna.parts[2].value - 95.0).abs() < 1e-9);
+        // It ran Reading and Tailoring without a price: its suite's cost is unknown, not a guess.
+        assert_eq!(luna.cost_usd, None);
+        // Coaching stands in: the median (20 s) × its pace on the roles it ran, (10 + 20) / (10 + 30) of the medians.
+        assert!(luna.seconds_estimated);
+        assert!((luna.seconds.unwrap() - (10.0 + 20.0 + 20.0 * 0.75)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn history_lists_the_reference_then_each_day_this_mac_ran_a_role() {
+        let reference = bench::Reference {
+            date: "2026-11-17".to_owned(),
+            roles: BTreeMap::from([(
+                bench::Role::Read,
+                BTreeMap::from([("claude:sonnet".to_owned(), rr(36, Some(90.0), 8.0))]),
+            )]),
+        };
+        let mut late = mac_row("read", "claude", "haiku", "a", "valid", 4_000);
+        late.at = "2026-11-19T10:00:00.000000Z".to_owned();
+        let mac = [
+            mac_row("read", "claude", "sonnet", "a", "valid", 4_000),
+            late,
+            mac_row("read", "claude", "sonnet", "b", "failed", 4_000),
+        ];
+        let h = history(&reference, &mac);
+        let read = h.iter().find(|h| h.role == Role::Read).unwrap();
+        let sources: Vec<(&str, BenchSource)> =
+            read.snapshots.iter().map(|s| (&s.at[..10], s.source)).collect();
+        assert_eq!(
+            sources,
+            [
+                ("2026-11-17", BenchSource::Reference),
+                ("2026-11-18", BenchSource::ThisMac),
+                ("2026-11-19", BenchSource::ThisMac)
+            ]
+        );
+        let line = |m: &str| &read.routes.iter().find(|r| r.model == m).unwrap().values;
+        assert_eq!(line("sonnet"), &[Some(90.0), Some(50.0), None]);
+        assert_eq!(line("haiku"), &[None, None, Some(50.0)]);
+        // Nothing scored for Coaching anywhere: no snapshots.
+        assert!(h.iter().find(|h| h.role == Role::Coach).unwrap().snapshots.is_empty());
+    }
+
+    #[test]
+    fn the_shipped_reference_ranks_complete_routes_first_with_an_index_each() {
+        let reference = bench::reference();
+        let roles: Vec<BenchRole> = INDEX_ROLES
+            .into_iter()
+            .map(|role| {
+                board(
+                    role,
+                    reference.roles.get(&bench_role(role)),
+                    &reference.date,
+                    &[],
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &key("claude", "sonnet"),
+                )
+            })
+            .collect();
+        let ix = index(&roles, [36, 36, 12]);
+        assert!(ix.routes.iter().all(|r| (0.0..=100.0).contains(&r.index)));
+        let first_partial = ix.routes.iter().position(|r| !r.complete).unwrap_or(ix.routes.len());
+        assert!(ix.routes[first_partial..].iter().all(|r| !r.complete));
+        assert!(first_partial > 0, "the reference has a route that ran every role");
     }
 }
