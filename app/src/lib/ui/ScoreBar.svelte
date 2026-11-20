@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import { untrack } from "svelte";
-  import { ROLL_CELLS, roll, token } from "./motion";
+  import { ROLL_CELLS, roll, rollDigits, token, type RollDigit } from "./motion";
   import { tip, type TipData, type TipRow } from "./tip.svelte";
 
   interface Props {
@@ -48,15 +48,7 @@
 
   /** The digits rolling up to `score`, each from its old one (null: the old number didn't have it) to its cell; null
    *  otherwise. A digit lower than its old one goes round: its cell in the strip's second 0–9. */
-  let rolling = $state<{ from: number | null; to: number }[] | null>(null);
-  const digits = (from: number, to: number) => {
-    const was = String(from).padStart(String(to).length, " ");
-    return [...String(to)].map((c, i) => {
-      const old = was[i] === " " ? null : Number(was[i]);
-      const d = Number(c);
-      return { from: old, to: old === null || d >= old ? d : d + 10 };
-    });
-  };
+  let rolling = $state<RollDigit[] | null>(null);
   /** A rise just rolled: the number in gain, until it fades back to ink. */
   let rose = $state(false);
   /** A rescoring call is running, or ended under `--dur-roll` × 4 ago (the jobs refresh comes after it ends). */
@@ -74,7 +66,7 @@
     if (!armed || to <= from || untrack(() => lost)) return;
     armed = false;
     rose = true;
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) rolling = digits(from, to);
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) rolling = rollDigits(from, to);
     // Landed: plain text again (no window, no mask) while the gain holds, then ink.
     const landed = setTimeout(() => (rolling = null), token("--dur-roll"));
     const settle = setTimeout(() => (rose = false), token("--dur-roll") * 2);

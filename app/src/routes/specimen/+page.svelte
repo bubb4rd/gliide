@@ -558,6 +558,44 @@
     rolling = { projected: 64, rescoring: true };
     setTimeout(() => (rolling = { projected: 81, rescoring: false }), 600);
   }
+  /** ScoreHeader's 3-stage loading sequence, replayed: empty bar → baseline fills → projected rolls + gain fills. */
+  let scoreStage = $state<{
+    now: number | null;
+    projected: number | null;
+    ceiling: number | null;
+    label: string;
+  }>({
+    now: 53,
+    projected: 78,
+    ceiling: 85,
+    label: "Landed: 53% baseline filled, then +25 points rolled and swept in",
+  });
+  let scoreTimers: ReturnType<typeof setTimeout>[] = [];
+  function replayScore() {
+    for (const t of scoreTimers) clearTimeout(t);
+    scoreStage = { now: null, projected: null, ceiling: null, label: "1. Reading requirements: empty bar and skeleton" };
+    scoreTimers = [
+      setTimeout(() => {
+        scoreStage = {
+          now: 53,
+          projected: null,
+          ceiling: null,
+          label: "2. Baseline found: bar fills to 53% while edits are suggested",
+        };
+      }, 900),
+      setTimeout(() => {
+        scoreStage = {
+          now: 53,
+          projected: 78,
+          ceiling: 85,
+          label: "3. Review landed: gain sweeps out and 78% rolls up",
+        };
+      }, 2200),
+    ];
+  }
+  $effect(() => () => {
+    for (const t of scoreTimers) clearTimeout(t);
+  });
 
   // ── Heatmap: nine weeks of made-up activity ending on a fixed day, so the specimen never shifts ──
   const heatEnd = new Date(2026, 9, 13);
@@ -1509,7 +1547,30 @@
         <Card pad>
           <ScoreHeader now={64} projected={64} ceiling={70}>No changes in yet: no gain, no popover</ScoreHeader>
         </Card>
+        <Card pad>
+          <ScoreHeader now={null} />
+        </Card>
+        <Card pad>
+          <ScoreHeader now={53} nowTitle="Your master as it is" />
+        </Card>
       </div>
+      <Card pad>
+        <div class="stack">
+          <div class="row">
+            <p class="meta">{scoreStage.label}</p>
+            <Button size="sm" icon={RotateCcw} onclick={replayScore}>Replay</Button>
+          </div>
+          <ScoreHeader
+            now={scoreStage.now}
+            projected={scoreStage.projected}
+            ceiling={scoreStage.ceiling}
+            components={scoreStage.projected !== null ? parts : []}
+            nowTitle="Your master as it is"
+          >
+            <strong>+25 points</strong> from 4 edits · fits on 1 page
+          </ScoreHeader>
+        </div>
+      </Card>
     </section>
 
     <!-- ═══════════ Score bar ═══════════ -->

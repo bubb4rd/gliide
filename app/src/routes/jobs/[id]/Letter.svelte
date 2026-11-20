@@ -132,7 +132,7 @@
   );
 </script>
 
-<!-- The whole letter being written: its stage centered in the ring (`Review`); the one before shows on the desk. -->
+<!-- The whole letter being written: its stage centered in the ring (`Review`); the desk clears until it lands. -->
 {#if writing}
   <div class="center">
     <Thinking center label="Writing the cover letter…" startedAt={s.running?.startedAt} oncancel={() => s.cancel()} />

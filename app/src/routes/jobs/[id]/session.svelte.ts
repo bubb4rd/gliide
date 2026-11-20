@@ -101,6 +101,8 @@ export class Session {
   pending = $state(0);
   /** Bumped when a review arrives from Suggest (not from an edit): the column enters once per arrival. */
   arrival = $state(0);
+  /** True when the first review just arrived after a live Extract/Suggest call: ScoreHeader animates its reveal once. */
+  scoreReveal = $state(false);
   /** The open review's cover letter, once loaded for it. */
   cover = $state<CoverView | null>(null);
   /** A model call on the letter: the whole letter, or paragraph `n` (from 0). */
@@ -205,6 +207,7 @@ export class Session {
       try {
         const review = await startReview(this.job, master, fresh);
         if (!this.#alive) return;
+        if (this.review === null && (this.running !== null || this.steps.length > 0)) this.scoreReveal = true;
         this.#show(review);
         this.arrival++;
         // Suggest ran (not a cached answer): its alias may name a newer model now.
