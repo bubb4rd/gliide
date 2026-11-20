@@ -37,7 +37,7 @@
     type SentLine,
   } from "$lib/api";
   import { bindKeys } from "$lib/keys";
-  import { kindLabel } from "$lib/rounds";
+  import { interviewer, kindLabel } from "$lib/rounds";
   import { Speech, spokenLine } from "$lib/speech.svelte";
   import {
     Button,
@@ -74,6 +74,8 @@
   const byId = $derived(new Map(lines.map((l) => [l.id, l])));
   const asked = $derived(prep.questions.find((q) => q.id === question) ?? prep.questions[0]);
   const practiced = $derived(new Set(turns.map((t) => t.question)));
+  /** The thread holds what you practiced here; a live run's readback rows count as practiced but stay its own. */
+  const typed = $derived(turns.filter((t) => t.live === null));
   const order = $derived(prep.questions.findIndex((q) => q.id === asked?.id));
   /** The first question after this one you haven't practiced, else the next in order. */
   const next = $derived.by(() => {
@@ -81,13 +83,13 @@
     return after.find((q) => !practiced.has(q.id)) ?? after[0];
   });
   /** Who asks: the round's interviewer by first name, else the company. */
-  const asker = $derived(round.with ? `${round.with.split(/[ ,]/)[0]}, as ${company}` : `${company}’s interviewer`);
+  const asker = $derived(interviewer(round, company).asker);
   let answer = $state("");
   let reading = $state<number | null>(null);
   /** You asked for the same question again: it waits for a new answer though the last turn answered it. */
   let again = $state(false);
   /** The last turn answers the question being asked: then it's answered, and the next one waits for N. */
-  const answered = $derived(turns.at(-1)?.question === asked?.id && !again);
+  const answered = $derived(typed.at(-1)?.question === asked?.id && !again);
   let kept = $state(new Set<string>());
   let field = $state<Textarea>();
   let composer = $state<HTMLElement>();
@@ -208,7 +210,7 @@
   /** Turns saved as a story this visit: the turn's id → the story's. */
   let saved = $state(new Map<string, string>());
   /** The newest turn with a story to save that isn't saved yet: what `S` saves. */
-  const saveable = $derived(turns.findLast((t) => t.feedback.story && !saved.has(t.id)));
+  const saveable = $derived(typed.findLast((t) => t.feedback.story && !saved.has(t.id)));
   let saving = $state(false);
 
   const storyHref = (id: string) => `/bank/stories/${encodeURIComponent(id)}`;
@@ -295,7 +297,7 @@
 </div>
 
 <div class="thread" bind:this={thread}>
-  {#each turns as turn (turn.id)}
+  {#each typed as turn (turn.id)}
     <article class="turn">
       <p class="who"><Icon icon={UserRound} size={16} /><span class="who__name">{asker}</span></p>
       <p class="asked">{turn.asked}</p>

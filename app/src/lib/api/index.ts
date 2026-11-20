@@ -42,6 +42,9 @@ import type { JobRow } from "./bindings/JobRow";
 import type { JobView } from "./bindings/JobView";
 import type { KeyDecision } from "./bindings/KeyDecision";
 import type { Library } from "./bindings/Library";
+import type { LiveRun } from "./bindings/LiveRun";
+import type { LiveSession } from "./bindings/LiveSession";
+import type { LiveTakenBack } from "./bindings/LiveTakenBack";
 import type { LogoRow } from "./bindings/LogoRow";
 import type { LogoSource } from "./bindings/LogoSource";
 import type { NotificationPermission } from "./bindings/NotificationPermission";
@@ -165,6 +168,11 @@ export type * from "./bindings/KeyDecision";
 export type * from "./bindings/Letter";
 export type * from "./bindings/Library";
 export type * from "./bindings/LineView";
+export type * from "./bindings/LiveRun";
+export type * from "./bindings/LiveSession";
+export type * from "./bindings/LiveTakenBack";
+export type * from "./bindings/LiveTurn";
+export type * from "./bindings/LiveTurnKind";
 export type * from "./bindings/LogoRow";
 export type * from "./bindings/LogoSource";
 export type * from "./bindings/MasterChoice";
@@ -465,6 +473,39 @@ export const tellStory = (story: string, asked: string, answer: string, spoken: 
   invoke<PracticeTurn>("tell_story", { story, asked, answer, spoken });
 /** The story's practiced tellings (Tell it), oldest first. */
 export const storyTurns = (story: string) => invoke<PracticeTurn[]>("story_turns", { story });
+
+// ── Live interview ──
+/** Starts a live interview of the round: its first turn asks the prep's first question, verbatim (no model call).
+ *  Rejects without a prep. */
+export const liveStart = (round: string) => invoke<LiveSession>("live_start", { round });
+/** A live interview as it stands, with what its readback has read so far. */
+export const liveSession = (session: string) => invoke<LiveSession>("live_session", { session });
+/** The round's live interviews, the newest first. */
+export const liveRuns = (round: string) => invoke<LiveRun[]>("live_runs", { round });
+/** `answer` to the current turn, kept first; then one model call (emits `progress`, `interviewing`, keyed by the
+ *  round's job, so `cancel` stops it) for a follow-up, or none: then the next prep question, or the end past the last.
+ *  No call after a question's second follow-up. A failed or cancelled call rejects with the answer kept and the
+ *  session `waiting`. */
+export const liveAnswer = (session: string, answer: string, spoken: Spoken | null = null) =>
+  invoke<LiveSession>("live_answer", { session, answer, spoken });
+/** The step a `waiting` session owes, again (one model call, as `liveAnswer`); the session as is when none is owed. */
+export const liveRetry = (session: string) => invoke<LiveSession>("live_retry", { session });
+/** Takes back your last answer: its turn unanswered again (a turn asked after it removed) and its text. `cancel` the
+ *  round's job first. */
+export const liveTakeBack = (session: string) => invoke<LiveTakenBack>("live_take_back", { session });
+/** Next question: the current turn skipped (while `waiting`, the follow-up owed not asked), then the next prep
+ *  question, or the end past the last. `cancel` the round's job first while waiting. */
+export const liveSkip = (session: string) => invoke<LiveSession>("live_skip", { session });
+/** Ends the interview with the clock as you kept it. `answer` (Send and end), when it says something, is kept on the
+ *  current turn first, with no model call; `null` drops a turn unanswered. On one that ended by itself, only the clock
+ *  is set. */
+export const liveEnd = (session: string, activeMs: number, answer: string | null = null, spoken: Spoken | null = null) =>
+  invoke<LiveSession>("live_end", { session, activeMs, answer, spoken });
+/** One model call (emits `progress`, `practicing`): the ended interview's exchange on prep question `question` read as
+ *  Practice reads an answer, kept as practice of the round (it counts as practiced). Read already: the row kept, no
+ *  call. Rejects for a question never answered. One at a time: read the questions in turn. */
+export const liveRead = (session: string, question: string) =>
+  invoke<PracticeTurn>("live_read", { session, question });
 
 // ── Spoken practice ──
 /** Whether gliide can hear a spoken answer, without asking macOS. */

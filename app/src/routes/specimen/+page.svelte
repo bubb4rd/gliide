@@ -62,6 +62,8 @@
     Marked,
     Menu,
     Meter,
+    MixPicker,
+    type MixCard,
     Nav,
     NavItem,
     PartRow,
@@ -70,6 +72,8 @@
     RankBars,
     type RankItem,
     ReleaseNotes,
+    RouteLine,
+    type RoutePoint,
     Scatter,
     type ScatterPoint,
     ScoreBar,
@@ -829,6 +833,76 @@
     hollow,
     tip: `${label}: ${y}, ${x}`,
   });
+  // ── Route lines and mixes (Settings → Agents) ──
+  const CLAUDE = "/agents/claude.png";
+  const OPENAI = "/agents/openai.png";
+  const AGY = "/agents/antigravity.png";
+  const rp = (key: string, icon: string, label: string, seconds: number, extra: Partial<RoutePoint> = {}): RoutePoint => ({
+    key,
+    icon,
+    label,
+    seconds,
+    description: `${label}, ${seconds.toFixed(1)} s`,
+    tip: {
+      title: label,
+      rows: [
+        { label: "Median", value: `${seconds.toFixed(1)} s`, sub: "gliide’s reference" },
+        ...(extra.quality != null ? [{ label: "Quality", value: extra.quality }] : []),
+      ],
+    },
+    ...extra,
+  });
+  /** Choose a route on the first line: it becomes the current one. */
+  let routeOn = $state("sonnet");
+  let routeHover = $state<string | null>(null);
+  const readLine = $derived(
+    [
+      rp("haiku", CLAUDE, "Haiku", 4.1, { invalid: true }),
+      rp("flash", AGY, "Gemini 3.8 Flash Low", 5.2),
+      rp("sonnet", CLAUDE, "Sonnet", 6.8),
+      rp("gpt", OPENAI, "GPT-6 mini", 9.4),
+    ].map((p) => ({ ...p, current: p.key === routeOn })),
+  );
+  const crowdedLine: RoutePoint[] = [
+    rp("a", CLAUDE, "Sonnet", 12.2, { current: true }),
+    rp("b", OPENAI, "GPT-6", 13.0, { blocked: "signed out" }),
+    rp("c", OPENAI, "GPT-6 mini", 13.4, { blocked: "signed out", invalid: true }),
+    rp("d", AGY, "Gemini 4 Neon", 14.1, { preview: true }),
+    rp("e", CLAUDE, "Opus", 19.8),
+    rp("f", AGY, "Gemini 4 Argon", 41.0),
+  ];
+  const tailorPlot: RoutePoint[] = [
+    rp("flash", AGY, "Gemini 3.8 Flash Low", 10.5, { quality: 71 }),
+    rp("sonnet", CLAUDE, "Sonnet", 15.9, { quality: 78, preview: true }),
+    rp("haiku", CLAUDE, "Haiku", 8.2, { quality: 69, invalid: true }),
+    rp("gpt", OPENAI, "GPT-6", 28.0, { quality: 81, blocked: "signed out" }),
+    rp("opus", CLAUDE, "Opus", 34.5, { quality: 86, current: true }),
+  ];
+  const mixSample: MixCard[] = [
+    { key: "fastest", name: "Fastest", minutes: 43, quality: 71, foot: "27 min less, quality 15 lower" },
+    { key: "best", name: "Best edits", minutes: 68, quality: 86, foot: "2 min less, the same quality" },
+    { key: "own", name: "Your own", minutes: 70, quality: 86, here: true, foot: "Where you are" },
+  ];
+  const mixCardStates: MixCard[] = [
+    { key: "fastest", name: "Fastest", minutes: 43, quality: 71, disabled: "Needs Antigravity, which isn’t installed.", foot: "Needs Antigravity, which isn’t installed." },
+    { key: "best", name: "Best edits", minutes: 68, quality: 86, on: true, foot: "Where you are" },
+    { key: "own", name: "Your own", minutes: null, quality: null, disabled: "Choose a route", note: "Choose a route on any line below to make your own mix." },
+  ];
+  const mixEmpty: MixCard[] = [
+    { key: "fastest", name: "Fastest", minutes: null, noTotal: "No model calls in the last 30 days to weigh it by", quality: null },
+    { key: "own", name: "Your own", minutes: null, noTotal: "Writing isn’t benchmarked on it", quality: 78, here: true, foot: "Codex is signed out, so coaching can’t run.", footTone: "warn" },
+  ];
+  let mixPreview = $state<string | null>(null);
+  let routeMenu = $state("claude:sonnet");
+  const routeMenuOptions = [
+    { value: "claude:opus", label: "Opus", meta: "18.4 s · 86", group: "Claude Code" },
+    { value: "claude:sonnet", label: "Sonnet", meta: "6.8 s · 78", group: "Claude Code" },
+    { value: "claude:haiku", label: "Haiku", meta: "4.1 s", group: "Claude Code" },
+    { value: "custom:claude", label: "Other model…", group: "Claude Code" },
+    { value: "codex:gpt-6", label: "GPT-6", meta: "14.1 s", group: "Codex" },
+    { value: "custom:codex", label: "Other model…", group: "Codex" },
+  ];
+
   const scatterPoints: ScatterPoint[] = [
     pt("flash", "google", "Gemini 3.8 Flash", 1.04, 81.7, true),
     pt("opus", "anthropic", "Opus", 3.84, 79.9, true),
@@ -1544,7 +1618,7 @@
         </Card>
         <Card pad>
           <div class="tile">
-            <p class="label">Thinking · with steps done · with Cancel · bare</p>
+            <p class="label">Thinking · with steps done · with Cancel · a named stop with its key · bare</p>
             {#key progressRun}
               <Thinking
                 label="Suggesting edits…"
@@ -1552,6 +1626,12 @@
                 oncancel={() => toast("Cancelled", { tone: "neutral" })}
               />
               <Thinking label="Reading the requirements…" oncancel={() => toast("Cancelled", { tone: "neutral" })} />
+              <Thinking
+                label="Priya is reading your answer…"
+                cancelLabel="Take back"
+                cancelKbd="Esc"
+                oncancel={() => toast("Taken back", { tone: "neutral" })}
+              />
               <Thinking label="Copying your resume…" />
             {/key}
             <div class="row"><Button size="sm" icon={RotateCcw} onclick={() => progressRun++}>Restart</Button></div>
@@ -2128,6 +2208,75 @@
           <span class="row nowrap meta"><SeriesKey color={M.anthropic.color} />Anthropic</span>
           <span class="row nowrap meta"><SeriesKey color={M.openai.color} />OpenAI</span>
           <span class="row nowrap meta"><SeriesKey />No maker</span>
+        </div>
+      </Card>
+    </section>
+
+    <!-- ═══════════ Route lines and mixes ═══════════ -->
+    <section class="section">
+      <h2 class="title">Route lines and mixes</h2>
+      <p class="meta lede">
+        Settings → Agents' Who does what and Your mix, at the role column's width. Every route the benchmark timed sits
+        on its role's line by its median against the target (two thirds along); Tailoring's is a plot against quality.
+        Hover a route or a card for what it changes; Tab into a line and use the arrows, ⏎ to choose.
+      </p>
+      <div class="grid cols-2">
+        <Card pad>
+          <div class="tile">
+            <p class="label">A line: current (click another), not valid every first try</p>
+            <RouteLine
+              points={readLine}
+              target={8}
+              label="Reading (specimen)"
+              onchoose={(k) => (routeOn = k)}
+              onpreview={(k) => (routeHover = k)}
+            />
+            <p class="meta">{routeHover ? `In hand: ${routeHover}` : `Runs on ${routeOn}`}</p>
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">Crowded labels, blocked, a preview ring, past the line's end</p>
+            <RouteLine points={crowdedLine} target={20} label="Coaching (specimen)" />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">A plot: quality up, the frontier, blocked, preview</p>
+            <RouteLine
+              points={tailorPlot}
+              target={30}
+              plot={{ min: 65, max: 90 }}
+              frontier={["haiku", "flash", "sonnet", "gpt", "opus"]}
+              label="Tailoring (specimen)"
+            />
+          </div>
+        </Card>
+        <Card pad>
+          <div class="tile">
+            <p class="label">One route; none</p>
+            <RouteLine points={[rp("only", CLAUDE, "Sonnet", 6.2, { current: true })]} target={15} label="Writing (specimen)" />
+            <RouteLine points={[]} target={15} label="Nothing timed (specimen)" />
+          </div>
+        </Card>
+      </div>
+      <div class="pane-width">
+        <Card pad>
+          <div class="tile">
+            <p class="label">MixPicker: presets, your own where you are</p>
+            <MixPicker cards={mixSample} label="Your mix (specimen)" onpreview={(k) => (mixPreview = k)} />
+            <p class="meta">{mixPreview ? `In hand: ${mixPreview}` : "Hover a card"}</p>
+            <p class="label">A preset on, one that can't be chosen, your own as a note</p>
+            <MixPicker cards={mixCardStates} label="Your mix, states (specimen)" />
+            <p class="label">No totals; a warning</p>
+            <MixPicker cards={mixEmpty} label="Your mix, empty (specimen)" />
+          </div>
+        </Card>
+      </div>
+      <Card pad>
+        <div class="row">
+          <p class="label">Menu with groups (a role's route)</p>
+          <Menu bind:value={routeMenu} options={routeMenuOptions} label="Reading runs on" size="sm" />
         </div>
       </Card>
     </section>

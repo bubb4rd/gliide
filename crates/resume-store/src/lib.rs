@@ -49,6 +49,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("bench.sql"),
     include_str!("sent_template.sql"),
     include_str!("spoken.sql"),
+    include_str!("live.sql"),
 ];
 
 /// How long after a round ends its debrief is due (Up next, the Applications list); later, it's left be.
@@ -474,7 +475,72 @@ pub struct PracticeRow {
     pub feedback: String,
     /// Said out loud: how long and how many words; `None` when typed.
     pub spoken: Option<Spoken>,
+    /// The live run it was read from (the readback); `None` for an answer practiced on its own.
+    pub live_id: Option<String>,
     /// Set by the store when added (the one given is ignored).
+    pub at: String,
+}
+
+/// A live interview of a round: the prep's questions asked in order, with follow-ups.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveRunRow {
+    pub id: String,
+    pub round_id: String,
+    pub started_at: String,
+    /// `None` while live.
+    pub ended_at: Option<String>,
+    /// The session's clock as the app kept it (waits excluded), set at its end.
+    pub active_ms: Option<u32>,
+    /// The prep's question count when it started.
+    pub questions: u32,
+    /// Its ask turns (questions asked), counted by the store.
+    pub asked: u32,
+    /// Its follow-up turns, counted by the store.
+    pub follows: u32,
+}
+
+/// What a live turn asked: a prep question verbatim, or a follow-up on the answer before it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveKind {
+    Ask,
+    Follow,
+}
+
+impl LiveKind {
+    /// The lowercase name, as stored.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Follow => "follow",
+        }
+    }
+
+    /// The kind named `name` (as [`LiveKind::as_str`] writes it).
+    pub fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "ask" => Self::Ask,
+            "follow" => Self::Follow,
+            _ => return None,
+        })
+    }
+}
+
+/// One turn of a live run: what was asked and your answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveTurnRow {
+    /// Its place in the run, from 0. Set by the store when added (the one given is ignored).
+    pub seq: u32,
+    /// The prep question's id.
+    pub question: String,
+    pub kind: LiveKind,
+    pub asked: String,
+    /// A follow-up's phrase of the answer it took up.
+    pub picked: Option<String>,
+    /// `None` while unanswered, or skipped.
+    pub answer: Option<String>,
+    pub skipped: bool,
+    pub spoken: Option<Spoken>,
+    /// When it was asked. Set by the store when added (the one given is ignored).
     pub at: String,
 }
 
@@ -2091,17 +2157,24 @@ impl Store {
         Ok(Prep { at, ..p.clone() })
     }
 
-    /// Adds a practiced answer, at now; returns it as stored. Errors when it names a round that doesn't exist.
+    /// Adds a practiced answer, at now; returns it as stored. Errors when it names a round, or a live run, that
+    /// doesn't exist.
     pub fn add_practice(&self, p: &PracticeRow) -> Result<PracticeRow, StoreError> {
         if let Some(round) = &p.round_id
             && round_by_id(&self.conn, round)?.is_none()
         {
             return Err(not_found("round", round));
         }
+        if let Some(run) = &p.live_id
+            && self.live_run_row(run)?.is_none()
+        {
+            return Err(not_found("live run", run));
+        }
         let at = now();
         self.conn.execute(
-            "INSERT INTO practice (id, round_id, story_id, question, asked, answer, feedback, spoken_ms, spoken_words, at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO practice (id, round_id, story_id, question, asked, answer, feedback, spoken_ms, spoken_words,
+                 live_id, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 p.id,
                 p.round_id,
@@ -2112,15 +2185,21 @@ impl Store {
                 p.feedback,
                 p.spoken.map(|s| s.ms),
                 p.spoken.map(|s| s.words),
+                p.live_id,
                 at
             ],
         )?;
         Ok(PracticeRow { at, ..p.clone() })
     }
 
-    /// The round's practiced answers, oldest first.
+    /// The round's practiced answers, oldest first (a live run's readback included).
     pub fn practice(&self, round_id: &str) -> Result<Vec<PracticeRow>, StoreError> {
         self.practice_where("round_id = ?1 ORDER BY at, rowid", Some(round_id))
+    }
+
+    /// The answers read from live run `run_id` (its readback), oldest first.
+    pub fn live_practice(&self, run_id: &str) -> Result<Vec<PracticeRow>, StoreError> {
+        self.practice_where("live_id = ?1 ORDER BY at, rowid", Some(run_id))
     }
 
     /// Every telling of the story (alone or answering a prep question), oldest first.
@@ -2144,7 +2223,7 @@ impl Store {
         arg: Option<&str>,
     ) -> Result<Vec<PracticeRow>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT id, round_id, story_id, question, asked, answer, feedback, spoken_ms, spoken_words, at
+            "SELECT id, round_id, story_id, question, asked, answer, feedback, spoken_ms, spoken_words, at, live_id
              FROM practice WHERE {clause}"
         ))?;
         let row = |r: &Row| {
@@ -2159,6 +2238,7 @@ impl Store {
                 feedback: r.get(6)?,
                 spoken: ms.zip(words).map(|(ms, words)| Spoken { ms, words }),
                 at: r.get(9)?,
+                live_id: r.get(10)?,
             })
         };
         let rows = match arg {
@@ -2166,6 +2246,211 @@ impl Store {
             None => stmt.query_map([], row)?.collect::<Result<Vec<_>, _>>()?,
         };
         Ok(rows)
+    }
+
+    // Live interviews.
+
+    /// Starts a live run of the round, now, with no turns yet; `questions`: the prep's question count. Errors when the
+    /// round doesn't exist.
+    pub fn add_live_run(&self, round_id: &str, questions: u32) -> Result<LiveRunRow, StoreError> {
+        if round_by_id(&self.conn, round_id)?.is_none() {
+            return Err(not_found("round", round_id));
+        }
+        let id = new_id();
+        self.conn.execute(
+            "INSERT INTO live_runs (id, round_id, started_at, questions) VALUES (?1, ?2, ?3, ?4)",
+            params![id, round_id, now(), questions],
+        )?;
+        self.live_run_row(&id)?.ok_or_else(|| not_found("live run", &id))
+    }
+
+    /// Adds `t` as the run's next turn (its `seq` after the last), asked now; returns it as stored. Errors when the
+    /// run doesn't exist.
+    pub fn add_live_turn(&self, run_id: &str, t: &LiveTurnRow) -> Result<LiveTurnRow, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let seq: Option<u32> = tx
+            .query_row(
+                "SELECT (SELECT COALESCE(MAX(seq) + 1, 0) FROM live_turns WHERE run_id = ?1)
+                 FROM live_runs WHERE id = ?1",
+                [run_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let seq = seq.ok_or_else(|| not_found("live run", run_id))?;
+        let at = now();
+        tx.execute(
+            "INSERT INTO live_turns (run_id, seq, question, kind, asked, picked, answer, skipped, spoken_ms,
+                 spoken_words, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                run_id,
+                seq,
+                t.question,
+                t.kind.as_str(),
+                t.asked,
+                t.picked,
+                t.answer,
+                t.skipped,
+                t.spoken.map(|s| s.ms),
+                t.spoken.map(|s| s.words),
+                at
+            ],
+        )?;
+        tx.commit()?;
+        Ok(LiveTurnRow { seq, at, ..t.clone() })
+    }
+
+    /// Sets `answer` on the run's turn `seq`. Errors when there's no such turn unanswered and not skipped.
+    pub fn answer_live_turn(
+        &self,
+        run_id: &str,
+        seq: u32,
+        answer: &str,
+        spoken: Option<Spoken>,
+    ) -> Result<(), StoreError> {
+        let n = self.conn.execute(
+            "UPDATE live_turns SET answer = ?3, spoken_ms = ?4, spoken_words = ?5
+             WHERE run_id = ?1 AND seq = ?2 AND answer IS NULL AND skipped = 0",
+            params![
+                run_id,
+                seq,
+                answer,
+                spoken.map(|s| s.ms),
+                spoken.map(|s| s.words)
+            ],
+        )?;
+        if n == 0 {
+            return Err(not_found("live turn", &format!("{run_id}#{seq}")));
+        }
+        Ok(())
+    }
+
+    /// Takes back the run's last answer: that turn unanswered again and any turn asked after it removed, in one
+    /// transaction. Returns the answer's text; `None` (nothing changed) when no turn has an answer, or a turn after
+    /// the last answered one was skipped.
+    pub fn unanswer_live_turn(&self, run_id: &str) -> Result<Option<String>, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let last: Option<(u32, String)> = tx
+            .query_row(
+                "SELECT seq, answer FROM live_turns WHERE run_id = ?1 AND answer IS NOT NULL
+                 ORDER BY seq DESC LIMIT 1",
+                [run_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((seq, answer)) = last else {
+            return Ok(None);
+        };
+        let skipped_after: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM live_turns WHERE run_id = ?1 AND seq > ?2 AND skipped = 1",
+            params![run_id, seq],
+            |r| r.get(0),
+        )?;
+        if skipped_after > 0 {
+            return Ok(None);
+        }
+        tx.execute(
+            "DELETE FROM live_turns WHERE run_id = ?1 AND seq > ?2",
+            params![run_id, seq],
+        )?;
+        tx.execute(
+            "UPDATE live_turns SET answer = NULL, spoken_ms = NULL, spoken_words = NULL
+             WHERE run_id = ?1 AND seq = ?2",
+            params![run_id, seq],
+        )?;
+        tx.commit()?;
+        Ok(Some(answer))
+    }
+
+    /// Marks the run's turn `seq` skipped. Errors when there's no such turn unanswered and not skipped.
+    pub fn skip_live_turn(&self, run_id: &str, seq: u32) -> Result<(), StoreError> {
+        let n = self.conn.execute(
+            "UPDATE live_turns SET skipped = 1
+             WHERE run_id = ?1 AND seq = ?2 AND answer IS NULL AND skipped = 0",
+            params![run_id, seq],
+        )?;
+        if n == 0 {
+            return Err(not_found("live turn", &format!("{run_id}#{seq}")));
+        }
+        Ok(())
+    }
+
+    /// Ends the run, in one transaction: a turn unanswered and not skipped is removed; `ended_at` set to now unless it
+    /// has one; `active_ms` set when given. Errors when the run doesn't exist.
+    pub fn end_live_run(&self, run_id: &str, active_ms: Option<u32>) -> Result<(), StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let n = tx.execute(
+            "UPDATE live_runs SET ended_at = COALESCE(ended_at, ?2), active_ms = COALESCE(?3, active_ms)
+             WHERE id = ?1",
+            params![run_id, now(), active_ms],
+        )?;
+        if n == 0 {
+            return Err(not_found("live run", run_id));
+        }
+        tx.execute(
+            "DELETE FROM live_turns WHERE run_id = ?1 AND answer IS NULL AND skipped = 0",
+            [run_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The round's live runs, the newest first.
+    pub fn live_runs(&self, round_id: &str) -> Result<Vec<LiveRunRow>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {LIVE_RUN_COLUMNS} FROM live_runs r WHERE r.round_id = ?1
+             ORDER BY r.started_at DESC, r.rowid DESC"
+        ))?;
+        let rows = stmt
+            .query_map([round_id], live_run_from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Live run `id` and its turns in order.
+    pub fn live_run(&self, id: &str) -> Result<Option<(LiveRunRow, Vec<LiveTurnRow>)>, StoreError> {
+        let Some(run) = self.live_run_row(id)? else {
+            return Ok(None);
+        };
+        let mut stmt = self.conn.prepare(
+            "SELECT seq, question, kind, asked, picked, answer, skipped, spoken_ms, spoken_words, at
+             FROM live_turns WHERE run_id = ?1 ORDER BY seq",
+        )?;
+        let turns = stmt
+            .query_map([id], |r| {
+                let kind: String = r.get(2)?;
+                let (ms, words): (Option<u32>, Option<u32>) = (r.get(7)?, r.get(8)?);
+                Ok(LiveTurnRow {
+                    seq: r.get(0)?,
+                    question: r.get(1)?,
+                    kind: LiveKind::parse(&kind).ok_or_else(|| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            2,
+                            rusqlite::types::Type::Text,
+                            format!("live turn kind `{kind}`").into(),
+                        )
+                    })?,
+                    asked: r.get(3)?,
+                    picked: r.get(4)?,
+                    answer: r.get(5)?,
+                    skipped: r.get(6)?,
+                    spoken: ms.zip(words).map(|(ms, words)| Spoken { ms, words }),
+                    at: r.get(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Some((run, turns)))
+    }
+
+    fn live_run_row(&self, id: &str) -> Result<Option<LiveRunRow>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                &format!("SELECT {LIVE_RUN_COLUMNS} FROM live_runs r WHERE r.id = ?1"),
+                [id],
+                live_run_from_row,
+            )
+            .optional()?)
     }
 
     // Stories.
@@ -2620,6 +2905,24 @@ impl RawRound {
         let state = serde_json::from_value(serde_json::Value::String(self.state))?;
         Ok(Round { state, ..self.r })
     }
+}
+
+/// A live run's columns, with its ask and follow-up turns counted (the table aliased `r`).
+const LIVE_RUN_COLUMNS: &str = "r.id, r.round_id, r.started_at, r.ended_at, r.active_ms, r.questions,
+    (SELECT COUNT(*) FROM live_turns t WHERE t.run_id = r.id AND t.kind = 'ask'),
+    (SELECT COUNT(*) FROM live_turns t WHERE t.run_id = r.id AND t.kind = 'follow')";
+
+fn live_run_from_row(r: &Row) -> rusqlite::Result<LiveRunRow> {
+    Ok(LiveRunRow {
+        id: r.get(0)?,
+        round_id: r.get(1)?,
+        started_at: r.get(2)?,
+        ended_at: r.get(3)?,
+        active_ms: r.get(4)?,
+        questions: r.get(5)?,
+        asked: r.get(6)?,
+        follows: r.get(7)?,
+    })
 }
 
 fn round_by_id(conn: &Connection, id: &str) -> Result<Option<Round>, StoreError> {

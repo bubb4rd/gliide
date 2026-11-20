@@ -8,6 +8,9 @@
   box's middle, the steps stacked above it and Cancel under it, so a new stage never moves what you're reading. A
   stage that finishes leaves with `exit`; the next enters as `.enter` once it's gone, and the finished one's step
   enters above.
+
+  The stop says what stopping does when Cancel doesn't (`cancelLabel`: the live interview's "Take back"), with its
+  key (`cancelKbd`) when one stops it.
 -->
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
@@ -32,9 +35,21 @@
     /** Centered in its box, the stage line on its middle (a pane being written). */
     center?: boolean;
     oncancel?: () => void;
+    /** The stop's word, when it does more than cancel ("Take back"); "Cancel" by default. */
+    cancelLabel?: string;
+    /** The key that stops it, shown in the button ("Esc"). */
+    cancelKbd?: string;
   }
 
-  let { label, steps = [], startedAt, center = false, oncancel }: Props = $props();
+  let {
+    label,
+    steps = [],
+    startedAt,
+    center = false,
+    oncancel,
+    cancelLabel = "Cancel",
+    cancelKbd,
+  }: Props = $props();
 
   const mountedAt = performance.now();
   let elapsed = $state(0);
@@ -77,12 +92,14 @@
       {/key}
     </div>
     {#if oncancel}
-      <div class="cancel"><Button variant="ghost" size="sm" onclick={oncancel}>Cancel</Button></div>
+      <div class="cancel">
+        <Button variant="ghost" size="sm" kbd={cancelKbd} onclick={oncancel}>{cancelLabel}</Button>
+      </div>
     {/if}
   {:else}
     <div class="now">
       {@render stage()}
-      {#if oncancel}<Button variant="ghost" size="sm" onclick={oncancel}>Cancel</Button>{/if}
+      {#if oncancel}<Button variant="ghost" size="sm" kbd={cancelKbd} onclick={oncancel}>{cancelLabel}</Button>{/if}
     </div>
   {/if}
 </div>

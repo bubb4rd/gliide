@@ -39,7 +39,7 @@ network requests are these (links you open, such as a posting or Maps, go to you
 
 | Request | When | What is sent |
 |---|---|---|
-| Your agent CLI (`claude -p`, `codex exec` or `agy -p`) | Extract, Suggest, Rewrite, Instruct, import, cover letters, interview prep and practice; feed checks (up to the daily cap, also while gliide is closed if you turn that on) | The prompt (posting text, the resume being tailored, your notes) goes to the model through the CLI you installed, under your own account with its maker |
+| Your agent CLI (`claude -p`, `codex exec` or `agy -p`) | Extract, Suggest, Rewrite, Instruct, import, cover letters, interview prep, practice and the live interviewer's follow-ups; feed checks (up to the daily cap, also while gliide is closed if you turn that on) | The prompt (posting text, the resume being tailored, your notes) goes to the model through the CLI you installed, under your own account with its maker |
 | A posting's page or its board's API (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee…) | You paste a link; a feed job is read | The link |
 | [freehire](https://freehire.me) public API and `logo.freehire.me` | Feed pulls and searches (when the feed is on, and every 3 hours while gliide is closed if you turn on Settings → Feed → Pull while gliide is closed); company logos | Your feed filters and search words; company names |
 | Company websites | A feed company's logo freehire doesn't have | A request for the site's icon |

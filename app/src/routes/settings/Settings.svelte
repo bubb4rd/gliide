@@ -2,13 +2,10 @@
   Settings: a modal `Sheet` over whatever screen is showing (⌘, or the sidebar's Settings; the layout mounts it while
   `shell.settings` names a pane). The rail: a search that narrows the panes to those whose settings match, the panes,
   and this build's version at its foot; the pane shown takes the rest, one at a time. Every control saves as you change
-  it (fields on blur or ⏎); the theme applies at once. Agents names, for each kind of work (Reading, Tailoring,
-  Writing, Coaching), the agent it runs on (a menu of the ones that are on and signed in) and that agent's model for
-  it, with how fast the pair answers on this Mac; Set all to… puts every role on one agent; then what suggestions draw
-  on; then lists Claude Code, Codex and Antigravity (each checked by running it, never by reading its credentials; one
-  check runs them all, off ones too), each with its presence on its icon, the roles it runs, a switch (locked while a
-  role runs on it), and its path behind a disclosure. When an agent a role runs on can't run, a prompt under the roles
-  offers to move them to another; it never switches by itself. Feed holds the job feed's own settings (saved apart
+  it (fields on blur or ⏎); the theme applies at once. Agents (`Agents.svelte`) sets who does what as a trade: your mix
+  (the presets and your own, by model time a month and Tailoring's quality), a line per role with every route the
+  benchmark timed placed by its time against the role's target (Tailoring's a plot against quality), and the agents on
+  this Mac. Feed holds the job feed's own settings (saved apart
   from the rest): whether it pulls, and whether it pulls while gliide is closed too (a launchd agent macOS may hold
   back in Login Items, read again whenever the window gains focus); each filter is Auto (worked out from your
   experience and masters, shown as it stands) or Custom;
@@ -16,7 +13,7 @@
   Apify token. Notifications are off until Turn on (the only thing that asks macOS); its three kinds can't be checked
   while Interviews is off or macOS doesn't allow gliide's banners, read again whenever the window gains focus. Usage
   (`Usage.svelte`) shows the model calls' tokens and cost; Benchmark (`Benchmark.svelte`) ranks the routes per role and
-  runs the suite on this Mac. Set all to…'s presets and Benchmark's Use the best per role apply routes the same way
+  runs the suite on this Mac. Agents' presets and Benchmark's Use the best per role apply routes the same way
   (`app.applyRoutes`, with Undo).
 -->
 <script lang="ts">
@@ -26,42 +23,31 @@
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Bot from "@lucide/svelte/icons/bot";
   import Gauge from "@lucide/svelte/icons/gauge";
   import ChartColumn from "@lucide/svelte/icons/chart-column";
-  import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import Info from "@lucide/svelte/icons/info";
   import Palette from "@lucide/svelte/icons/palette";
   import RadioTower from "@lucide/svelte/icons/radio-tower";
-  import RotateCw from "@lucide/svelte/icons/rotate-cw";
   import Rss from "@lucide/svelte/icons/rss";
   import X from "@lucide/svelte/icons/x";
   import {
-    type Agent,
-    type AgentStatus,
     appError,
     type Backdrop,
     feedSettings,
     setFeedSettings,
     type FeedSettingsDto,
     type FeedSettingsView,
-    type Mode,
     type NotificationPermission,
     notificationPermission,
     openLoginItems,
     openNotificationSettings,
     requestNotifications,
-    type Role,
-    routeLatencies,
-    type RouteLatency,
     type Settings,
     type Theme,
   } from "$lib/api";
-  import { AGENT_LIST, AGENTS, PRESETS, ROLES, type AgentInfo, type Preset } from "$lib/agents";
   import { CATEGORY, COUNTRIES, EMPLOYMENT, SENIORITY, countryName } from "$lib/feed";
   import type { KeyBindings } from "$lib/keys";
   import { app } from "$lib/stores/app.svelte";
@@ -70,11 +56,9 @@
   import { shell, type SettingsPane } from "$lib/stores/shell.svelte";
   import { theme } from "$lib/stores/theme.svelte";
   import {
-    AgentMark,
     Button,
     Card,
     Checkbox,
-    CompanyMark,
     Icon,
     Input,
     Menu,
@@ -83,22 +67,13 @@
     ReleaseNotes,
     Segmented,
     Sheet,
-    Switch,
     tip,
     toast,
   } from "$lib/ui";
+  import Agents from "./Agents.svelte";
   import Benchmark from "./Benchmark.svelte";
   import Usage from "./Usage.svelte";
 
-  const CUSTOM = "custom";
-  /** Set all to…'s value while the roles run on different agents: none of its options. */
-  const MIXED = "";
-  /** Set all to…'s values for presets: `preset:<id>`, apart from the agents' ids. */
-  const PRESET = "preset:";
-  const MODES: { value: Mode; label: string }[] = [
-    { value: "master-only", label: "Master only" },
-    { value: "bank-aware", label: "Bank-aware" },
-  ];
   const THEMES: { value: Theme; label: string }[] = [
     { value: "light", label: "Light" },
     { value: "dark", label: "Dark" },
@@ -111,14 +86,8 @@
     { value: "sakura", label: "Sakura" },
   ];
 
-  let checking = $state(false);
   /** Bumped when a save fails, so every control redraws from what's stored. */
   let resets = $state(0);
-  /** Roles whose model menu says Custom… while the field is being filled. */
-  let custom = $state<Record<Role, boolean>>({ read: false, tailor: false, write: false, coach: false });
-  let drafts = $state<Record<Role, string>>({ read: "", tailor: "", write: "", coach: "" });
-  /** How fast each role's route answers on this Mac; empty until loaded. */
-  let paces = $state<RouteLatency[]>([]);
 
   const s = $derived(app.settings);
 
@@ -130,7 +99,7 @@
       label: "Agents",
       icon: Bot,
       terms:
-        "who does what reading tailoring writing coaching set all models suggestions from bank-aware master only claude code codex antigravity path sign in check again",
+        "your mix fastest best edits model time quality target who does what reading tailoring writing coaching set all models other model suggestions from bank-aware master only on this mac claude code codex antigravity path sign in check again",
     },
     {
       id: "benchmark",
@@ -203,20 +172,6 @@
 
   /** Benchmark's place in the rail while a run is going: "40/324". */
   const runCount = $derived(benchmark.busy && benchmark.run ? `${benchmark.run.done}/${benchmark.run.total}` : undefined);
-
-  // The fields start from what's stored for each role's agent, and follow it after each save or switch.
-  $effect(() => {
-    for (const role of ROLES) drafts[role.id] = app.routes[role.id].model;
-  });
-
-  // Each role's pace, read again after every save (a route or model may have changed).
-  $effect(() => {
-    if (!s) return;
-    routeLatencies().then(
-      (v) => (paces = v),
-      (e) => console.error(`route latencies: ${appError(e).message}`),
-    );
-  });
 
   onMount(() => {
     if (!app.settings) app.loadSettings();
@@ -493,156 +448,10 @@
     openNotificationSettings().catch((e) => toast(appError(e).message, { tone: "danger" }));
   }
 
-  /** One check, every agent. */
-  async function refreshAgents() {
-    checking = true;
-    await app.refreshAgents();
-    checking = false;
-  }
-
-  /** Runs `role` on `agent` from now on, with that agent's own model for it. */
-  function setRoute(role: Role, agent: Agent) {
-    if (!s || s.routes[role] === agent) return;
-    custom[role] = false;
-    void save({ routes: { ...s.routes, [role]: agent } });
-  }
-
-  /** Runs every role in `roles` on `agent`, each with that agent's own model for it. */
-  function moveRoles(roles: Role[], agent: Agent) {
-    if (!s) return;
-    const routes = { ...s.routes };
-    for (const role of roles) {
-      routes[role] = agent;
-      custom[role] = false;
-    }
-    void save({ routes });
-  }
-
-  /** Turns an agent on (offered by the role menus, may run calls) or off (never runs one; still checked). */
-  function setEnabled(agent: Agent, enabled: boolean) {
-    if (s) void save({ agents: { ...s.agents, [agent]: { ...s.agents[agent], enabled } } });
-  }
-
   function setTheme(t: Theme) {
     // Applied before the save returns, so the switch feels instant.
     theme.apply(t);
     save({ theme: t });
-  }
-
-  /** `agent`'s models, from its status, as menu options; Custom… last. */
-  function modelOptions(agent: Agent) {
-    return [
-      ...(statusOf(agent)?.models ?? []).map((m) => ({ value: m.id, label: m.name })),
-      { value: CUSTOM, label: "Custom…" },
-    ];
-  }
-  const listed = (agent: Agent, model: string) => app.lists(agent, model);
-
-  const menuValue = (role: Role) => {
-    const r = app.routes[role];
-    return custom[role] || !listed(r.info.id, r.model) ? CUSTOM : r.model;
-  };
-
-  /** Saves `role`'s model on the agent it runs on, keeping that agent's path and other models. */
-  function saveModel(role: Role, value: string) {
-    if (!s) return Promise.resolve(false);
-    const agent = s.routes[role];
-    const a = s.agents[agent];
-    return save({ agents: { ...s.agents, [agent]: { ...a, models: { ...a.models, [role]: value } } } });
-  }
-
-  function chooseModel(role: Role, value: string) {
-    if (value === CUSTOM) {
-      custom[role] = true;
-      drafts[role] = listed(app.routes[role].info.id, drafts[role]) ? "" : drafts[role];
-      tick().then(() => document.getElementById(`${role}-custom`)?.focus());
-      return;
-    }
-    custom[role] = false;
-    void saveModel(role, value);
-  }
-
-  async function commitModel(role: Role) {
-    const value = drafts[role].trim();
-    const r = app.routes[role];
-    if (!value) {
-      // Nothing typed: back to what's stored.
-      custom[role] = false;
-      drafts[role] = r.model;
-      return;
-    }
-    if (value === r.model) return;
-    if (await saveModel(role, value)) custom[role] = !listed(r.info.id, value);
-  }
-
-  /** Under a role's name: its route's median time on this Mac once five calls are timed; null while what's measured
-   *  is another route's (a save not read back yet). */
-  function paceOf(role: Role) {
-    const p = paces.find((x) => x.role === role);
-    const r = app.routes[role];
-    if (!p || p.agent !== r.info.id || p.model !== r.model) return null;
-    const calls = `${p.calls.toLocaleString()} ${p.calls === 1 ? "call" : "calls"}`;
-    if (p.p50Ms !== null) return `${(p.p50Ms / 1000).toFixed(1)} s typical · ${calls}`;
-    return p.calls ? `${calls} timed so far` : "Not timed yet";
-  }
-
-  // ── Each agent's details: its path, behind the row's disclosure (one open at a time), then edited behind Change
-  //    path (Save, Discard, or Remove to find it again) ──
-  let detailsOpen = $state<Agent | null>(null);
-  let pathOpen = $state<Agent | null>(null);
-  let pathDraft = $state("");
-  let pathBusy = $state(false);
-  const pathUnchanged = $derived(pathOpen !== null && pathDraft.trim() === (s?.agents[pathOpen].path ?? ""));
-
-  function toggleDetails(agent: Agent) {
-    pathOpen = null;
-    pathDraft = "";
-    detailsOpen = detailsOpen === agent ? null : agent;
-  }
-
-  function openPath(agent: Agent) {
-    pathDraft = s?.agents[agent].path ?? "";
-    detailsOpen = agent;
-    pathOpen = agent;
-    tick().then(() => document.getElementById(`${agent}-path`)?.focus());
-  }
-
-  /** Back to the path as stored, focus on its Change path. */
-  function closePath() {
-    const agent = pathOpen;
-    pathOpen = null;
-    pathDraft = "";
-    if (agent) tick().then(() => document.getElementById(`${agent}-path-change`)?.focus());
-  }
-
-  /** `null` finds the agent on your PATH again. Stays open when the save fails, so the path can be fixed. */
-  async function savePath(path: string | null) {
-    const agent = pathOpen;
-    if (pathBusy || !s || !agent) return;
-    if (path === s.agents[agent].path) return closePath();
-    pathBusy = true;
-    const saved = await save({ agents: { ...s.agents, [agent]: { ...s.agents[agent], path } } });
-    pathBusy = false;
-    if (!saved) return;
-    closePath();
-    void refreshAgents();
-  }
-
-  function submitPath(e: SubmitEvent) {
-    e.preventDefault();
-    if (!pathUnchanged) void savePath(pathDraft.trim() || null);
-  }
-
-  /** Esc anywhere in the path's editor discards it, as its Discard button says. */
-  function discardOnEscape(form: HTMLFormElement) {
-    const onkey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      closePath();
-    };
-    form.addEventListener("keydown", onkey);
-    return () => form.removeEventListener("keydown", onkey);
   }
 
   async function chooseFolder() {
@@ -663,115 +472,6 @@
   function onEnter(e: KeyboardEvent) {
     if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
   }
-
-  const statusOf = (agent: Agent) => app.agents?.find((a) => a.agent === agent) ?? null;
-  /** Found and signed in: the picker offers it, and it can be turned on. */
-  const ready = (status: AgentStatus | null) => !!status?.found && status.signedIn === true;
-
-  /** The presence dot's tone and its words (the icon's tooltip): amber signed out, as the sidebar's. */
-  function presence(status: AgentStatus | null) {
-    if (checking) return { tone: "neutral", text: "Checking…" } as const;
-    if (!status) return { tone: "neutral", text: "Not checked" } as const;
-    if (!status.found) return { tone: "danger", text: "Not installed" } as const;
-    if (status.signedIn === false) return { tone: "warn", text: "Signed out" } as const;
-    if (status.signedIn === null) return { tone: "neutral", text: "Couldn’t check sign-in" } as const;
-    return { tone: "gain", text: status.plan ? `Signed in · ${status.plan}` : "Signed in" } as const;
-  }
-
-  /** The roles that run on `agent`, in Settings' order. */
-  const rolesOn = (agent: Agent) => ROLES.filter((r) => s?.routes[r.id] === agent);
-
-  /** "Reading", "Reading and Tailoring", "Reading, Tailoring and Coaching". */
-  function andList(words: string[]) {
-    return words.length < 2 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
-  }
-
-  /**
-   * Why an agent's switch can't change, or null. An agent that's on can always go off, unless a role runs on it; one
-   * that's off goes on only once it's found and signed in.
-   */
-  function lockOf(info: AgentInfo, status: AgentStatus | null, on: boolean) {
-    if (status?.found === false) return `${info.name} isn’t installed on this Mac.`;
-    const roles = rolesOn(info.id);
-    if (roles.length) {
-      const one = roles.length === 1;
-      return `${andList(roles.map((r) => r.name))} ${one ? "runs" : "run"} on ${info.name}. Move ${one ? "it" : "them"} to another agent first.`;
-    }
-    if (on || ready(status)) return null;
-    if (status?.signedIn === false)
-      return `Sign in to ${info.name} to turn it on. Run ${info.bin} in Terminal, then Check again.`;
-    return `Couldn’t check ${info.name}’s sign-in. Check again first.`;
-  }
-
-  /** "/Users/jane/.nvm/versions/node/v20.19.0/bin/claude" → "~/.nvm/…/bin/claude"; in full in its tooltip. */
-  function shortPath(path: string) {
-    const parts = path.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").split("/");
-    return parts.length > 5 ? [...parts.slice(0, 2), "…", ...parts.slice(-2)].join("/") : parts.join("/");
-  }
-
-  // ── The roles' menus: the agents that are on and signed in, and always the one a role runs on ──
-  const option = (a: AgentInfo) => ({ value: a.id, label: a.name, meta: statusOf(a.id)?.plan ?? undefined });
-  const offered = (a: AgentInfo) => app.offers(a.id);
-  const agentOptions = (role: Role) => AGENT_LIST.filter((a) => a.id === s?.routes[role] || offered(a)).map(option);
-  /** A preset's agents are on and signed in, and each lists the model it names (Claude Code's aliases always do). */
-  const presetReady = (p: Preset) =>
-    ROLES.every(({ id }) => offered(AGENTS[p.routes[id].agent]) && listed(p.routes[id].agent, p.routes[id].model));
-  /** Every role already runs on the agent and model `p` names for it. */
-  const presetOn = (p: Preset) =>
-    !!s &&
-    ROLES.every(({ id }) => {
-      const r = p.routes[id];
-      return s.routes[id] === r.agent && s.agents[r.agent].models[id] === r.model;
-    });
-  const presetOf = (value: string) => PRESETS.find((p) => PRESET + p.id === value) ?? null;
-  /** Set all to…: the agents on and signed in, then the presets whose agents are; its value is the preset every role
-   *  is set as, else the agent every role runs on, none while they differ. */
-  const allOptions = $derived([
-    ...AGENT_LIST.filter(offered).map(option),
-    ...PRESETS.filter(presetReady).map((p) => ({
-      value: PRESET + p.id,
-      label: p.name,
-      meta: `Tailoring on ${app.modelName(p.routes.tailor.model)}`,
-    })),
-  ] as { value: string; label: string; meta?: string }[]);
-  const allOn = $derived.by<string>(() => {
-    const preset = PRESETS.find(presetOn);
-    if (preset) return PRESET + preset.id;
-    return s && new Set(Object.values(s.routes)).size === 1 ? s.routes.read : MIXED;
-  });
-  /** The agent whose mark leads a Set all to… option: the agent's own, or a preset's Tailoring agent. */
-  const leadAgent = (value: string) => presetOf(value)?.routes.tailor.agent ?? (value as Agent);
-
-  /** Puts every role on the agent and model `p` names for it (Undo in its toast); a failed save redraws the menus. */
-  async function applyPreset(p: Preset) {
-    for (const { id } of ROLES) custom[id] = false;
-    if (!(await app.applyRoutes(p.routes))) resets++;
-  }
-
-  function setAll(value: string) {
-    const preset = presetOf(value);
-    if (preset) applyPreset(preset);
-    else moveRoles(ROLES.map((r) => r.id), value as Agent);
-  }
-
-  /** Each agent a role runs on that's checked and can't run: what its prompt says, in the tone of its dot, the roles
-   *  that would fail, and the first other agent on and signed in to move them to. */
-  const stuck = $derived.by(() => {
-    if (!s) return [];
-    return app.routed.flatMap((info) => {
-      const a = statusOf(info.id);
-      if (!a || ready(a)) return [];
-      const roles = rolesOn(info.id);
-      const work = andList(roles.map((r) => r.name.toLowerCase()));
-      const next = AGENT_LIST.find((x) => x.id !== info.id && offered(x)) ?? null;
-      const base = { info, roles: roles.map((r) => r.id), next };
-      if (!a.found)
-        return [{ ...base, tone: "danger", signedOut: false, head: `${info.name} isn’t found on this Mac anymore, so ${work} will fail.` }];
-      if (a.signedIn === false)
-        return [{ ...base, tone: "warn", signedOut: true, head: `${info.name} is signed out, so ${work} will fail.` }];
-      return [{ ...base, tone: "neutral", signedOut: false, head: `Couldn’t check ${info.name}’s sign-in, so ${work} may fail.` }];
-    });
-  });
 
   // ── About: this build and updates ──
   const update = $derived(app.update);
@@ -839,254 +539,10 @@
     {#key resets}
       {#if pane === "agents"}
         <p class="lede">
-          Each kind of work runs on the agent and model you choose, with your own plan. gliide never sees a credential.
+          Each kind of work runs on the agent and model you choose, with your own plan. Faster or better is a trade:
+          every route below sits where the benchmark timed it. gliide never sees a credential.
         </p>
-        <Card pad>
-          <div class="card">
-          <div class="list-head list-head--first">
-            <p class="label">Who does what</p>
-            {#if allOptions.some((o) => o.value !== allOn)}
-              <Menu
-                value={allOn}
-                options={allOptions}
-                label="Set all to"
-                size="sm"
-                variant="ghost"
-                placement="bottom-end"
-                onchange={setAll}
-              >
-                {#snippet trigger()}Set all to…{/snippet}
-                {#snippet lead(option)}
-                  <AgentMark
-                    size={16}
-                    src={AGENTS[leadAgent(option.value)].icon}
-                    tone={presence(statusOf(leadAgent(option.value))).tone}
-                  />
-                {/snippet}
-              </Menu>
-            {/if}
-          </div>
-          <dl class="fields fields--roles">
-            {#each ROLES as role (role.id)}
-              {@const r = app.routes[role.id]}
-              {@const pace = paceOf(role.id)}
-              <div class="field field--two">
-                <dt>
-                  {role.name}
-                  <span class="hint">{role.covers}</span>
-                  {#if pace}<span class="hint num">{pace}</span>{/if}
-                </dt>
-                <dd class="controls">
-                  {#if menuValue(role.id) === CUSTOM}
-                    <span class="custom">
-                      <Input
-                        id="{role.id}-custom"
-                        size="md"
-                        bind:value={drafts[role.id]}
-                        placeholder="Model name"
-                        aria-label="{role.name}: {r.info.name} model name"
-                        spellcheck="false"
-                        autocomplete="off"
-                        onblur={() => commitModel(role.id)}
-                        onkeydown={onEnter}
-                      />
-                    </span>
-                  {/if}
-                  <Menu
-                    value={r.info.id}
-                    options={agentOptions(role.id)}
-                    label="{role.name} runs on"
-                    placement="bottom-end"
-                    onchange={(a) => setRoute(role.id, a)}
-                  >
-                    {#snippet lead(option)}
-                      <AgentMark size={16} src={AGENTS[option.value].icon} tone={presence(statusOf(option.value)).tone} />
-                    {/snippet}
-                  </Menu>
-                  <Menu
-                    value={menuValue(role.id)}
-                    options={modelOptions(r.info.id)}
-                    label="{r.info.name} model for {role.name.toLowerCase()}"
-                    placement="bottom-end"
-                    onchange={(v) => chooseModel(role.id, v)}
-                  />
-                </dd>
-              </div>
-            {/each}
-          </dl>
-          {#each stuck as p (p.info.id)}
-            {@const next = p.next}
-            <div class="prompt prompt--{p.tone}" role="status">
-              <Icon icon={CircleAlert} />
-              <div>
-                <p class="prompt__head">{p.head}</p>
-                <p class="prompt__how">
-                  {#if p.signedOut}Run <code>{p.info.bin}</code> in Terminal and sign in, then Check again.{:else}Check
-                    again.{/if}
-                  {next ? "Or move the work to another agent:" : "No other agent is on and signed in."}
-                </p>
-              </div>
-              <div class="prompt__actions">
-                {#if next}
-                  <Button size="sm" variant="primary" onclick={() => moveRoles(p.roles, next.id)}>
-                    <CompanyMark size={16} src={next.icon} />Move to {next.name}
-                  </Button>
-                {/if}
-                <Button size="sm" variant="ghost" icon={RotateCw} disabled={checking} onclick={refreshAgents}
-                  >Check again</Button
-                >
-              </div>
-            </div>
-          {/each}
-          <dl class="fields fields--after">
-            <div class="field field--two">
-              <dt>
-                Suggestions from
-                <span class="hint">
-                  Bank-aware brings in an entry from Experience where it fits a posting better than one the master
-                  shows.
-                </span>
-              </dt>
-              <dd>
-                <Segmented
-                  options={MODES}
-                  value={s.suggestionsFrom}
-                  label="Suggestions from"
-                  onchange={(m) => save({ suggestionsFrom: m })}
-                />
-              </dd>
-            </div>
-          </dl>
-            <div class="list-head">
-              <p class="label" id="agents-list">Supported agents</p>
-              <Button size="sm" variant="ghost" icon={RotateCw} disabled={checking} onclick={refreshAgents}>
-                {checking ? "Checking…" : "Check again"}
-              </Button>
-            </div>
-          <ul class="agents" aria-labelledby="agents-list">
-            {#each AGENT_LIST as info (info.id)}
-              {@const status = statusOf(info.id)}
-              {@const dot = presence(status)}
-              {@const roles = rolesOn(info.id)}
-              {@const missing = status?.found === false}
-              {@const on = s.agents[info.id].enabled && !missing}
-              {@const lock = lockOf(info, status, on)}
-              {@const path = s.agents[info.id].path}
-              {@const open = detailsOpen === info.id}
-              <li class={["agent", !on && "agent--off"]}>
-                <span class="agent__mark" role="img" aria-label="{info.name}: {dot.text}" {@attach tip(dot.text)}>
-                  {#if missing}
-                    <CompanyMark size={28} src={info.icon} />
-                  {:else}
-                    <AgentMark src={info.icon} tone={dot.tone} />
-                  {/if}
-                </span>
-                <span class="agent__name">
-                  <span class="agent__title">{info.name}</span>
-                  {#if missing}
-                    <span class="meta">Not installed</span>
-                  {:else if !on}
-                    <span class="meta">Off</span>
-                  {:else}
-                    {#if status?.version}<span class="meta num">v{status.version}</span>{/if}
-                    {#if roles.length}<span class="meta"
-                        >{roles.length === ROLES.length ? "Every role" : roles.map((r) => r.name).join(", ")}</span
-                      >{/if}
-                  {/if}
-                </span>
-                <span class="agent__end">
-                  {#if missing}
-                    <Button size="sm" variant="ghost" icon={ExternalLink} onclick={() => visit(info.install)}
-                      >How to install</Button
-                    >
-                  {/if}
-                  <Switch
-                    checked={on}
-                    label={info.name}
-                    locked={!!lock}
-                    {@attach tip(lock)}
-                    onchange={(next) => setEnabled(info.id, next)}
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    square
-                    icon={open ? ChevronDown : ChevronRight}
-                    aria-expanded={open}
-                    aria-controls="{info.id}-details"
-                    aria-label="{info.name} details"
-                    onclick={() => toggleDetails(info.id)}
-                  />
-                </span>
-                {#if on && !roles.length && status?.problem}
-                  <!-- Its problem names commands in backticks ("Run `codex` in Terminal…"): shown as code. -->
-                  <p class="problem problem--{dot.tone} agent__more">
-                    {#each status.problem.split("`") as part, i (i)}{#if i % 2}<code>{part}</code>{:else}{part}{/if}{/each}
-                  </p>
-                {/if}
-                {#if open}
-                  <div class="agent__more" id="{info.id}-details">
-                    {#if pathOpen === info.id}
-                      <form class="path-edit" onsubmit={submitPath} {@attach discardOnEscape}>
-                        <label for="{info.id}-path">Path</label>
-                        <Input
-                          id="{info.id}-path"
-                          size="md"
-                          bind:value={pathDraft}
-                          placeholder="Automatic"
-                          spellcheck="false"
-                          autocomplete="off"
-                          aria-describedby="{info.id}-path-hint"
-                        />
-                        <p class="hint" id="{info.id}-path-hint">
-                          Where the <code>{info.bin}</code> to run is. Empty finds it on your PATH.
-                        </p>
-                        <div class="path-actions">
-                          {#if path}
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              disabled={pathBusy}
-                              {@attach tip(`Find ${info.bin} on your PATH again`)}
-                              onclick={() => void savePath(null)}>Remove</Button
-                            >
-                          {/if}
-                          <Button variant="ghost" size="sm" kbd="Esc" disabled={pathBusy} onclick={closePath}
-                            >Discard</Button
-                          >
-                          <Button type="submit" variant="primary" size="sm" kbd="⏎" disabled={pathBusy || pathUnchanged}>
-                            {pathBusy ? "Saving…" : "Save"}
-                          </Button>
-                        </div>
-                      </form>
-                    {:else}
-                      <div class="path-row">
-                        <span class="path-label">Path</span>
-                        <span class="path-value">
-                          {#if path}
-                            <code {@attach tip(path)}>{shortPath(path)}</code>
-                          {:else if status?.path}
-                            <code {@attach tip(status.path)}>{shortPath(status.path)}</code> · found on your PATH
-                          {:else}
-                            {missing ? "Not found on your PATH" : "Automatic: found on your PATH"}
-                          {/if}
-                        </span>
-                        <Button
-                          id="{info.id}-path-change"
-                          variant="ghost"
-                          size="sm"
-                          aria-label="Change {info.name}’s path"
-                          onclick={() => openPath(info.id)}>Change path</Button
-                        >
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-          </div>
-        </Card>
+        <Agents />
       {:else if pane === "benchmark"}
         <!-- Its lede names the best route per role, so the pane draws it under its actions. -->
         <Benchmark bind:keys={paneKeys} />
@@ -1558,206 +1014,12 @@
     color: var(--danger);
     background: var(--danger-soft);
   }
-  /* An agent's problem in its dot's tone: amber signed out, neutral when its sign-in couldn't be checked. */
-  .problem--warn {
-    color: var(--warn);
-    background: var(--warn-soft);
-  }
-  .problem--neutral {
-    color: var(--ink-2);
-    background: var(--sunken);
-  }
   .hint {
     margin-top: var(--space-1-5);
     font-size: var(--text-sm);
     line-height: var(--leading-sm);
     overflow-wrap: anywhere;
     color: var(--ink-3);
-  }
-  code {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-  }
-  /* Under the roles, one for each agent a role runs on that can't: what's wrong and how to fix it, then Move to the
-     first other agent that's on and signed in, and Check again. In its dot's tone: amber signed out, danger no longer
-     found, neutral sign-in unknown. It never switches by itself. */
-  .prompt {
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr);
-    column-gap: var(--space-2-5);
-    margin-block: calc(var(--space-1) * -1) var(--space-2);
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--warn-soft);
-  }
-  .prompt + .prompt {
-    margin-top: 0;
-  }
-  .prompt > :global(svg) {
-    margin-top: 2px;
-    color: var(--warn);
-  }
-  .prompt--danger {
-    background: var(--danger-soft);
-  }
-  .prompt--danger > :global(svg) {
-    color: var(--danger);
-  }
-  .prompt--neutral {
-    background: var(--sunken);
-  }
-  .prompt--neutral > :global(svg) {
-    color: var(--ink-2);
-  }
-  .prompt__head,
-  .prompt__how {
-    margin: 0;
-    text-wrap: pretty;
-  }
-  .prompt__head {
-    font-weight: var(--weight-medium);
-  }
-  .prompt__how {
-    color: var(--ink-2);
-  }
-  .prompt__actions {
-    grid-column: 2;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-2-5);
-  }
-  /* The fields go on under the roles (and the prompts) as one list. */
-  .fields:has(+ .prompt) .field:last-child,
-  .fields:has(+ .fields--after) .field:last-child {
-    padding-bottom: var(--space-2);
-  }
-  .fields.fields--after {
-    margin-top: calc(var(--space-1) * -1);
-  }
-  /* A field whose name has a sentence under it (Suggestions from). */
-  .field--two dt {
-    flex: 1;
-    min-width: 0;
-  }
-  .field--two .hint {
-    display: block;
-    margin-top: var(--space-0-5);
-  }
-  /* "Who does what" with Set all to…, "Supported agents" with Check again, each at its end; as tall as the small
-     button whether it shows or not, so the rows never move when Set all to… comes and goes. */
-  .list-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    min-height: var(--control-sm);
-    padding: var(--space-4) 0 var(--space-1-5);
-    box-sizing: content-box;
-  }
-  .list-head--first {
-    padding-top: 0;
-  }
-  .fields.fields--roles {
-    margin-top: 0;
-  }
-  /* A role: its name and lines take 200px at least; its controls go under them, at the trailing edge, when they
-     don't fit beside them (a custom model's field, a narrow window). */
-  .fields--roles .field {
-    flex-wrap: wrap;
-    row-gap: var(--space-2);
-  }
-  .fields--roles dt {
-    flex: 1 0 200px;
-  }
-  .fields--roles dd {
-    margin-inline-start: auto;
-  }
-  /* The agents: a 28px icon with its presence dot (its state in words in its tooltip), the name and version (or Off,
-     Not installed), the roles it runs ("Every role"), then How to install, the switch and the disclosure; one line
-     each, hairlines between, as the fields'. */
-  .agents {
-    display: grid;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .agent {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: var(--space-3);
-    padding-block: var(--space-2-5);
-    box-shadow: inset 0 1px 0 var(--line);
-  }
-  .agent:last-child {
-    padding-bottom: 0;
-  }
-  .agent__mark {
-    display: flex;
-  }
-  .agent__name {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    min-width: 0;
-    white-space: nowrap;
-  }
-  .agent__title {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: var(--weight-medium);
-  }
-  .agent--off .agent__title {
-    color: var(--ink-2);
-  }
-  .agent__end {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* Under the name: the problem, then the details: the path, one line ending in Change path, or its editor (the field
-     after its label, the hint under the field, then Remove, Discard and Save at the trailing edge). */
-  .agent__more {
-    grid-column: 2 / -1;
-  }
-  .path-row,
-  .path-edit {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-1-5) var(--space-3);
-    margin-top: var(--space-2);
-  }
-  .path-edit {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .path-label,
-  .path-edit label {
-    color: var(--ink-2);
-  }
-  .path-value {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--ink-3);
-  }
-  .path-value code {
-    color: var(--ink-2);
-  }
-  .path-edit .hint {
-    grid-column: 2;
-    margin-top: 0;
-  }
-  .path-actions {
-    grid-column: 1 / -1;
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
   }
   .fields {
     display: grid;
@@ -1796,9 +1058,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-  }
-  .custom {
-    width: 200px;
   }
   .folder {
     display: flex;

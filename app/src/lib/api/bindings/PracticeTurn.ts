@@ -27,6 +27,10 @@ asked: string, answer: string, feedback: Feedback,
  */
 spoken: Spoken | null, 
 /**
+ * The live run it was read from (a readback row), `LiveSession.id`; `None` for practice.
+ */
+live: string | null, 
+/**
  * RFC 3339.
  */
 at: string, };

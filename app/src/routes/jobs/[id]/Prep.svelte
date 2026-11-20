@@ -3,8 +3,21 @@
   from changes. What the round will likely test, the questions it will likely ask (grouped, each with why, the story
   it calls for (a chip that opens it; "No story yet" for a behavioral one without), and whether you've practiced it;
   selecting one marks the lines it's about on the desk, ⏎ practices it), the requirements the resume you sent doesn't
-  show with an honest answer for each, and questions to ask them.
+  show with an honest answer for each, and questions to ask them. Under the focus, a row per live run of the round
+  (newest first): its readback, or, while it isn't ended, the session again.
 -->
+<script lang="ts" module>
+  import type { QuestionGroup } from "$lib/api";
+
+  /** The prep's question groups as their labels name them (the live interview's turns say them too). */
+  export const GROUPS: { value: QuestionGroup; label: string }[] = [
+    { value: "resume", label: "About your resume" },
+    { value: "skills", label: "Skills from the posting" },
+    { value: "behavioral", label: "Behavioral" },
+    { value: "logistics", label: "Logistics" },
+  ];
+</script>
+
 <script lang="ts">
   import { onMount } from "svelte";
   import BookOpen from "@lucide/svelte/icons/book-open";
@@ -12,8 +25,11 @@
   import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import Crosshair from "@lucide/svelte/icons/crosshair";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import { stories, type PrepQuestion, type PrepView, type QuestionGroup, type SentLine } from "$lib/api";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import MessagesSquare from "@lucide/svelte/icons/messages-square";
+  import { stories, type LiveRun, type PrepQuestion, type PrepView, type SentLine } from "$lib/api";
   import { Badge, Button, GroupHead, Icon, Thinking, tip } from "$lib/ui";
+  import { runLine } from "./live";
 
   interface Props {
     /** "the technical": the round, as the heading names it. */
@@ -30,6 +46,10 @@
     onpractice: (question: PrepQuestion) => void;
     onagain: () => void;
     oncancel: () => void;
+    /** The round's live runs, newest first. */
+    runs: LiveRun[];
+    /** Opens a run: its readback, or the session again while it isn't ended. */
+    onrun: (run: LiveRun) => void;
   }
 
   let {
@@ -44,14 +64,9 @@
     onpractice,
     onagain,
     oncancel,
+    runs,
+    onrun,
   }: Props = $props();
-
-  const GROUPS: { value: QuestionGroup; label: string }[] = [
-    { value: "resume", label: "About your resume" },
-    { value: "skills", label: "Skills from the posting" },
-    { value: "behavioral", label: "Behavioral" },
-    { value: "logistics", label: "Logistics" },
-  ];
 
   const byId = $derived(new Map(lines.map((l) => [l.id, l])));
   /** Story titles by id, loaded once: a question's story chip names it. */
@@ -102,6 +117,15 @@
     </div>
   {:else if prep}
     <p class="focus"><Icon icon={Crosshair} size={16} />{prep.focus}</p>
+    {#each runs.filter((r) => !r.endedAt || r.asked > 0) as run (run.id)}
+      <div class="run">
+        <Icon icon={MessagesSquare} size={14} />
+        <span class="run__what"><span class="run__name">Live run</span><span class="meta num">{runLine(run)}</span></span>
+        <Button variant="ghost" size="sm" iconEnd={ChevronRight} onclick={() => onrun(run)}
+          >{run.endedAt ? "Readback" : "Go on"}</Button
+        >
+      </div>
+    {/each}
 
     {#each groups as group (group.value)}
       <p class="label group">{group.label} <span class="num">{group.questions.length}</span></p>
@@ -208,6 +232,42 @@
     flex: none;
     margin-top: 3px;
     color: var(--ink-3);
+  }
+  /* A live run: one quiet row, its icon in ink 3, what it was in meta, the way back in at its end. */
+  .run {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 36px;
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    border-radius: var(--radius-md);
+    transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .run > :global(.icon) {
+    flex: none;
+    color: var(--ink-3);
+  }
+  @media (hover: hover) {
+    .run:hover {
+      background: var(--hover);
+    }
+  }
+  .run__what {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1-5);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .run__what .meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .run__name {
+    flex: none;
+    font-weight: var(--weight-medium);
   }
   .group {
     margin: var(--space-4) var(--space-3) var(--space-1);

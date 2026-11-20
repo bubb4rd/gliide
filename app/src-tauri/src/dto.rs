@@ -110,7 +110,7 @@ pub enum Role {
     Tailor,
     /// The cover letter: prose.
     Write,
-    /// Prep, practice, nudges, Dig and debriefs: conversational judgment.
+    /// Prep, practice, nudges, the live interviewer, Dig and debriefs: conversational judgment.
     Coach,
 }
 
@@ -1788,8 +1788,95 @@ pub struct PracticeTurn {
     pub feedback: Feedback,
     /// Said out loud (spoken practice): how long and how many words; `None` when typed.
     pub spoken: Option<Spoken>,
+    /// The live run it was read from (a readback row), `LiveSession.id`; `None` for practice.
+    pub live: Option<String>,
     /// RFC 3339.
     pub at: String,
+}
+
+/// What a live turn asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum LiveTurnKind {
+    /// The prep question, verbatim.
+    Ask,
+    /// A follow-up on your answer.
+    Follow,
+}
+
+/// One turn of a live interview: what she asked and your answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LiveTurn {
+    /// Its place in the session, from 0.
+    pub seq: u32,
+    /// The prep question's id.
+    pub question: String,
+    pub kind: LiveTurnKind,
+    /// What she asked.
+    pub asked: String,
+    /// A follow-up's phrase of your previous answer to this question that it takes up, as that answer writes it;
+    /// `None` when none matched, and for an ask.
+    pub picked: Option<String>,
+    /// `None` while unanswered (the current turn), or skipped.
+    pub answer: Option<String>,
+    /// Next question was pressed on it.
+    pub skipped: bool,
+    pub spoken: Option<Spoken>,
+    /// When it was asked, RFC 3339.
+    pub at: String,
+}
+
+/// A live interview of a round: the prep's questions in order, each with up to two follow-ups, then its readback.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LiveSession {
+    pub id: String,
+    pub round: String,
+    /// RFC 3339.
+    pub started_at: String,
+    /// RFC 3339; `None` while live.
+    pub ended_at: Option<String>,
+    /// The session's clock as the UI kept it (waits excluded), set at its end.
+    pub active_ms: Option<u32>,
+    /// The prep's question count when it started.
+    pub questions: u32,
+    /// In order; the last unanswered and not skipped is the current one.
+    pub turns: Vec<LiveTurn>,
+    /// The last turn is answered, the next not asked yet, the session not ended: the step after the answer is owed (it
+    /// failed, or was stopped). `liveRetry` runs it.
+    pub waiting: bool,
+    /// The readback's rows read so far, in question order.
+    pub read: Vec<PracticeTurn>,
+}
+
+/// A past live interview, as the prep lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LiveRun {
+    pub id: String,
+    /// RFC 3339.
+    pub started_at: String,
+    /// RFC 3339; `None` while live.
+    pub ended_at: Option<String>,
+    pub active_ms: Option<u32>,
+    /// Questions asked.
+    pub asked: u32,
+    /// Follow-ups asked.
+    pub follows: u32,
+}
+
+/// Your last answer taken back: the session with that turn unanswered again, and the answer to put back in the box.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LiveTakenBack {
+    pub session: LiveSession,
+    pub answer: String,
 }
 
 /// What an answer did, never a grade: the lines it drew on, which parts of situation, task, action and result it has,
@@ -2422,6 +2509,8 @@ pub enum Stage {
     Practicing,
     /// Nudges for the question you're answering.
     Nudging,
+    /// A live interview's next turn: a follow-up on your answer, or none.
+    Interviewing,
     /// Dig's questions about an entry written, or your answers read.
     Digging,
     /// A round's debrief read: what to dig into, notes for the next prep.
@@ -2450,13 +2539,15 @@ pub enum Feature {
     /// A practiced answer read, for a round or a story told alone.
     Practice,
     Nudges,
+    /// The live interviewer deciding a follow-up on your answer.
+    Live,
     Dig,
     Debrief,
 }
 
 impl Feature {
     /// Every feature, in declaration order (Settings → Agents sums a role's latency over its features).
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Requirements,
         Self::FeedCheck,
         Self::Suggestions,
@@ -2468,6 +2559,7 @@ impl Feature {
         Self::Prep,
         Self::Practice,
         Self::Nudges,
+        Self::Live,
         Self::Dig,
         Self::Debrief,
     ];
@@ -2479,7 +2571,9 @@ impl Feature {
             Self::Requirements | Self::FeedCheck | Self::Import | Self::Invite => Role::Read,
             Self::Suggestions | Self::Rewrite | Self::Chat => Role::Tailor,
             Self::CoverLetter => Role::Write,
-            Self::Prep | Self::Practice | Self::Nudges | Self::Dig | Self::Debrief => Role::Coach,
+            Self::Prep | Self::Practice | Self::Nudges | Self::Live | Self::Dig | Self::Debrief => {
+                Role::Coach
+            }
         }
     }
 }
@@ -2506,6 +2600,8 @@ pub struct UsageView {
 pub struct UsageDay {
     pub day: String,
     pub feature: Feature,
+    /// The role whose route runs the feature (`Feature::role`): Settings → Agents counts each role's calls with it.
+    pub role: Role,
     pub agent: Agent,
     /// The model id that served the calls, as the agent names it.
     pub model: String,
