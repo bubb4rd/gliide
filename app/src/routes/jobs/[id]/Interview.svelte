@@ -5,7 +5,9 @@
   invite you paste (`⌘V`, one model call) or a calendar file (`.ics`) you drop on the window; edited in place (`⏎`)
   and removed (`⌫`, Undo in the toast). The first upcoming round of a Saved or Applied posting moves it to
   Interviewing, with Undo; adding a round while reminders were never offered offers them once, inline. Practice (`P`)
-  turns the column into the round's practice (`Practice`). A round that has ended awaits its debrief (`D`, or its
+  turns the column into the round's practice (`Practice`); Live interview (`L`) into a live interview of the round
+  (`Live`: the prep's questions in order, follow-ups on what you say, a readback once it ends), or back into the run
+  not ended yet; the prep's live run rows open a run's readback. A round that has ended awaits its debrief (`D`, or its
   Debrief badge): the debrief (`Debrief`) takes the prep's place; the tab opens on it when the latest round awaits
   one, or for `?debrief=<round>`. The desk (Review's) shows the resume you sent, the lines the selected question is
   about marked (in a debrief, the checked questions').
@@ -28,6 +30,9 @@
     appError,
     cancel,
     openNotificationSettings,
+    liveRuns,
+    liveSession,
+    liveStart,
     practiceTurns,
     prep as loadPrep,
     readInvite,
@@ -37,6 +42,8 @@
     rounds as loadRounds,
     saveRound,
     type ApplicationRow,
+    type LiveRun,
+    type LiveSession,
     type NotificationPermission,
     type PracticeTurn,
     type PrepQuestion,
@@ -68,6 +75,7 @@
   } from "$lib/ui";
   import Debrief from "./Debrief.svelte";
   import Practice from "./Practice.svelte";
+  import Live from "./Live.svelte";
   import Prep from "./Prep.svelte";
 
   interface Props {
@@ -95,6 +103,8 @@
     canSaveDebrief?: boolean;
     /** The round in focus has ended and awaits its debrief (bindable; the toolbar shows Debrief). */
     debriefDue?: string | null;
+    /** A live interview is open (bindable; the toolbar's End interview, or Back to prep once it's a readback). */
+    living?: "live" | "readback" | null;
   }
 
   let {
@@ -112,6 +122,7 @@
     debriefing = $bindable(null),
     canSaveDebrief = $bindable(false),
     debriefDue = $bindable(null),
+    living = $bindable(null),
   }: Props = $props();
 
   const LENGTHS: { value: number | null; label: string }[] = [
@@ -179,6 +190,7 @@
 
   function openDebrief(r: Round) {
     practicing = false;
+    live = null;
     form = null;
     selected = r.id;
     question = null;
@@ -275,6 +287,11 @@
   const focusId = $derived(focus?.id ?? null);
   let prep = $state<PrepView | null>(null);
   let turns = $state<PracticeTurn[]>([]);
+  /** The round's live runs, newest first, and the one open. */
+  let runs = $state<LiveRun[]>([]);
+  let live = $state<LiveSession | null>(null);
+  /** The question the live interview's desk marks. */
+  let liveQuestion = $state<string | null>(null);
   let writing = $state<number | null>(null);
   let prepFailed = $state<string | null>(null);
   let question = $state<string | null>(null);
@@ -293,6 +310,8 @@
     if (!again) {
       prep = null;
       turns = [];
+      runs = [];
+      live = null;
       question = null;
       marked = [];
     }
@@ -300,6 +319,7 @@
     practiceTurns(round)
       .then((t) => focusId === round && (turns = t))
       .catch(() => {});
+    loadRuns(round);
     writing = performance.now();
     try {
       const p = await loadPrep(round, again);
@@ -330,6 +350,76 @@
     if (!question) question = (prep.questions.find((q) => !practiced.has(q.id)) ?? prep.questions[0]).id;
     marked = prep.questions.find((q) => q.id === question)?.lines ?? [];
   });
+
+  // ── The live interview ──
+  $effect(() => {
+    living = live ? (live.endedAt ? "readback" : "live") : null;
+  });
+  // The desk marks the question being asked (or the readback's card last opened).
+  $effect(() => {
+    if (!live) return;
+    marked = prep?.questions.find((q) => q.id === liveQuestion)?.lines ?? [];
+  });
+
+  function loadRuns(round: string) {
+    liveRuns(round)
+      .then((r) => focusId === round && (runs = r))
+      .catch(() => {});
+  }
+
+  /** Live interview: the run not ended yet goes on, else a new one starts on the prep's first question. */
+  export async function startLive() {
+    if (!focus || !canPractice || live) return;
+    const open = runs.find((r) => r.endedAt === null);
+    if (open) return openRun(open);
+    const round = focus.id;
+    try {
+      const session = await liveStart(round);
+      if (focusId !== round) return;
+      practicing = false;
+      live = session;
+      loadRuns(round);
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+    }
+  }
+
+  async function openRun(run: LiveRun) {
+    const round = focusId;
+    try {
+      const session = await liveSession(run.id);
+      if (focusId !== round) return;
+      practicing = false;
+      live = session;
+    } catch (e) {
+      toast(appError(e).message, { tone: "danger" });
+    }
+  }
+
+  /** Back to the prep: what the readback read counts as practiced, and the run's row says where it stands. */
+  export function closeLive() {
+    live = null;
+    liveQuestion = null;
+    marked = [];
+    if (!focusId) return;
+    const round = focusId;
+    practiceTurns(round)
+      .then((t) => focusId === round && (turns = t))
+      .catch(() => {});
+    loadRuns(round);
+  }
+
+  /** The toolbar's End interview. */
+  let livePane = $state<ReturnType<typeof Live>>();
+  export function endLive() {
+    livePane?.end();
+  }
+
+  /** A question the run didn't reach: practice it. */
+  function practiceFromLive(q: PrepQuestion) {
+    closeLive();
+    startPractice(q);
+  }
 
   // ── The form: a new round (`key` "new") or one being edited ──
   interface Form {
@@ -571,6 +661,7 @@
           ...(debriefDue
             ? [{ keys: ["D"], label: "Debrief", run: () => focus && openDebrief(focus) }]
             : []),
+          { keys: ["L"], label: "Live interview", run: () => void startLive(), disabled: !canPractice },
           { keys: ["P"], label: "Practice", run: () => startPractice(chosen), disabled: !canPractice },
         ]),
     { keys: ["A"], label: "Add interview", run: startAdd, disabled: busy },
@@ -597,9 +688,10 @@
   }
 
   $effect(() => {
-    if (practicing) return;
+    if (practicing || live) return;
     return bindKeys({
       d: (e) => (interactive(e.target) || !debriefDue || !focus ? false : openDebrief(focus)),
+      l: (e) => (interactive(e.target) || !canPractice || debriefRound ? false : void startLive()),
       p: (e) => (interactive(e.target) || !canPractice || debriefRound ? false : startPractice(chosen)),
       a: (e) => (interactive(e.target) ? false : startAdd()),
       "mod+v": (e) => (interactive(e.target) ? false : void pasteInvite()),
@@ -648,7 +740,23 @@
   };
 </script>
 
-{#if practicing && prep && focus}
+{#if live && prep && focus}
+  {#key live.id}
+    <Live
+      bind:this={livePane}
+      {job}
+      {company}
+      round={focus}
+      {prep}
+      {lines}
+      bind:session={() => live as LiveSession, (s) => (live = s)}
+      bind:question={liveQuestion}
+      {keys}
+      onback={closeLive}
+      onpractice={practiceFromLive}
+    />
+  {/key}
+{:else if practicing && prep && focus}
   <Practice
     {job}
     {company}
@@ -921,6 +1029,8 @@
       onpractice={startPractice}
       onagain={() => focus && void loadFor(focus.id, true)}
       oncancel={() => void cancel(job)}
+      {runs}
+      onrun={(run) => void openRun(run)}
     />
   {/if}
 </div>

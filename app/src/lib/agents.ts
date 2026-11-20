@@ -63,7 +63,7 @@ export const ROLES: RoleInfo[] = [
   { id: "read", name: "Reading", covers: "Postings, feed checks, resume imports, interview invites" },
   { id: "tailor", name: "Tailoring", covers: "Suggestions, rewrites, chat" },
   { id: "write", name: "Writing", covers: "Cover letters" },
-  { id: "coach", name: "Coaching", covers: "Prep, practice, nudges, Dig, debriefs" },
+  { id: "coach", name: "Coaching", covers: "Prep, practice, live interviews, nudges, Dig, debriefs" },
 ];
 
 /** A route per role, as a preset sets them. */

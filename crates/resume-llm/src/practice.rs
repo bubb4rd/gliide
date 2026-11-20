@@ -4,9 +4,10 @@
 //! answer as a story to keep.
 //!
 //! The model sees the question (its text, why it's likely, the lines it's about, the story it means to tell), the
-//! answer, the posting's requirement terms and the resume as sent, tagged with its facts as Prep reads it. A story
-//! told alone (Tell it) reads the same way, against its entry as the bank holds it ([`SentResume::entry`]).
-//! [`checked`] holds the reply to what the resume, the bank and the answer back.
+//! answer (with the follow-ups asked on it and your replies, read from a live interview), the posting's requirement
+//! terms and the resume as sent, tagged with its facts as Prep reads it. A story told alone (Tell it) reads the same
+//! way, against its entry as the bank holds it ([`SentResume::entry`]). [`checked`] holds the reply to what the
+//! resume, the bank and the answer back.
 
 use std::fmt::Write as _;
 
@@ -40,6 +41,8 @@ pub struct PracticeInput<'a> {
     /// The ids of the lines it's about.
     pub lines: &'a [String],
     pub answer: &'a str,
+    /// The follow-ups asked on the answer in a live interview and your replies, in order; empty for practice.
+    pub follow_ups: &'a [(String, String)],
     /// The posting's requirement terms, most important first.
     pub terms: &'a [String],
     pub sent: &'a SentResume,
@@ -48,13 +51,33 @@ pub struct PracticeInput<'a> {
 }
 
 /// The Practice call's input: `<question>` (its text, why, the lines it's about with their text, and the story it
-/// means to tell), `<answer>` (at most [`MAX_ANSWER_CHARS`]), `<terms>` (one a line), `<resume>`.
+/// means to tell), `<answer>` (at most [`MAX_ANSWER_CHARS`]), `<followups>` (only with some: each follow-up and your
+/// reply, the reply at most [`MAX_ANSWER_CHARS`]), `<terms>` (one a line), `<resume>`.
 pub fn input(i: &PracticeInput<'_>) -> String {
     let answer = clipped(i.answer);
-    let mut s = String::with_capacity(i.sent.text.len() + answer.len() + 1024);
+    let replies: usize = i.follow_ups.iter().map(|(a, r)| a.len() + r.len()).sum();
+    let mut s = String::with_capacity(i.sent.text.len() + answer.len() + replies + 1024);
     write_question(&mut s, i.question, i.why, i.lines, i.sent, i.story);
     let _ = writeln!(s, "<answer>\n{answer}\n</answer>");
+    if !i.follow_ups.is_empty() {
+        s.push_str("<followups>\n");
+        for (asked, reply) in i.follow_ups {
+            let _ = writeln!(s, "(asked) {}\n(reply) {}", asked.trim(), clipped(reply));
+        }
+        s.push_str("</followups>\n");
+    }
     write_terms_and_resume(&mut s, i.terms, i.sent);
+    s
+}
+
+/// All that was said: `answer`, then each reply to a follow-up, a line apart. What [`checked`] grounds the reading in
+/// for an answer read from a live interview.
+pub fn said(answer: &str, follow_ups: &[(String, String)]) -> String {
+    let mut s = answer.trim().to_owned();
+    for (_, reply) in follow_ups {
+        s.push('\n');
+        s.push_str(reply.trim());
+    }
     s
 }
 
@@ -218,7 +241,8 @@ impl Dropped {
 /// tighter telling dropped when it states a number neither the answer, the lines it and the question cite, nor the
 /// facts state; the story kept with only the resume's entries, bullets and facts it names, and dropped when it states
 /// a number neither the answer, those bullets and facts, nor the story told (`told`) state, or says nothing.
-/// `question_lines`: the ids of the lines the question was about.
+/// `question_lines`: the ids of the lines the question was about. `answer`: all that was said (with a live
+/// interview's replies to follow-ups, [`said`]).
 pub fn checked(
     f: Feedback,
     sent: &SentResume,
@@ -424,7 +448,7 @@ pub async fn read(
 #[cfg(test)]
 mod tests {
     use super::{
-        Feedback, Mismatch, NewClaim, PracticeInput, StarPart, StoryDraft, checked, input,
+        Feedback, Mismatch, NewClaim, PracticeInput, StarPart, StoryDraft, checked, input, said,
     };
     use resume_core::story::StoryTheme;
     use crate::prep::SentResume;
@@ -446,6 +470,7 @@ mod tests {
             why: "A number invites a follow-up",
             lines: &lines,
             answer: "\n I caught 20 regressions. \n",
+            follow_ups: &[],
             terms: &terms,
             sent: &sent,
             story: None,
@@ -528,6 +553,41 @@ mod tests {
         assert_eq!(f.star_note.as_deref(), Some("Say why the tests were needed."));
         assert_eq!(f.follow_up, None);
         assert!(dropped.tighter.is_empty());
+    }
+
+    #[test]
+    fn follow_ups_are_read_after_the_answer_and_ground_it() {
+        let (bank, resume) = jane();
+        let sent = SentResume::tagged(&resume, &bank);
+        let follow_ups = [(
+            " How many did they catch? ".to_owned(),
+            "\n They caught 20 regressions before release. \n".to_owned(),
+        )];
+        let text = input(&PracticeInput {
+            question: "Tell me about the tests you wrote.",
+            why: "",
+            lines: &[],
+            answer: "I wrote integration tests for the order API.",
+            follow_ups: &follow_ups,
+            terms: &[],
+            sent: &sent,
+            story: None,
+        });
+        assert!(text.contains(
+            "<answer>\nI wrote integration tests for the order API.\n</answer>\n<followups>\n\
+             (asked) How many did they catch?\n(reply) They caught 20 regressions before release.\n\
+             </followups>\n<terms>\n"
+        ));
+        // The mismatch's "20" is in the reply, not the answer.
+        let answer = "I wrote integration tests for the order API.";
+        let alone = checked(feedback(), &sent, &[], answer, None).0;
+        assert!(alone.mismatches.is_empty());
+        let all = said(answer, &follow_ups);
+        assert_eq!(
+            all,
+            "I wrote integration tests for the order API.\nThey caught 20 regressions before release."
+        );
+        assert_eq!(checked(feedback(), &sent, &[], &all, None).0.mismatches.len(), 1);
     }
 
     #[test]
@@ -636,6 +696,7 @@ mod tests {
             why: "",
             lines: &lines,
             answer: "I wrote tests.",
+            follow_ups: &[],
             terms: &[],
             sent: &sent,
             story: Some(&stories[0]),

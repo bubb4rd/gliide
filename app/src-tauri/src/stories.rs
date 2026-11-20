@@ -190,6 +190,7 @@ pub async fn tell_story(
             why: "",
             lines: &l,
             answer: &a,
+            follow_ups: &[],
             terms: &st.skills,
             sent: &se,
             story: Some(&st),
@@ -214,6 +215,7 @@ pub async fn tell_story(
             ms: s.ms,
             words: s.words,
         }),
+        live_id: None,
         at: String::new(),
     };
     let stored = blocking(app, move |app| Ok(lock(&app.store).add_practice(&row)?)).await?;

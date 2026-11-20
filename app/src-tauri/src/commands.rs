@@ -11,7 +11,8 @@ use crate::dto::{
     BenchRunStatus, BenchmarkView, CoverPart, CoverView, CustomEdit, Debrief, DebriefView,
     Decision, DigAnswer, DigCapture, DigQuestions, EditTargets, EntryEdit, EntryView, Exported,
     FeedSettingsDto, FeedSettingsView, FeedView, FolderPdf, FolderView, ImportChoices, ImportView,
-    Instructed, JobRow, JobView, KeyDecision, Library, LogoRow, LogoSource, Nudge, Place,
+    Instructed, JobRow, JobView, KeyDecision, Library, LiveRun, LiveSession, LiveTakenBack,
+    LogoRow, LogoSource, Nudge, Place,
     PracticeTurn, PrepView, Progress, ReviewView, Rewritten, Round, RoundDraft, RoundsView,
     RouteLatency, SalaryRange, SearchCursor, SearchResults, SentView, Settings, StatusSet,
     StoriesView, StoryDraft, StoryView, UpdateStatus, UsageView,
@@ -19,7 +20,7 @@ use crate::dto::{
 use crate::state::{App, blocking};
 use crate::{
     benchmark, cover, debrief, dig, entry, export, feed, folder as files, import, jobs,
-    library as lib, logo, place, prep, review, rounds, settings, stories, update, usage,
+    library as lib, live, logo, place, prep, review, rounds, settings, stories, update, usage,
 };
 
 type Res<T> = Result<T, AppError>;
@@ -507,6 +508,69 @@ pub async fn tell_story(
     spoken: Option<crate::dto::Spoken>,
 ) -> Res<PracticeTurn> {
     stories::tell_story(&app, &story, asked, answer, spoken).await
+}
+
+// ── Live interview ──
+
+#[tauri::command]
+pub async fn live_start(app: St<'_>, round: String) -> Res<LiveSession> {
+    blocking(&app, move |app| live::start(app, &round)).await
+}
+
+#[tauri::command]
+pub async fn live_session(app: St<'_>, session: String) -> Res<LiveSession> {
+    blocking(&app, move |app| live::session(app, &session)).await
+}
+
+#[tauri::command]
+pub async fn live_runs(app: St<'_>, round: String) -> Res<Vec<LiveRun>> {
+    blocking(&app, move |app| live::runs(app, &round)).await
+}
+
+/// `spoken`: the answer was said out loud, and how long and how many words it took.
+#[tauri::command]
+pub async fn live_answer(
+    app: St<'_>,
+    session: String,
+    answer: String,
+    spoken: Option<crate::dto::Spoken>,
+) -> Res<LiveSession> {
+    live::answer(&app, &session, answer, spoken).await
+}
+
+#[tauri::command]
+pub async fn live_retry(app: St<'_>, session: String) -> Res<LiveSession> {
+    live::retry(&app, &session).await
+}
+
+#[tauri::command]
+pub async fn live_take_back(app: St<'_>, session: String) -> Res<LiveTakenBack> {
+    blocking(&app, move |app| live::take_back(app, &session)).await
+}
+
+#[tauri::command]
+pub async fn live_skip(app: St<'_>, session: String) -> Res<LiveSession> {
+    blocking(&app, move |app| live::skip(app, &session)).await
+}
+
+/// `answer`: what's in the box (Send and end), kept on the current turn with no call; `null` drops the turn.
+#[tauri::command]
+pub async fn live_end(
+    app: St<'_>,
+    session: String,
+    active_ms: u32,
+    answer: Option<String>,
+    spoken: Option<crate::dto::Spoken>,
+) -> Res<LiveSession> {
+    blocking(&app, move |app| {
+        live::end(app, &session, active_ms, answer, spoken)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn live_read(app: St<'_>, session: String, question: String) -> Res<PracticeTurn> {
+    live::read(&app, &session, question).await
 }
 
 // ── Spoken practice ──

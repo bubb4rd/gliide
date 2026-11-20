@@ -3,4 +3,4 @@
 /**
  * What a model call was for, as Settings → Usage groups them (`usage.rs`).
  */
-export type Feature = "requirements" | "feed-check" | "suggestions" | "rewrite" | "chat" | "cover-letter" | "import" | "invite" | "prep" | "practice" | "nudges" | "dig" | "debrief";
+export type Feature = "requirements" | "feed-check" | "suggestions" | "rewrite" | "chat" | "cover-letter" | "import" | "invite" | "prep" | "practice" | "nudges" | "live" | "dig" | "debrief";

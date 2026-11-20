@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["follow_up", "picked"],
+  "properties": {
+    "follow_up": { "type": ["string", "null"], "maxLength": 240 },
+    "picked": { "type": ["string", "null"], "maxLength": 200 }
+  }
+}

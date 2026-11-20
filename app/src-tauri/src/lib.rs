@@ -19,6 +19,7 @@ mod ics;
 pub mod import;
 pub mod jobs;
 pub mod library;
+pub mod live;
 pub mod logo;
 pub mod notify;
 pub mod place;
@@ -159,6 +160,15 @@ pub fn run() {
             commands::keep_claim,
             commands::tell_story,
             commands::story_turns,
+            commands::live_start,
+            commands::live_session,
+            commands::live_runs,
+            commands::live_answer,
+            commands::live_retry,
+            commands::live_take_back,
+            commands::live_skip,
+            commands::live_end,
+            commands::live_read,
             commands::speech_status,
             commands::practice_hints,
             commands::start_listening,

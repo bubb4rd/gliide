@@ -9,9 +9,9 @@ use resume_core::suggestions::Suggestions;
 use resume_core::{Bank, Master, Posting, Requirements, Resume, migrate_v1};
 use resume_store::{
     AppStatus, Application, BenchRunRow, ChangeFate, ChangeOutcome, DEBRIEF_DAYS, Dig, DigAnswers,
-    FeedState, KeptRow, Latency, LogoFound, LogoSource, NewAnalysis, NewFeedJob, Notified,
-    PracticeRow, Prep, Rev, Round, RoundState, RouteTimes, Spoken, StatusChange, Store, StoreError,
-    UsageRow, applications_csv, parse_ats_fit_csv,
+    FeedState, KeptRow, Latency, LiveKind, LiveTurnRow, LogoFound, LogoSource, NewAnalysis,
+    NewFeedJob, Notified, PracticeRow, Prep, Rev, Round, RoundState, RouteTimes, Spoken,
+    StatusChange, Store, StoreError, UsageRow, applications_csv, parse_ats_fit_csv,
 };
 
 const V1: &str = include_str!("../../../fixtures/banks/jane-doe.v1.json");
@@ -685,6 +685,7 @@ fn migrating_to_covers_keeps_the_data() {
     };
     // Back to version 1, as the M4 app left it.
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -742,7 +743,7 @@ fn migrating_to_covers_keeps_the_data() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -850,6 +851,7 @@ fn migrating_to_fetched_logos_keeps_yours() {
         .put_logo("acme", b"png", "image/png")
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -884,6 +886,7 @@ fn migrating_to_status_changes_keeps_the_applications() {
         .put_application(&app("a", "2026-10-01", "Acme"))
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1103,6 +1106,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .put_application(&app("a", "2026-10-01", "Acme"))
         .unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1124,7 +1128,7 @@ fn migrating_to_rounds_keeps_the_applications() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1138,6 +1142,7 @@ fn practice_row(id: &str, round: &str, question: &str) -> PracticeRow {
         answer: "I wrote 14 tests.".into(),
         feedback: r#"{"lines":[]}"#.into(),
         spoken: None,
+        live_id: None,
         at: String::new(),
     }
 }
@@ -1237,6 +1242,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         store.put_round(&round("r", "a", None)).unwrap();
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1258,7 +1264,7 @@ fn migrating_to_practice_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1388,6 +1394,7 @@ fn migrating_to_stories_keeps_the_practice() {
         store.put_round(&round("r", "a", None)).unwrap();
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1435,7 +1442,7 @@ fn migrating_to_stories_keeps_the_practice() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1647,6 +1654,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
             .unwrap();
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1669,7 +1677,7 @@ fn migrating_to_debriefs_keeps_the_rounds() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1831,6 +1839,7 @@ fn migrating_to_latency_keeps_the_usage() {
     let path = dir.join("gliide.sqlite");
     drop(Store::open(&path).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1859,7 +1868,7 @@ fn migrating_to_latency_keeps_the_usage() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1936,6 +1945,7 @@ fn migrating_to_bench_keeps_the_analyses() {
         (posting_id, a.id)
     };
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template;
@@ -1978,7 +1988,7 @@ fn migrating_to_bench_keeps_the_analyses() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1999,6 +2009,7 @@ fn migrating_to_sent_template_names_classic_serif_for_resumes_sent_before() {
             .unwrap();
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
     conn.execute_batch(
         "ALTER TABLE practice DROP COLUMN spoken_ms; ALTER TABLE practice DROP COLUMN spoken_words;
          ALTER TABLE applications DROP COLUMN sent_template; PRAGMA user_version = 16;",
@@ -2018,7 +2029,216 @@ fn migrating_to_sent_template_names_classic_serif_for_resumes_sent_before() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 18);
+    assert_eq!(version, 19);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Back from version 19 to 18: live interviews' tables and the practice row's run gone.
+const BEFORE_LIVE: &str = "DROP INDEX practice_live; ALTER TABLE practice DROP COLUMN live_id;
+     DROP TABLE live_turns; DROP TABLE live_runs;";
+
+/// Practice from before live interviews (schema version 18) keeps its rows, read from no run.
+#[test]
+fn migrating_to_live_keeps_the_practice() {
+    let dir = std::env::temp_dir().join(format!("resume-store-v18-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    {
+        let store = Store::open(&path).unwrap();
+        store
+            .put_application(&app("a", "2026-10-01", "Acme"))
+            .unwrap();
+        store.put_round(&round("r", "a", None)).unwrap();
+        store.add_practice(&practice_row("p1", "r", "q1")).unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(BEFORE_LIVE).unwrap();
+    conn.execute_batch("PRAGMA user_version = 18;").unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    let rows = store.practice("r").unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].id.as_str(), rows[0].live_id.as_deref()), ("p1", None));
+    let run = store.add_live_run("r", 4).unwrap();
+    assert_eq!(store.live_runs("r").unwrap(), [run]);
+    drop(store);
+    let version: i64 = rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 19);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn live_turn(question: &str, kind: LiveKind, asked: &str) -> LiveTurnRow {
+    LiveTurnRow {
+        seq: 99,
+        question: question.into(),
+        kind,
+        asked: asked.into(),
+        picked: None,
+        answer: None,
+        skipped: false,
+        spoken: None,
+        at: String::new(),
+    }
+}
+
+/// A run's turns are numbered in order; an answer can be set once, taken back (the turn asked after it goes with it),
+/// or the turn skipped; ending drops the turn left unanswered. A run, and what was read from it, go with its round.
+#[test]
+fn live_runs_take_turns_and_go_with_their_round() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .put_application(&app("a", "2026-10-01", "Acme"))
+        .unwrap();
+    store.put_round(&round("r", "a", None)).unwrap();
+    store.put_round(&round("s", "a", None)).unwrap();
+    assert!(matches!(
+        store.add_live_run("gone", 3),
+        Err(StoreError::NotFound { what: "round", .. })
+    ));
+    let first = store.add_live_run("r", 3).unwrap();
+    let run = store.add_live_run("r", 3).unwrap();
+    assert_eq!((run.ended_at.clone(), run.active_ms, run.asked), (None, None, 0));
+
+    let ask = store
+        .add_live_turn(&run.id, &live_turn("q1", LiveKind::Ask, "Walk me through the regression suite."))
+        .unwrap();
+    assert_eq!(ask.seq, 0);
+    assert!(!ask.at.is_empty());
+    let spoken = Spoken {
+        ms: 24_000,
+        words: 60,
+    };
+    store
+        .answer_live_turn(&run.id, 0, "We read order events from a Kafka topic.", Some(spoken))
+        .unwrap();
+    // Answered once.
+    assert!(store.answer_live_turn(&run.id, 0, "Again", None).is_err());
+    let follow = store
+        .add_live_turn(
+            &run.id,
+            &LiveTurnRow {
+                picked: Some("read order events from a Kafka topic".into()),
+                ..live_turn("q1", LiveKind::Follow, "Who wrote the consumer?")
+            },
+        )
+        .unwrap();
+    assert_eq!(follow.seq, 1);
+
+    // Taken back: the answer comes back, the follow-up asked on it goes.
+    assert_eq!(
+        store.unanswer_live_turn(&run.id).unwrap().as_deref(),
+        Some("We read order events from a Kafka topic.")
+    );
+    let (_, turns) = store.live_run(&run.id).unwrap().unwrap();
+    assert_eq!(turns.len(), 1);
+    assert_eq!((turns[0].answer.clone(), turns[0].spoken), (None, None));
+    assert_eq!(store.unanswer_live_turn(&run.id).unwrap(), None);
+
+    store.answer_live_turn(&run.id, 0, "I wrote the consumer.", None).unwrap();
+    store
+        .add_live_turn(&run.id, &live_turn("q1", LiveKind::Follow, "How did you test it?"))
+        .unwrap();
+    store.skip_live_turn(&run.id, 1).unwrap();
+    assert!(store.skip_live_turn(&run.id, 1).is_err());
+    // Past a skipped turn, nothing to take back.
+    store
+        .add_live_turn(&run.id, &live_turn("q2", LiveKind::Ask, "Why this team?"))
+        .unwrap();
+    assert_eq!(store.unanswer_live_turn(&run.id).unwrap(), None);
+
+    store.end_live_run(&run.id, Some(600_000)).unwrap();
+    let (ended, turns) = store.live_run(&run.id).unwrap().unwrap();
+    let ended_at = ended.ended_at.clone().unwrap();
+    assert_eq!(
+        (ended.active_ms, ended.questions, ended.asked, ended.follows),
+        (Some(600_000), 3, 1, 1)
+    );
+    assert_eq!(
+        turns
+            .iter()
+            .map(|t| (t.seq, t.kind, t.answer.is_some(), t.skipped))
+            .collect::<Vec<_>>(),
+        [(0, LiveKind::Ask, true, false), (1, LiveKind::Follow, false, true)]
+    );
+    assert_eq!(turns[1].picked, None);
+    // Ending again keeps when it ended; a clock not given keeps the one kept.
+    store.end_live_run(&run.id, None).unwrap();
+    let again = store.live_run(&run.id).unwrap().unwrap().0;
+    assert_eq!((again.ended_at.unwrap(), again.active_ms), (ended_at, Some(600_000)));
+    assert!(store.end_live_run("gone", None).is_err());
+
+    let ids = |round: &str| -> Vec<String> {
+        store
+            .live_runs(round)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.id)
+            .collect()
+    };
+    assert_eq!(ids("r"), [run.id.clone(), first.id.clone()]);
+    assert!(ids("s").is_empty());
+
+    // What a run's readback reads is practice of the round, from that run.
+    store
+        .add_practice(&PracticeRow {
+            live_id: Some(run.id.clone()),
+            ..practice_row("p1", "r", "q1")
+        })
+        .unwrap();
+    store.add_practice(&practice_row("p2", "r", "q1")).unwrap();
+    assert!(
+        store
+            .add_practice(&PracticeRow {
+                live_id: Some("gone".into()),
+                ..practice_row("p3", "r", "q1")
+            })
+            .is_err()
+    );
+    let read = store.live_practice(&run.id).unwrap();
+    assert_eq!(read.len(), 1);
+    assert_eq!((read[0].id.as_str(), read[0].live_id.as_deref()), ("p1", Some(run.id.as_str())));
+    assert_eq!(store.practice("r").unwrap().len(), 2);
+
+    store.delete_round("r").unwrap();
+    assert!(ids("r").is_empty());
+    assert_eq!(store.live_run(&run.id).unwrap(), None);
+    assert!(store.live_practice(&run.id).unwrap().is_empty());
+}
+
+/// A practice row outlives the live run it was read from, read from none.
+#[test]
+fn practice_keeps_its_answer_when_its_live_run_goes() {
+    let dir = std::env::temp_dir().join(format!("resume-store-live-{}", std::process::id()));
+    let path = dir.join("gliide.sqlite");
+    let run = {
+        let store = Store::open(&path).unwrap();
+        store
+            .put_application(&app("a", "2026-10-01", "Acme"))
+            .unwrap();
+        store.put_round(&round("r", "a", None)).unwrap();
+        let run = store.add_live_run("r", 2).unwrap();
+        store
+            .add_practice(&PracticeRow {
+                live_id: Some(run.id.clone()),
+                ..practice_row("p1", "r", "q1")
+            })
+            .unwrap();
+        run
+    };
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    conn.execute("DELETE FROM live_runs WHERE id = ?1", [&run.id])
+        .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    let rows = store.practice("r").unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].id.as_str(), rows[0].live_id.as_deref()), ("p1", None));
+    drop(store);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

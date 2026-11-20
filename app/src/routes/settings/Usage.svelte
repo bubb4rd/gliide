@@ -54,6 +54,7 @@
     nudges: "Nudges",
     dig: "Dig",
     debrief: "Reading debriefs",
+    live: "Live interview",
   };
   /** The token kinds, output first (the dearest per token), as the ledger stacks them from the baseline up and the
    *  mix lays them out: each with its place in a day's four (input, output, cache write, cache read). */

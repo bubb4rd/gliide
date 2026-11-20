@@ -16,6 +16,17 @@ export const ROUND_KINDS: { value: RoundKind; label: string }[] = [
 
 export const kindLabel = (kind: RoundKind) => ROUND_KINDS.find((k) => k.value === kind)?.label ?? "Interview";
 
+/**
+ * Who asks in practice and a live interview: the round's interviewer by first name ("Priya", and as the thread names
+ * her, "Priya, as Globex"), else the company's interviewer.
+ */
+export function interviewer(round: Round, company: string): { name: string; asker: string } {
+  const first = round.with?.split(/[ ,]/)[0];
+  return first
+    ? { name: first, asker: `${first}, as ${company}` }
+    : { name: `${company}’s interviewer`, asker: `${company}’s interviewer` };
+}
+
 const DAY = 86_400_000;
 
 /** Midnight of `d`'s day, local time. */

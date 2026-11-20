@@ -3,11 +3,17 @@
   lines it drew on, which of situation, task, action and result it has, what it says differently from the resume (amber),
   what it says the bank doesn't hold yet (Keep as fact), a tighter telling and the likely follow-up. Never a grade.
   `actions` adds to the Tighter row's (practice's Save as story).
+
+  In a live run's readback (`LiveReadback`) the card has a head that folds it (`head`: the question's number, the
+  question, and a meta line of your first words, its follow-ups and how long you spoke; `collapsed` bindable), and
+  `asked` (the follow-ups she actually asked) takes the likely Follow-up's place as **She asked**.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import Check from "@lucide/svelte/icons/check";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import Copy from "@lucide/svelte/icons/copy";
   import Plus from "@lucide/svelte/icons/plus";
@@ -27,9 +33,26 @@
     /** What a mismatch is against ("the resume you sent"). */
     against?: string;
     actions?: Snippet;
+    /** A head that folds the card: the question's number, the question and a meta line under it. */
+    head?: { n: number; question: string; meta: string };
+    /** Folded to its head (bindable; with `head`). */
+    collapsed?: boolean;
+    /** The follow-ups as she asked them (a live run): shown as She asked, in place of the likely one. */
+    asked?: string[];
   }
 
-  let { feedback: f, line, kept, onkeep, grounded, against = "the resume you sent", actions }: Props = $props();
+  let {
+    feedback: f,
+    line,
+    kept,
+    onkeep,
+    grounded,
+    against = "the resume you sent",
+    actions,
+    head,
+    collapsed = $bindable(false),
+    asked,
+  }: Props = $props();
 
   const STAR: { key: "situation" | "task" | "action" | "result"; label: string }[] = [
     { key: "situation", label: "Situation" },
@@ -50,7 +73,16 @@
   }
 </script>
 
-<article class="card" aria-label="Feedback on your answer">
+<article class="card" aria-label={head ? `Question ${head.n}` : "Feedback on your answer"}>
+  {#if head}
+    <button type="button" class="head" aria-expanded={!collapsed} onclick={() => (collapsed = !collapsed)}>
+      <span class="head__n num">{head.n}</span>
+      <span class="head__q">{head.question}</span>
+      <span class="head__fold"><Icon icon={collapsed ? ChevronDown : ChevronUp} size={14} /></span>
+      <span class="meta head__meta">{head.meta}</span>
+    </button>
+  {/if}
+  {#if !head || !collapsed}
   {#if f.lines.length}
     <div class="row">
       <span class="row__label">Drew on</span>
@@ -130,11 +162,21 @@
       <p class="acts acts--alone">{@render actions()}</p>
     </div>
   {/if}
-  {#if f.followUp}
+  {#if asked}
+    {#if asked.length}
+      <div class="row">
+        <span class="row__label">She asked</span>
+        <div class="asked">
+          {#each asked as q, i (i)}<p class="follow">“{q}”</p>{/each}
+        </div>
+      </div>
+    {/if}
+  {:else if f.followUp}
     <div class="row">
       <span class="row__label">Follow-up</span>
       <p class="follow">“{f.followUp}”</p>
     </div>
+  {/if}
   {/if}
 </article>
 
@@ -153,8 +195,64 @@
     gap: var(--space-3);
     padding: var(--space-2-5) var(--space-3);
   }
-  .row + .row {
+  .row + .row,
+  .head + .row {
     box-shadow: inset 0 1px 0 var(--line);
+  }
+  /* The readback's head: the whole of it folds the card; the meta keeps saying what it holds while folded. */
+  .head {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: var(--space-2);
+    row-gap: var(--space-0-5);
+    align-items: start;
+    width: 100%;
+    padding: var(--space-2-5) var(--space-3);
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: start;
+    cursor: default;
+    transition: background-color var(--dur-instant) var(--ease-out);
+  }
+  .head:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+  }
+  @media (hover: hover) {
+    .head:hover {
+      background: var(--hover);
+    }
+  }
+  .head__n {
+    color: var(--ink-3);
+    font-size: var(--text-md);
+    line-height: var(--leading-md);
+  }
+  .head__q {
+    font-size: var(--text-md);
+    line-height: var(--leading-md);
+    font-weight: var(--weight-medium);
+    text-wrap: pretty;
+  }
+  .head__fold {
+    display: inline-flex;
+    align-items: center;
+    height: var(--leading-md);
+    color: var(--ink-3);
+  }
+  .head__meta {
+    grid-column: 2;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .asked {
+    display: grid;
+    gap: var(--space-1-5);
   }
   .row p {
     margin: 0;

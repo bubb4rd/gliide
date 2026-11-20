@@ -146,6 +146,7 @@ fn summed(calls: &[UsageRow]) -> Vec<UsageDay> {
             .or_insert_with(|| UsageDay {
                 day: c.day.clone(),
                 feature,
+                role: feature.role(),
                 agent,
                 model: c.model.clone(),
                 calls: 0,

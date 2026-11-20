@@ -12,6 +12,8 @@
   import Banknote from "@lucide/svelte/icons/banknote";
   import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
   import Play from "@lucide/svelte/icons/play";
+  import CircleStop from "@lucide/svelte/icons/circle-stop";
+  import MessagesSquare from "@lucide/svelte/icons/messages-square";
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
@@ -100,6 +102,7 @@
     nudging: "Nudging…",
     digging: "Reading your answers…",
     debriefing: "Reading your debrief…",
+    interviewing: "Reading your answer…",
   } as const;
   /** A finished stage in the status's trail. */
   const DONE = {
@@ -116,6 +119,7 @@
     nudging: "Nudged",
     digging: "Read your answers",
     debriefing: "Read your debrief",
+    interviewing: "Read your answer",
   } as const;
   const TABS: { value: Tab; label: string }[] = [
     { value: "resume", label: "Resume" },
@@ -173,6 +177,8 @@
   /** The Interview tab's open debrief, and the round in focus awaiting one (its toolbar actions). */
   let debriefing = $state<string | null>(null);
   let debriefDue = $state<string | null>(null);
+  /** The Interview tab's live interview: running (End interview) or its readback (Back to prep). */
+  let living = $state<"live" | "readback" | null>(null);
   let canSaveDebrief = $state(false);
   let interview = $state<ReturnType<typeof Interview>>();
   /** The lines of the resume you sent that the Interview tab's selected question is about. */
@@ -514,6 +520,10 @@
       disabled={!ready || !letter?.letter || s.drafting !== null}
       onclick={exportLetter}>Export letter</Button
     >
+  {:else if onInterview && living === "live"}
+    <Button icon={CircleStop} kbd="⌘." onclick={() => interview?.endLive()}>End interview</Button>
+  {:else if onInterview && living === "readback"}
+    <Button variant="ghost" kbd="Esc" onclick={() => interview?.closeLive()}>Back to prep</Button>
   {:else if onInterview && practicing}
     <Button variant="ghost" kbd="Esc" onclick={() => (practicing = false)}>Back to prep</Button>
   {:else if onInterview && debriefing}
@@ -527,6 +537,14 @@
   {:else if onInterview && debriefDue}
     <Button variant="primary" icon={NotebookPen} kbd="D" onclick={() => interview?.debriefNow()}>Debrief</Button>
   {:else if onInterview && canPractice}
+    <Button
+      icon={MessagesSquare}
+      kbd="L"
+      {@attach tip(
+        "Run the round as an interview: every question in order, follow-ups on what you say, no feedback until you end (L)",
+      )}
+      onclick={() => void interview?.startLive()}>Live interview</Button
+    >
     <Button variant="primary" icon={Play} kbd="P" onclick={() => (practicing = true)}>Practice</Button>
   {:else if onInterview}
     <Button variant="primary" icon={CalendarPlus} kbd="A" onclick={() => (addRound = true)}>Add interview</Button>
@@ -579,6 +597,7 @@
         bind:debriefing
         bind:canSaveDebrief
         bind:debriefDue
+        bind:living
       />
     {:else}
     {#if head && !chatting}

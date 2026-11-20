@@ -63,6 +63,7 @@
     nudging: "Nudging…",
     digging: "Reading…",
     debriefing: "Reading…",
+    interviewing: "Reading…",
   };
 
   /**

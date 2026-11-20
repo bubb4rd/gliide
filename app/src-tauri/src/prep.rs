@@ -27,22 +27,32 @@ use crate::state::{App, blocking, lock, model_call};
 use crate::stories::draft_of;
 
 /// What a prep or a practiced answer is read against: the round, its application and posting, the resume as sent.
-struct Context {
-    round: store::Round,
-    application: Application,
+pub(crate) struct Context {
+    pub(crate) round: store::Round,
+    pub(crate) application: Application,
     /// The model call's job: the posting, else the application.
-    job: String,
-    requirements: Option<Requirements>,
-    sent: SentResume,
+    pub(crate) job: String,
+    pub(crate) requirements: Option<Requirements>,
+    pub(crate) sent: SentResume,
     /// Your stories, newest first.
-    stories: Vec<Story>,
+    pub(crate) stories: Vec<Story>,
     /// This application's earlier rounds' debriefs, oldest first.
     debriefs: Vec<Earlier>,
     /// What the prep was written from, hashed (the round included).
     key: String,
 }
 
-fn context(app: &App, round: &str) -> Result<Context> {
+impl Context {
+    /// The posting's requirement terms, most important first.
+    pub(crate) fn terms(&self) -> Vec<String> {
+        self.requirements
+            .as_ref()
+            .map(|r| r.skills.iter().map(|k| k.term.clone()).collect())
+            .unwrap_or_default()
+    }
+}
+
+pub(crate) fn context(app: &App, round: &str) -> Result<Context> {
     let store = lock(&app.store);
     let r = store
         .round(round)?
@@ -263,11 +273,7 @@ pub async fn practice(
         .as_deref()
         .and_then(|id| cx.stories.iter().find(|s| s.id == id))
         .cloned();
-    let terms: Vec<String> = cx
-        .requirements
-        .as_ref()
-        .map(|r| r.skills.iter().map(|k| k.term.clone()).collect())
-        .unwrap_or_default();
+    let terms = cx.terms();
     let route = app.route(Feature::Practice);
     let llm = app.llm(&route, Feature::Practice).await?;
     let model = route.model;
@@ -284,6 +290,7 @@ pub async fn practice(
             why: &qt.why,
             lines: &qt.lines,
             answer: &a,
+            follow_ups: &[],
             terms: &terms,
             sent: &s,
             story: st.as_ref(),
@@ -311,6 +318,7 @@ pub async fn practice(
             ms: s.ms,
             words: s.words,
         }),
+        live_id: None,
         at: String::new(),
     };
     let stored = blocking(app, move |app| Ok(lock(&app.store).add_practice(&row)?)).await?;
@@ -351,11 +359,7 @@ pub async fn nudge(
         .as_deref()
         .and_then(|id| cx.stories.iter().find(|s| s.id == id))
         .cloned();
-    let terms: Vec<String> = cx
-        .requirements
-        .as_ref()
-        .map(|r| r.skills.iter().map(|k| k.term.clone()).collect())
-        .unwrap_or_default();
+    let terms = cx.terms();
     let last = match last {
         Some(p) => Some((p.answer, serde_json::from_str::<practice::Feedback>(&p.feedback)?)),
         None => None,
@@ -479,6 +483,7 @@ pub(crate) fn turn(p: PracticeRow) -> Result<PracticeTurn> {
             ms: s.ms,
             words: s.words,
         }),
+        live: p.live_id,
         id: p.id,
         at: p.at,
     })
