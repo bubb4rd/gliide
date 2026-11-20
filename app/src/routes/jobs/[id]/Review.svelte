@@ -10,6 +10,7 @@
   import { page } from "$app/state";
   import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
   import Banknote from "@lucide/svelte/icons/banknote";
+  import BriefcaseBusiness from "@lucide/svelte/icons/briefcase-business";
   import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
   import Play from "@lucide/svelte/icons/play";
   import CircleStop from "@lucide/svelte/icons/circle-stop";
@@ -54,6 +55,7 @@
     Menu,
     PlaceMap,
     Popover,
+    ScoreHeader,
     Segmented,
     Thinking,
     Toolbar,
@@ -134,11 +136,33 @@
 
   const review = $derived(s.review);
   const ready = $derived(s.phase === "ready" && review !== null);
-  const head = $derived(review?.head ?? s.view?.head ?? null);
   const row = $derived(app.jobs.find((j) => j.id === job));
+  /** Known from the posting row before Extract finishes (feed and recent jobs); pasted text waits for Extract. */
+  const rowHead = $derived(
+    row && (row.company || (row.role && row.role !== "Untitled posting"))
+      ? { role: row.role, company: row.company, companyKey: row.companyKey, location: row.location, seniority: "" }
+      : null,
+  );
+  const head = $derived(review?.head ?? s.view?.head ?? rowHead);
   /** The posting's row: the list's (current once you set its link or salary), else the review's or the opened job's. */
   const posting = $derived(row ?? review?.job ?? s.view?.job ?? null);
   const company = $derived(head?.company || row?.company || "Posting");
+  const added = $derived.by(() => {
+    if (!posting?.addedAt) return "";
+    const at = new Date(posting.addedAt);
+    if (Number.isNaN(at.getTime())) return "";
+    const days = Math.floor((Date.now() - at.getTime()) / 86_400_000);
+    if (days <= 0) return "Added today";
+    if (days === 1) return "Added yesterday";
+    if (days < 30) return `Added ${days} days ago`;
+    return `Added ${at.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  });
+  /** The master being tailored while Suggest runs: supplies the baseline score as soon as Extract finishes. */
+  const baselineMaster = $derived(
+    s.view ? (s.view.masters.find((m) => m.id === s.master) ?? s.view.masters[0] ?? null) : null,
+  );
+  const baseline = $derived(baselineMaster ? baselineMaster.score : null);
+  const baselineTitle = $derived(baselineMaster ? `Your ${baselineMaster.title} master as it is` : undefined);
   /** Its application once exported (a posting has at most one): its status is set from the crumbs. */
   const application = $derived(app.applications.find((a) => a.job === job));
   const link = $derived(posting?.url ?? null);
@@ -201,8 +225,10 @@
   /** Between Extract and Suggest (Suggest not reported yet), the stage is Suggest's, from that moment. */
   const loadStage = $derived(s.running?.stage ?? "suggesting");
   const loadSince = $derived(s.running?.startedAt ?? performance.now());
+  /** The whole cover letter is being written (first write or rewrite): column wears the ring and desk clears. */
+  const writingLetter = $derived(onCover && ready && s.drafting === "letter");
   /** A model call writing the column: the first load, or the whole cover letter (`Letter` centers its stage). */
-  const working = $derived(loading || (onCover && ready && s.drafting === "letter"));
+  const working = $derived(loading || writingLetter);
   // The letter loads once per review, when its tab first shows.
   let letterFor: string | null = null;
   $effect(() => {
@@ -259,7 +285,7 @@
   }
 
   async function exportLetter() {
-    if (!ready || !letter?.letter) return;
+    if (!ready || !letter?.letter || s.drafting !== null) return;
     const done = await s.exportCover();
     if (!done) return;
     toast(`Saved ${done.fileName}`, {
@@ -674,9 +700,15 @@
           {#if head.company}<p class="company" {@attach tip(head.company)}>{head.company}</p>{/if}
           <h1 class="headline">{head.role}</h1>
         </div>
+        {#if !onCover && (head.seniority || added)}
+          <ul class="facts meta">
+            {#if head.seniority}<li><Icon icon={BriefcaseBusiness} size={14} />{head.seniority}</li>{/if}
+            {#if added}<li><Icon icon={CalendarPlus} size={14} />{added}</li>{/if}
+          </ul>
+        {/if}
         {#if review?.headline}<p class="lede">{review.headline}</p>{/if}
       </div>
-    {:else if s.phase === "opening" && !loading}
+    {:else if s.phase === "opening"}
       <div class="job" aria-hidden="true">
         <span class="bone bone--meta"></span>
         <span class="bone bone--headline"></span>
@@ -759,8 +791,13 @@
         editable={row !== undefined}
       />
     {:else if s.phase === "opening" || s.phase === "suggesting" || s.phase === "stopped"}
+      {#if s.phase === "opening" || s.phase === "suggesting"}
+        <div class="score-loading">
+          <ScoreHeader now={baseline} nowTitle={baselineTitle} reveal />
+        </div>
+      {/if}
       {#if skills.length}
-        <div class="skills">
+        <div class="skills enter">
           <GroupHead label="Skills and keywords" meta="{skills.length} the posting asks for" />
           <div class="row chips">
             {#each skills as chip (chip.term)}
@@ -770,7 +807,7 @@
         </div>
       {/if}
       {#if s.view?.masters.length}
-        <div class="ranked">
+        <div class="ranked enter" style:--i={1}>
           <p class="label">Your masters, best first</p>
           {#each s.view.masters as master (master.id)}
             <div class="ranked__row">
@@ -819,7 +856,13 @@
       </div>
     {/if}
     <Desk
-      pages={onInterview ? (sent?.pages ?? []) : onCover ? (letter?.pages ?? []) : (review?.pages ?? [])}
+      pages={onInterview
+        ? (sent?.pages ?? [])
+        : onCover
+          ? writingLetter
+            ? []
+            : (letter?.pages ?? [])
+          : (review?.pages ?? [])}
       bind:zoom
       above={places.length ? placeMap : undefined}
     >
@@ -835,7 +878,9 @@
             <Badge>No resume sent</Badge>
           {/if}
         {:else if onCover}
-          {#if !letter?.letter}
+          {#if writingLetter}
+            <Badge>Writing letter…</Badge>
+          {:else if !letter?.letter}
             <Badge>No letter yet</Badge>
           {:else if letterFits}
             <Badge tone="gain" dot>Fits on 1 page</Badge>
@@ -850,7 +895,7 @@
           <Badge tone="warn" dot>{review.pageCount} pages: over by {review.pageCount - review.pageLimit}</Badge>
         {/if}
       {/snippet}
-      {#if onInterview}{#if sent}The resume you sent{/if}{:else if onCover}{#if letter?.letter}Dated today{/if}{:else if review}Highlights
+      {#if onInterview}{#if sent}The resume you sent{/if}{:else if onCover}{#if !writingLetter && letter?.letter}Dated today{/if}{:else if review}Highlights
         show what changed{/if}
     </Desk>
   </div>
@@ -1019,6 +1064,27 @@
     font-size: var(--text-md);
     color: var(--ink-2);
     text-wrap: pretty;
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1-5) var(--space-4);
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .facts li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+  }
+  .facts :global(.icon) {
+    color: var(--ink-3);
+  }
+  /* Aligns with ChatJob's ScoreHeader (24px inset, 16px below the job header) so the handoff doesn't jump. */
+  .score-loading {
+    padding-inline: var(--space-1);
+    margin-top: calc(var(--space-2) * -1);
   }
   /* Heads and rows 4px inside the column's text edge. */
   .skills,

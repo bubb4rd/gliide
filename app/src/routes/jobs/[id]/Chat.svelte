@@ -160,6 +160,11 @@
   // Only what arrives while the chat is open enters; a thread already there (or loaded with a review) just shows.
   const openedAt = Date.now();
   const firstArrival = untrack(() => s.arrival);
+  const revealScore = untrack(() => {
+    const due = s.scoreReveal;
+    if (due) s.scoreReveal = false;
+    return due;
+  });
 
   // ── Asking again: an answer retried, an ask edited (both from where that ask was), copying ──
   /** The turn whose Retry waits on your say-so: it would take back later asks or accepted edits. */
@@ -366,6 +371,7 @@
         {link}
         {source}
         root={scroller}
+        {revealScore}
         bind:salaryAnchor
         bind:linkAnchor
         bind:logoMark

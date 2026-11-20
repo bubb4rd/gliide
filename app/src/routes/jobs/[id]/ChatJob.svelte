@@ -7,6 +7,7 @@
   link's (Add link without one) and the mark the company photo's, all owned by Review.
 -->
 <script lang="ts">
+  import { untrack } from "svelte";
   import Banknote from "@lucide/svelte/icons/banknote";
   import BriefcaseBusiness from "@lucide/svelte/icons/briefcase-business";
   import CalendarPlus from "@lucide/svelte/icons/calendar-plus";
@@ -34,6 +35,8 @@
     source: string;
     /** The thread's scroller: the card is out of view when it's left it. */
     root: HTMLElement | undefined;
+    /** The review just landed after a live Extract/Suggest call: ScoreHeader animates its gain and projected score. */
+    revealScore?: boolean;
     salaryAnchor?: HTMLButtonElement;
     linkAnchor?: HTMLButtonElement;
     logoMark?: HTMLElement;
@@ -51,6 +54,7 @@
     link,
     source,
     root,
+    revealScore = false,
     salaryAnchor = $bindable(),
     linkAnchor = $bindable(),
     logoMark = $bindable(),
@@ -105,6 +109,8 @@
   let gone = $state(false);
   /** You folded the card: the strip takes its place. */
   let folded = $state(false);
+  /** Consume the arrival reveal on first mount so folding and unfolding never replay it. */
+  let scoreReveal = $state(untrack(() => revealScore));
   const strip = $derived(folded || gone);
 
   $effect(() => {
@@ -217,7 +223,10 @@
         icon={ChevronUp}
         aria-label="Fold the job"
         {@attach tip("Fold the job")}
-        onclick={() => (folded = true)}
+        onclick={() => {
+          folded = true;
+          scoreReveal = false;
+        }}
       />
     </div>
 
@@ -254,6 +263,7 @@
       ceiling={review.ceiling.total}
       components={review.projected.components}
       nowTitle="Your {review.master.title} master as it is"
+      reveal={scoreReveal}
     >
       <strong>{signed(projected - now)} points</strong> from {edits}
       {edits === 1 ? "edit" : "edits"} · {pageNote}

@@ -1,11 +1,14 @@
 <!--
-  The score: now → projected in the serif, the ceiling, and a bar (now | gain | headroom). Updates are instant: the
-  numbers and the bar change with every toggle, so they never animate. Hover or focus the numbers for the parts: one
-  line each (icon, name, share of the score, how much is met), its gist under it; met in full turns green. Parts the
-  posting doesn't ask for are named in one line at the foot.
+  The score: now → projected in the serif, the ceiling, and a bar (now | gain | headroom). Interactive updates (toggling
+  a change) are instant: no CSS width transition. During a posting's first load, `now`, `projected` and `ceiling` can be
+  null: stage 1 shows the empty bar and static skeleton bones; stage 2 fills the baseline (`0%` → `now%`) once Extract
+  scores your master; stage 3 (or mounting with `reveal` right after loading) sweeps the gain (`0%` → `gain%`) and rolls
+  the projected score up from `now` over `--dur-roll` `--ease-emphasized` (reduced motion fades only). Hover or focus
+  the numbers for the parts: one line each (icon, name, share of the score, how much is met), its gist under it; met in
+  full turns green. Parts the posting doesn't ask for are named in one line at the foot.
 -->
 <script lang="ts">
-  import type { Component, Snippet } from "svelte";
+  import { untrack, type Component, type Snippet } from "svelte";
   import type { LucideProps } from "@lucide/svelte";
   import Briefcase from "@lucide/svelte/icons/briefcase";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -15,6 +18,7 @@
   import MessagesSquare from "@lucide/svelte/icons/messages-square";
   import Wrench from "@lucide/svelte/icons/wrench";
   import Icon from "./Icon.svelte";
+  import { fillBar, ROLL_CELLS, roll, rollDigits, token, type RollDigit } from "./motion";
   import Popover from "./Popover.svelte";
   import { tip } from "./tip.svelte";
 
@@ -32,18 +36,35 @@
   }
 
   interface Props {
-    /** 0–100. */
-    now: number;
-    projected: number;
-    ceiling: number;
+    /** 0–100, or null while Extract is still scoring the master. */
+    now?: number | null;
+    /** 0–100, or null while Suggest is still estimating the tailored score. */
+    projected?: number | null;
+    /** 0–100, or null while Suggest is still estimating the ceiling. */
+    ceiling?: number | null;
     components?: Part[];
     /** What "now" is ("Your SWE master as it is"). */
     nowTitle?: string;
+    /**
+     * Animate the score arriving from loading:
+     * - Mounted with `now` and `projected == null`: `.bar__now` fills from 0% to `now%`.
+     * - Mounted with `now` and `projected` (right after loading): `.bar__now` starts at `now%`, `.bar__gain` fills
+     *   from 0% to `gain%`, the projected figure rolls up (on a rise) or enters, and ceiling/below fade in.
+     */
+    reveal?: boolean;
     /** The line under the bar ("+25 points from 4 changes · fits on 1 page"). */
     children?: Snippet;
   }
 
-  let { now, projected, ceiling, components = [], nowTitle, children }: Props = $props();
+  let {
+    now = null,
+    projected = null,
+    ceiling = null,
+    components = [],
+    nowTitle,
+    reveal = false,
+    children,
+  }: Props = $props();
 
   const ICONS: Record<string, Component<LucideProps>> = {
     hard_tool: Wrench,
@@ -59,29 +80,164 @@
   let open = $state(false);
 
   const clamp = (n: number) => Math.min(100, Math.max(0, n));
-  const nowPct = $derived(Math.round(clamp(now)));
-  const projectedPct = $derived(Math.round(clamp(projected)));
-  const ceilingPct = $derived(Math.round(clamp(ceiling)));
-  const gain = $derived(Math.max(0, projectedPct - nowPct));
+  const nowPct = $derived(now === null ? null : Math.round(clamp(now)));
+  const projectedPct = $derived(projected === null ? null : Math.round(clamp(projected)));
+  const ceilingPct = $derived(ceiling === null ? null : Math.round(clamp(ceiling)));
+  const gain = $derived(nowPct !== null && projectedPct !== null ? Math.max(0, projectedPct - nowPct) : 0);
+  const loading = $derived(nowPct === null || projectedPct === null);
   const counted = $derived(components.filter((c) => c.present));
   const absent = $derived(components.filter((c) => !c.present));
   const weightTotal = $derived(counted.reduce((s, c) => s + c.weight, 0));
+
+  const groupLabel = $derived(
+    nowPct === null
+      ? "Calculating fit score"
+      : projectedPct === null
+        ? `Now ${nowPct}%, estimating projected score`
+        : ceilingPct === null
+          ? `Now ${nowPct}%, projected ${projectedPct}%`
+          : `Now ${nowPct}%, projected ${projectedPct}%, ceiling ${ceilingPct}%`,
+  );
+
+  // ── Staged loading arrival (stage 1 → 2 baseline fill, stage 2 → 3 projected roll & gain fill) ──
+  let rolling = $state<RollDigit[] | null>(null);
+  let nowEntered = $state(false);
+  let projEntered = $state(false);
+  /** Non-zero generation triggers a one-shot fill attachment on the bar segment; 0 cancels any in-flight fill. */
+  let nowAnim = $state<{ gen: number; target: number }>({ gen: 0, target: 0 });
+  let gainAnim = $state<{ gen: number; target: number }>({ gen: 0, target: 0 });
+  let gen = 0;
+  let rollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function barSweep(req: { gen: number; target: number }) {
+    return (node: HTMLElement) => {
+      if (!req.gen || req.target <= 0) return;
+      const anim = fillBar(node, req.target);
+      return () => anim.cancel();
+    };
+  }
+
+  function stopNow() {
+    if (untrack(() => nowAnim.gen)) nowAnim = { gen: 0, target: 0 };
+  }
+
+  function stopProj() {
+    if (untrack(() => gainAnim.gen)) gainAnim = { gen: 0, target: 0 };
+    if (rollTimer !== null) {
+      clearTimeout(rollTimer);
+      rollTimer = null;
+    }
+    rolling = null;
+  }
+
+  function animateNow(target: number) {
+    nowEntered = true;
+    nowAnim = target > 0 ? { gen: ++gen, target } : { gen: 0, target: 0 };
+  }
+
+  function animateProj(from: number | null, to: number, delta: number) {
+    stopProj();
+    projEntered = true;
+    if (delta > 0) gainAnim = { gen: ++gen, target: delta };
+    if (from !== null && to > from && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      rolling = rollDigits(from, to);
+      rollTimer = setTimeout(() => {
+        rolling = null;
+        rollTimer = null;
+      }, token("--dur-roll"));
+    }
+  }
+
+  let mounted = false;
+  let lastNow: number | null = null;
+  let lastProj: number | null = null;
+
+  $effect(() => {
+    const n = nowPct;
+    const p = projectedPct;
+    const g = gain;
+
+    if (!mounted) {
+      mounted = true;
+      lastNow = n;
+      lastProj = p;
+      const shouldReveal = untrack(() => reveal);
+      if (shouldReveal) {
+        if (n !== null && p === null) animateNow(n);
+        else if (p !== null) animateProj(n, p, g);
+      }
+      return;
+    }
+
+    const prevNow = lastNow;
+    const prevProj = lastProj;
+    lastNow = n;
+    lastProj = p;
+
+    if (prevNow === null && n !== null) {
+      animateNow(n);
+    } else if (prevNow !== n) {
+      stopNow();
+      if (n === null) nowEntered = false;
+    }
+
+    if (prevProj === null && p !== null) {
+      animateProj(n, p, g);
+    } else if (prevProj !== p) {
+      stopProj();
+      if (p === null) projEntered = false;
+    }
+  });
+
+  $effect(() => () => {
+    if (rollTimer !== null) {
+      clearTimeout(rollTimer);
+      rollTimer = null;
+    }
+  });
 </script>
 
 {#snippet figures()}
-  <span class="value value--now num" {@attach tip(nowTitle)}>{nowPct}<span class="unit">%</span></span>
+  {#if nowPct !== null}
+    <span class={["value value--now num", nowEntered && "enter-fade"]} {@attach tip(nowTitle)}
+      >{nowPct}<span class="unit">%</span></span
+    >
+  {:else}
+    <span class="value value--now value--bone" aria-hidden="true"><span class="bone bone--now"></span></span>
+  {/if}
   <Icon icon={ChevronRight} class="arrow" />
-  <span class="value value--projected num">{projectedPct}<span class="unit">%</span></span>
-  <span class="ceiling"><span class="meta">Ceiling</span><strong class="num">{ceilingPct}%</strong></span>
+  {#if projectedPct !== null}
+    <span class={["value value--projected num", projEntered && !rolling && "enter"]}>
+      {#if rolling}<span class="roll"
+          >{#each rolling as digit, i (i)}<span class="digit"
+              ><span class="strip" {@attach roll(digit.from, digit.to)}
+                >{#each ROLL_CELLS as cell, j (j)}<span>{cell}</span>{/each}</span
+              ></span
+            >{/each}</span
+        >{:else}{projectedPct}{/if}<span class="unit">%</span>
+    </span>
+  {:else}
+    <span class="value value--projected value--bone" aria-hidden="true"
+      ><span class="bone bone--projected"></span></span
+    >
+  {/if}
+  <span class="ceiling">
+    <span class="meta">Ceiling</span>
+    {#if ceilingPct !== null}
+      <strong class={["num", projEntered && "enter-fade"]}>{ceilingPct}%</strong>
+    {:else}
+      <strong class="ceiling__bone" aria-hidden="true"><span class="bone bone--ceiling"></span></strong>
+    {/if}
+  </span>
 {/snippet}
 
-<div class="score">
-  {#if components.length}
+<div class="score" aria-busy={loading || undefined}>
+  {#if !loading && components.length}
     <button
       bind:this={numbers}
       type="button"
       class="numbers"
-      aria-label="Now {nowPct}%, projected {projectedPct}%, ceiling {ceilingPct}%"
+      aria-label={groupLabel}
       aria-describedby="{id}-parts"
       aria-expanded={open}
       onclick={() => (open = true)}
@@ -98,18 +254,26 @@
       {@render figures()}
     </button>
   {:else}
-    <div class="numbers" role="group" aria-label="Now {nowPct}%, projected {projectedPct}%, ceiling {ceilingPct}%">
+    <div class="numbers" role="group" aria-label={groupLabel}>
       {@render figures()}
     </div>
   {/if}
   <div class="bar" aria-hidden="true">
-    <span class="bar__now" style:width="{nowPct}%"></span>
-    {#if gain > 0}<span class="bar__gain" style:width="{gain}%"></span>{/if}
+    {#if nowPct !== null && nowPct > 0}
+      <span class="bar__now" style:width="{nowPct}%" {@attach barSweep(nowAnim)}></span>
+    {/if}
+    {#if gain > 0}
+      <span class="bar__gain" style:width="{gain}%" {@attach barSweep(gainAnim)}></span>
+    {/if}
   </div>
-  {#if children}<div class="meta below">{@render children()}</div>{/if}
+  {#if loading}
+    <div class="meta below below--bone" aria-hidden="true"><span class="bone bone--below"></span></div>
+  {:else if children}
+    <div class={["meta below", projEntered && "enter-fade"]}>{@render children()}</div>
+  {/if}
 </div>
 
-{#if components.length}
+{#if !loading && components.length}
   <Popover bind:open anchor={numbers} mode="manual" id="{id}-parts" role="tooltip">
     <div class="parts__body">
       <div class="part parts__head">
@@ -174,6 +338,37 @@
   .value--projected {
     color: var(--ink);
   }
+  /* Zero-width strut keeps every skeleton bone on the exact typographic baseline and line height of its number. */
+  .value--bone::before,
+  .ceiling__bone::before,
+  .below--bone::before {
+    content: "\200b";
+  }
+  .bone {
+    display: inline-block;
+    vertical-align: baseline;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    background: var(--sunken);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .bone--now {
+    width: 44px;
+    height: 0.7em;
+  }
+  .bone--projected {
+    width: 76px;
+    height: 0.68em;
+  }
+  .bone--ceiling {
+    width: 34px;
+    height: 0.75em;
+  }
+  .bone--below {
+    width: 184px;
+    height: 10px;
+    vertical-align: middle;
+  }
   .numbers :global(.arrow) {
     align-self: center;
     color: var(--ink-4);
@@ -195,7 +390,39 @@
     color: var(--ink-2);
   }
 
-  /* now | gain | headroom; widths from the scores, updated instantly. */
+  /* Rolling digits for the arriving projected score (same odometer window as ScoreBar). */
+  .roll {
+    display: inline-flex;
+    vertical-align: top;
+  }
+  .digit {
+    box-sizing: content-box;
+    height: 1lh;
+    padding-block: var(--space-1);
+    margin-block: calc(-1 * var(--space-1));
+    overflow: clip;
+    mask-image: linear-gradient(
+      transparent,
+      currentColor var(--space-1),
+      currentColor calc(100% - var(--space-1)),
+      transparent
+    );
+  }
+  .strip {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .enter-fade {
+    animation: fade var(--dur-base) var(--ease-out) both;
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* now | gain | headroom; interactive toggles update instantly, initial load fills via Web Animations. */
   .bar {
     display: flex;
     gap: 2px;
@@ -207,10 +434,12 @@
     box-shadow: inset 0 0 0 1px var(--line);
   }
   .bar__now {
+    flex: none;
     border-radius: var(--radius-full);
     background: var(--ink-3);
   }
   .bar__gain {
+    flex: none;
     border-radius: var(--radius-full);
     background: var(--gain);
   }
@@ -303,5 +532,16 @@
     padding-block-start: var(--space-2);
     padding-inline-start: var(--space-1);
     border-top: 1px solid var(--line);
+  }
+
+  @media (forced-colors: active) {
+    .bar__now {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+    .bar__gain {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
   }
 </style>
